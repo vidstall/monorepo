@@ -1,0 +1,82 @@
+<svg width="1100" height="680" viewBox="0 0 1100 680" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Xaisen system architecture</title>
+  <desc id="desc">High-level diagram showing customers, workers, the contract registry, runtime services, and the cloud testbed.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#374151"/>
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .box { fill: #ffffff; stroke: #1f2937; stroke-width: 2; rx: 14; }
+      .soft { fill: #eef6ff; stroke: #1d4ed8; }
+      .chain { fill: #f1f5f9; stroke: #475569; }
+      .runtime { fill: #f0fdf4; stroke: #15803d; }
+      .ops { fill: #fff7ed; stroke: #c2410c; }
+      .title { fill: #111827; font: 700 24px Arial, sans-serif; }
+      .label { fill: #111827; font: 700 18px Arial, sans-serif; }
+      .small { fill: #374151; font: 400 14px Arial, sans-serif; }
+      .group { fill: none; stroke: #cbd5e1; stroke-width: 2; stroke-dasharray: 8 8; rx: 20; }
+      .arrow { stroke: #374151; stroke-width: 2.5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1100" height="680" rx="24"/>
+  <text class="title" x="48" y="54">Xaisen Architecture</text>
+  <text class="small" x="48" y="82">Contract-backed worker registry, LiveKit media runtime, and cloud deployment testbed.</text>
+
+  <rect class="group" x="42" y="118" width="1016" height="374"/>
+  <text class="label" x="64" y="152">Runtime Network</text>
+
+  <rect class="box soft" x="76" y="204" width="180" height="90"/>
+  <text class="label" x="112" y="238">Customers</text>
+  <text class="small" x="103" y="264">Rent rooms and join</text>
+
+  <rect class="box soft" x="76" y="350" width="180" height="90"/>
+  <text class="label" x="120" y="384">Workers</text>
+  <text class="small" x="98" y="410">Register capacity</text>
+
+  <rect class="box chain" x="342" y="278" width="210" height="100"/>
+  <text class="label" x="383" y="316">Contract</text>
+  <text class="label" x="386" y="342">Registry</text>
+  <text class="small" x="379" y="364">On-chain node source</text>
+
+  <rect class="box runtime" x="638" y="168" width="190" height="82"/>
+  <text class="label" x="681" y="202">src/client</text>
+  <text class="small" x="675" y="226">Browser frontend</text>
+
+  <rect class="box runtime" x="638" y="286" width="190" height="82"/>
+  <text class="label" x="681" y="320">src/routes</text>
+  <text class="small" x="678" y="344">Backend API</text>
+
+  <rect class="box runtime" x="866" y="168" width="160" height="82"/>
+  <text class="label" x="901" y="202">LiveKit</text>
+  <text class="small" x="897" y="226">SFU media plane</text>
+
+  <rect class="box runtime" x="866" y="286" width="160" height="82"/>
+  <text class="label" x="896" y="320">Stateful</text>
+  <text class="small" x="890" y="344">Redis coordination</text>
+
+  <path class="arrow" d="M256 248 H638"/>
+  <path class="arrow" d="M828 209 H866"/>
+  <path class="arrow" d="M733 250 V286"/>
+  <path class="arrow" d="M828 327 H866"/>
+  <path class="arrow" d="M256 395 C304 395 304 328 342 328"/>
+  <path class="arrow" d="M552 328 C590 328 598 327 638 327"/>
+  <path class="arrow" d="M552 328 C626 410 820 413 918 368"/>
+
+  <rect class="group" x="42" y="528" width="1016" height="106"/>
+  <text class="label" x="64" y="562">Cloud Testbed</text>
+
+  <rect class="box ops" x="226" y="552" width="150" height="58"/>
+  <text class="label" x="268" y="586">Packer</text>
+
+  <rect class="box ops" x="476" y="552" width="150" height="58"/>
+  <text class="label" x="511" y="586">Terraform</text>
+
+  <rect class="box ops" x="726" y="552" width="150" height="58"/>
+  <text class="label" x="763" y="586">Ansible</text>
+
+  <path class="arrow" d="M376 581 H476"/>
+  <path class="arrow" d="M626 581 H726"/>
+  <path class="arrow" d="M801 552 C801 500 900 464 946 368"/>
+</svg>

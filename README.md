@@ -1,70 +1,79 @@
-# Web3 Video Conference Testbed
+# Xaisen
 
-This repository is for a web3 video conferencing app plus the cloud testbed used to deploy and validate it.
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue.svg)
+![Terraform 1.6+](https://img.shields.io/badge/Terraform-1.6%2B-844FBA.svg)
+![Packer 1.9+](https://img.shields.io/badge/Packer-1.9%2B-02A8EF.svg)
 
-## Product Model
+A decentralized video conferencing platform powered by a contract-backed node registry.
 
-The app is organized around a contract-backed node registry:
+## Overview
 
-- The smart contract acts as the node registry.
-- Workers register to provide video infrastructure and earn mining/reward participation.
-- Customers rent video conference rooms through the application.
+Xaisen connects customers who need video conference rooms with workers that provide the infrastructure for running them. The contract layer acts as the node registry, while the runtime layer handles conferencing, media routing, backend APIs, frontend UX, and stateful coordination.
 
-## Application Layers
+![Xaisen system architecture](docs/images/architecture.svg)
 
-- `src/livekit/` is the SFU layer.
-  - It is the LiveKit server/runtime used to handle media transport and conferencing.
-- `src/stateful/` is the coordination layer.
-  - It is responsible for Redis-backed cluster coordination, job dispatching, ingress, and egress.
-- `src/routes/` is the backend routes service for the meeting app.
-  - It provides the API/backend behavior.
-- `src/client/` is the web frontend for the meeting app.
-  - It contains the user-facing conferencing experience.
-  - Both pieces were split from `livekit-examples/meet`.
-- `src/contract/` is the contract boundary for the node registry and related on-chain coordination.
+## Key Features
 
-## Infrastructure Layer
+- Decentralized infrastructure model where workers register through an on-chain node registry.
+- Rentable video conference rooms backed by registered worker capacity.
+- LiveKit SFU media plane for real-time conferencing and WebRTC transport.
+- Cloud testbed pipeline using Packer, Terraform, and Ansible for repeatable deployments.
 
-`IaC/` is the future cloud testbed for the app.
+## Quick Start
 
-- `IaC/packer/` builds cloud-native images for each provider.
-- `IaC/terraform/` provisions the nodes from the image manifest.
-- `IaC/ansible/` configures the instances after provisioning.
-- `vidctl.py` orchestrates the build, deploy, inventory, and destroy pipeline.
+### Prerequisites
 
-## Current Role Model
+- Python 3.8+
+- Terraform 1.6+
+- Packer 1.9+
+- Ansible 2.14+
 
-The infrastructure is role-based:
+```bash
+git clone https://github.com/your-username/xaisen.git
+cd xaisen
+python3 vidctl.py --help
+python3 vidctl.py build --provider aws --role worker
+```
 
-- `worker`
-- `client`
-- `stateful`
+Provider credentials live in `secrets/cloud/<provider>.env`. Contract deployment credentials and mainnet metadata live in `secrets/contract.env`. See [`docs/cli.md`](docs/cli.md) before running provider builds or deployments.
 
-For compatibility, the CLI also accepts these aliases:
+## Documentation
 
-- `livekit` -> `worker`
-- `meet` -> `client`
+### Operations & CLI
 
-## Pipeline
+- [`docs/cli.md`](docs/cli.md) - CLI usage, credentials, and generated artifacts
+- [`docs/IaC.md`](docs/IaC.md) - infrastructure overview and deployment pipeline
 
-The intended deployment flow is:
+### Runtime Layer
 
-1. Build cloud-native images with Packer.
-2. Write `artifacts/image/manifest.json`.
-3. Let Terraform read the manifest and provision the correct image IDs.
-4. Let Terraform generate SSH material and inventory data.
-5. Run Ansible against the transient inventory.
+- [`docs/src/contract.md`](docs/src/contract.md) - on-chain contract boundary
+- [`docs/src/livekit.md`](docs/src/livekit.md) - LiveKit runtime layer
+- [`docs/src/routes.md`](docs/src/routes.md) - backend routes service
+- [`docs/src/client.md`](docs/src/client.md) - browser client
 
-## Repo Layout
+## Project Structure
 
-- `vidctl.py` - CLI entrypoint and orchestration layer
-- `src/` - application source code
-- `IaC/` - cloud testbed infrastructure
-- `docs/` - CLI and repository documentation
-- `artifacts/` - generated runtime outputs, ignored by git
+### Operations & CLI
 
-## Credentials
+- [`IaC/`](IaC/) - cloud testbed infrastructure
+- [`docs/`](docs/) - project documentation
+- [`vidctl.py`](vidctl.py) - CLI orchestration entrypoint
 
-Provider credentials are loaded from `secrets/cloud/<provider>.env` when present.
-Contract deployment credentials and mainnet metadata are loaded from `secrets/contract.env` when present.
-Keep `secrets/` out of git.
+### Runtime Layer
+
+- [`src/contract/`](src/contract/) - node registry and on-chain coordination boundary
+- [`src/livekit/`](src/livekit/) - SFU and media runtime
+- [`src/stateful/`](src/stateful/) - Redis-backed coordination and dispatch layer
+- [`src/routes/`](src/routes/) - backend API service
+- [`src/client/`](src/client/) - browser frontend
+
+## Contributing
+
+- Keep changes aligned with the docs-first layout of the repository.
+- Prefer updating the relevant document under `docs/` when behavior or architecture changes.
+- Keep runtime code, contract boundaries, and cloud testbed concerns separated.
+
+## License
+
+MIT
