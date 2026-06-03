@@ -1,6 +1,6 @@
 # Contract Layer
 
-This document describes the on-chain contract boundary for the web3 video conferencing app.
+This document describes the Sui on-chain contract boundary for the web3 video conferencing app.
 
 ## Purpose
 
@@ -9,6 +9,8 @@ The smart contract acts as the node registry for the system.
 - Workers register through the contract before they participate in the network.
 - The registry is the on-chain source of truth for available worker nodes.
 - Customers use the application to rent video conference rooms backed by the registered infrastructure.
+
+The current implementation is a Sui Move package in `src/contract`.
 
 ## Role In The System
 
@@ -36,7 +38,21 @@ The contract should stay focused on registry and coordination responsibilities.
 - Operational secrets and deployment metadata for the mainnet contract live in `secrets/contract.env`.
 - That file is for private values only and should never be committed to git.
 
-Implementation details for the on-chain contract are intentionally kept separate from the cloud deployment testbed.
+The first contract version is registry-only. Rooms, rentals, payments, rewards, and staking are intentionally out of scope.
+
+## Package Shape
+
+- `Move.toml` defines the `xaisen_contract` Sui Move package.
+- `sources/node_registry.move` implements the worker registry.
+- `tests/node_registry_tests.move` covers registration, owner authorization, metadata validation, availability, and unregistering.
+- `Move.lock` pins framework dependency resolution for reproducible builds.
+
+## Validation
+
+```bash
+sui move test --path src/contract --build-env testnet
+sui move build --path src/contract --build-env testnet
+```
 
 ## Relationship To IaC
 

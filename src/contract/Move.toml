@@ -1,0 +1,6 @@
+[package]
+name = "xaisen_contract"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
