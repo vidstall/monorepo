@@ -26,3 +26,27 @@ variable "stateful_count" {
   description = "Number of stateful nodes."
   default     = 1
 }
+
+variable "digitalocean_region" {
+  type        = string
+  description = "DigitalOcean region used for provisioning."
+  default     = "nyc3"
+}
+
+variable "digitalocean_size" {
+  type        = string
+  description = "DigitalOcean droplet size."
+  default     = "s-1vcpu-1gb"
+}
+
+variable "digitalocean_image" {
+  type        = string
+  description = "DigitalOcean base image slug."
+  default     = "ubuntu-22-04-x64"
+}
+
+variable "ssh_username" {
+  type        = string
+  description = "SSH username for the provisioned instances."
+  default     = "root"
+}

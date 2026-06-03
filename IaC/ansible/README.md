@@ -1,24 +1,19 @@
 # Ansible Layout
 
-Ansible is used to configure the nodes after Terraform has provisioned them.
+Ansible configures nodes after Terraform has provisioned them.
 
 ## Role model
 
-The testbed uses three distinct roles:
+The canonical infrastructure roles are:
 
 - `worker`
 - `client`
 - `stateful`
 
-Each role gets its own group variables and role implementation so the configuration can diverge where needed.
+`vidctl.py` renders a transient inventory from Terraform output and passes that inventory to `ansible-playbook`.
 
-## Contract boundary
+## Flow
 
-The smart-contract node registry is external to this repository. The playbooks and variables should accept a registry identifier once it is provided, but the identifier is not hardcoded here.
-
-## Recommended flow
-
-1. Pick one Terraform provider root.
-2. Provision the infrastructure.
-3. Export or generate inventory from the provider outputs.
-4. Run the Ansible playbook against the three role groups.
+1. Terraform provisions the nodes and generates SSH key output.
+2. The CLI writes a short-lived inventory under `artifacts/ssh_config/`.
+3. `ansible-playbook` runs against that inventory.

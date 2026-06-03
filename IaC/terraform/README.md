@@ -1,6 +1,6 @@
 # Terraform Layout
 
-Terraform is organized by provider so that the testbed can be deployed on the cheapest viable cloud for a given run.
+Terraform is organized by provider so each cloud can keep its own instance and networking details while sharing the same role contract.
 
 ## Provider roots
 
@@ -9,22 +9,14 @@ Terraform is organized by provider so that the testbed can be deployed on the ch
 - `environments/hetzner`
 - `environments/alibaba-cloud`
 
-Each provider root should expose the same logical interface:
+Each provider root now:
 
-- testbed name
-- role counts for `worker`, `client`, and `stateful`
-- node registry contract identifier
-- labels/tags needed for Ansible and runtime discovery
+- reads `artifacts/image/manifest.json` with `data "local_file"`
+- extracts the per-role `artifact_id` from the manifest JSON
+- provisions `worker`, `client`, and `stateful` nodes from those image IDs
+- generates a Terraform-managed SSH key pair
+- outputs a transient inventory payload and a sensitive private key
 
 ## Shared modules
 
-Reusable infrastructure building blocks belong in `modules/`.
-
-Recommended module boundaries:
-
-- node pools or instance groups
-- networking
-- storage
-- security and access
-
-The provider roots should assemble these modules and keep provider-specific differences isolated.
+`modules/` is still available for reusable shared pieces, but the current provider roots own the cloud-specific resources so the image and key lifecycle stays explicit.

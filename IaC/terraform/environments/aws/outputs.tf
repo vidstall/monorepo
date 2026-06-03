@@ -7,3 +7,36 @@ output "node_registry_contract_id" {
   value       = var.node_registry_contract_id
   description = "Smart-contract identifier for the node registry."
 }
+
+output "private_key_pem" {
+  value       = tls_private_key.ssh.private_key_pem
+  description = "Private key generated for SSH access."
+  sensitive   = true
+}
+
+output "inventory" {
+  value = {
+    worker = [
+      for instance in aws_instance.worker : {
+        name = instance.tags.Name
+        host = instance.public_ip
+        user = var.ssh_username
+      }
+    ]
+    client = [
+      for instance in aws_instance.client : {
+        name = instance.tags.Name
+        host = instance.public_ip
+        user = var.ssh_username
+      }
+    ]
+    stateful = [
+      for instance in aws_instance.stateful : {
+        name = instance.tags.Name
+        host = instance.public_ip
+        user = var.ssh_username
+      }
+    ]
+  }
+  description = "Inventory data grouped by role."
+}

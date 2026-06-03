@@ -2,6 +2,7 @@
 .DS_Store
 .idea/
 .vscode/
+Thumbs.db
 
 # Environment files
 *.env
@@ -53,3 +54,28 @@ override.tf.json
 *.retry
 *.pyc
 __pycache__/
+
+# Artifacts
+artifacts/
+*.iso
+build/
+dist/
+output/
+result/
+out/
+bin/
+obj/
+target/
+
+# Pythons
+venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+
+# Logs
+logs/
+*.log
+tmp/
+temp/
+.cache/

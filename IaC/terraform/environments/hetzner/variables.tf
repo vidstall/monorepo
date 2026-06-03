@@ -26,3 +26,27 @@ variable "stateful_count" {
   description = "Number of stateful nodes."
   default     = 1
 }
+
+variable "hcloud_location" {
+  type        = string
+  description = "Hetzner Cloud location used for provisioning."
+  default     = "fsn1"
+}
+
+variable "hcloud_server_type" {
+  type        = string
+  description = "Hetzner Cloud server type."
+  default     = "cx22"
+}
+
+variable "hcloud_image" {
+  type        = string
+  description = "Hetzner Cloud image slug."
+  default     = "ubuntu-24.04"
+}
+
+variable "ssh_username" {
+  type        = string
+  description = "SSH username for the provisioned instances."
+  default     = "root"
+}
