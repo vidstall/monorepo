@@ -65,13 +65,13 @@ resource "hcloud_server" "client" {
   labels      = merge(local.common_labels, { role = "client" })
 }
 
-resource "hcloud_server" "stateful" {
-  count       = var.stateful_count
-  name        = "${var.testbed_name}-stateful-${count.index + 1}"
-  image       = local.image_ids.stateful
+resource "hcloud_server" "coordinator" {
+  count       = var.coordinator_count
+  name        = "${var.testbed_name}-coordinator-${count.index + 1}"
+  image       = local.image_ids.coordinator
   location    = var.hcloud_location
   server_type = var.hcloud_server_type
   ssh_keys    = [hcloud_ssh_key.testbed.id]
   user_data   = local.cloud_init
-  labels      = merge(local.common_labels, { role = "stateful" })
+  labels      = merge(local.common_labels, { role = "coordinator" })
 }

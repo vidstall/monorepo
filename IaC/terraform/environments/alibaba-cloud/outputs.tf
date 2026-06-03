@@ -30,8 +30,8 @@ output "inventory" {
         user = var.ssh_username
       }
     ]
-    stateful = [
-      for instance in alicloud_instance.stateful : {
+    coordinator = [
+      for instance in alicloud_instance.coordinator : {
         name = instance.instance_name
         host = try(instance.public_ip, instance.public_ip_address)
         user = var.ssh_username

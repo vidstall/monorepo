@@ -13,7 +13,7 @@ Each provider root now:
 
 - reads `artifacts/image/manifest.json` with `data "local_file"`
 - extracts the per-role `artifact_id` from the manifest JSON
-- provisions `worker`, `client`, and `stateful` nodes from those image IDs
+- provisions `worker`, `client`, and `coordinator` nodes from those image IDs
 - generates a Terraform-managed SSH key pair
 - outputs a transient inventory payload and a sensitive private key
 

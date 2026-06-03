@@ -35,15 +35,15 @@ source "amazon-ebs" "client" {
   }
 }
 
-source "amazon-ebs" "stateful" {
-  ami_name      = "${var.testbed_name}-stateful-{{timestamp}}"
+source "amazon-ebs" "coordinator" {
+  ami_name      = "${var.testbed_name}-coordinator-{{timestamp}}"
   instance_type = var.aws_instance_type
   region        = var.aws_region
   source_ami    = data.amazon-ami.ubuntu_worker.id
   ssh_username  = var.aws_ssh_username
   tags = {
     testbed = var.testbed_name
-    role    = "stateful"
+    role    = "coordinator"
     source  = "depin-iac"
   }
 }
@@ -52,7 +52,7 @@ build {
   sources = [
     "source.amazon-ebs.worker",
     "source.amazon-ebs.client",
-    "source.amazon-ebs.stateful",
+    "source.amazon-ebs.coordinator",
   ]
 
   provisioner "shell" {

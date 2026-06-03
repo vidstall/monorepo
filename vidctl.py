@@ -22,11 +22,11 @@ TERRAFORM_ENV_DIR = REPO_ROOT / "IaC" / "terraform" / "environments"
 ANSIBLE_PLAYBOOK = REPO_ROOT / "IaC" / "ansible" / "playbooks" / "site.yml"
 
 PROVIDER_CHOICES = ("aws", "digital-ocean", "hetzner", "alibaba-cloud")
-ROLE_CHOICES = ("worker", "client", "stateful")
+ROLE_CHOICES = ("worker", "client", "coordinator")
 ROLE_ALIASES = {
     "worker": "worker",
     "client": "client",
-    "stateful": "stateful",
+    "coordinator": "coordinator",
     "livekit": "worker",
     "meet": "client",
 }
@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     deploy.add_argument("--node-registry-contract-id", default=None)
     deploy.add_argument("--worker-nodes", "--livekit-nodes", dest="worker_nodes", type=int, default=1)
     deploy.add_argument("--client-nodes", "--meet-nodes", dest="client_nodes", type=int, default=1)
-    deploy.add_argument("--stateful-nodes", type=int, default=1)
+    deploy.add_argument("--coordinator-nodes", type=int, default=1)
     deploy.set_defaults(func=cmd_deploy)
 
     destroy = subparsers.add_parser("destroy", help="Tear down Terraform-managed infrastructure")
@@ -73,7 +73,7 @@ def parse_args() -> argparse.Namespace:
     destroy.add_argument("--node-registry-contract-id", default=None)
     destroy.add_argument("--worker-nodes", "--livekit-nodes", dest="worker_nodes", type=int, default=1)
     destroy.add_argument("--client-nodes", "--meet-nodes", dest="client_nodes", type=int, default=1)
-    destroy.add_argument("--stateful-nodes", type=int, default=1)
+    destroy.add_argument("--coordinator-nodes", type=int, default=1)
     destroy.add_argument("--auto-approve", action="store_true", default=True)
     destroy.set_defaults(func=cmd_destroy)
 
@@ -83,7 +83,7 @@ def parse_args() -> argparse.Namespace:
     inventory.add_argument("--node-registry-contract-id", default=None)
     inventory.add_argument("--worker-nodes", "--livekit-nodes", dest="worker_nodes", type=int, default=1)
     inventory.add_argument("--client-nodes", "--meet-nodes", dest="client_nodes", type=int, default=1)
-    inventory.add_argument("--stateful-nodes", type=int, default=1)
+    inventory.add_argument("--coordinator-nodes", type=int, default=1)
     inventory.set_defaults(func=cmd_inventory)
 
     return parser.parse_args()
@@ -191,7 +191,7 @@ def terraform_args(
     testbed_name: str,
     worker_nodes: int,
     client_nodes: int,
-    stateful_nodes: int,
+    coordinator_nodes: int,
     node_registry_contract_id: str | None,
 ) -> List[str]:
     args = [
@@ -199,7 +199,7 @@ def terraform_args(
         f"-var=testbed_name={testbed_name}",
         f"-var=worker_count={worker_nodes}",
         f"-var=client_count={client_nodes}",
-        f"-var=stateful_count={stateful_nodes}",
+        f"-var=coordinator_count={coordinator_nodes}",
     ]
     if node_registry_contract_id is not None:
         args.append(f"-var=node_registry_contract_id={node_registry_contract_id}")
@@ -223,7 +223,7 @@ def terraform_apply(provider: str, args: argparse.Namespace, env: Mapping[str, s
                 testbed_name=args.testbed_name,
                 worker_nodes=args.worker_nodes,
                 client_nodes=args.client_nodes,
-                stateful_nodes=args.stateful_nodes,
+                coordinator_nodes=args.coordinator_nodes,
                 node_registry_contract_id=args.node_registry_contract_id,
             ),
         ],
@@ -244,7 +244,7 @@ def terraform_destroy(provider: str, args: argparse.Namespace, env: Mapping[str,
                 testbed_name=args.testbed_name,
                 worker_nodes=args.worker_nodes,
                 client_nodes=args.client_nodes,
-                stateful_nodes=args.stateful_nodes,
+                coordinator_nodes=args.coordinator_nodes,
                 node_registry_contract_id=args.node_registry_contract_id,
             ),
         ],

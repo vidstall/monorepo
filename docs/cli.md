@@ -42,7 +42,7 @@ Build images for one provider.
 Options:
 
 - `--provider` - one of `aws`, `digital-ocean`, `hetzner`, `alibaba-cloud`
-- `--role` - `all` or a single role (`worker`, `client`, `stateful`, plus aliases `livekit`, `meet`)
+- `--role` - `all` or a single role (`worker`, `client`, `coordinator`, plus aliases `livekit`, `meet`)
 - `--testbed-name` - image and resource prefix, default `depin-testbed`
 
 ### `deploy`
@@ -54,7 +54,7 @@ Run the full pipeline:
 3. `ansible-playbook`
 
 ```bash
-./vidctl.py deploy --provider aws --worker-nodes 2 --client-nodes 1 --stateful-nodes 1
+./vidctl.py deploy --provider aws --worker-nodes 2 --client-nodes 1 --coordinator-nodes 1
 ```
 
 The CLI writes a transient inventory file and SSH private key under `artifacts/ssh_config/`.
@@ -63,7 +63,7 @@ The deploy flow reflects the app architecture:
 
 - `worker` nodes run the video infrastructure layer.
 - `client` nodes represent the conferencing frontend side in `src/client/`.
-- `stateful` nodes carry the Redis/coordination layer.
+- `coordinator` nodes carry the Redis/coordination layer.
 
 ### `destroy`
 

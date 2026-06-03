@@ -26,16 +26,16 @@ source "hcloud" "client" {
   }
 }
 
-source "hcloud" "stateful" {
+source "hcloud" "coordinator" {
   token        = env("HCLOUD_TOKEN")
   image        = var.hcloud_image
   location     = var.hcloud_location
   server_type  = var.hcloud_server_type
   ssh_username = var.hcloud_ssh_username
-  snapshot_name = "${var.testbed_name}-stateful-{{timestamp}}"
+  snapshot_name = "${var.testbed_name}-coordinator-{{timestamp}}"
   snapshot_labels = {
     testbed = var.testbed_name
-    role    = "stateful"
+    role    = "coordinator"
     source  = "depin-iac"
   }
 }
@@ -44,7 +44,7 @@ build {
   sources = [
     "source.hcloud.worker",
     "source.hcloud.client",
-    "source.hcloud.stateful",
+    "source.hcloud.coordinator",
   ]
 
   provisioner "shell" {

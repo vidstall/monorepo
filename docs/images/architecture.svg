@@ -53,7 +53,7 @@
   <text class="small" x="897" y="226">SFU media plane</text>
 
   <rect class="box runtime" x="866" y="286" width="160" height="82"/>
-  <text class="label" x="896" y="320">Stateful</text>
+  <text class="label" x="896" y="320">Coordinator</text>
   <text class="small" x="890" y="344">Redis coordination</text>
 
   <path class="arrow" d="M256 248 H638"/>

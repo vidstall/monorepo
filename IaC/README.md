@@ -8,7 +8,7 @@ The infrastructure exists to validate the deployment model for the application:
 
 - `worker` nodes run the media/SFU workload
 - `client` nodes represent user-facing conference participants
-- `stateful` nodes host Redis-backed coordination, job dispatch, ingress, and egress
+- `coordinator` nodes host Redis-backed coordination, job dispatch, ingress, and egress
 
 ## Layout
 

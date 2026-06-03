@@ -1,4 +1,0 @@
----
-- name: Mark stateful role as configured
-  ansible.builtin.debug:
-    msg: "Configuring stateful node"

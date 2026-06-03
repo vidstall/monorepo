@@ -30,8 +30,8 @@ output "inventory" {
         user = var.ssh_username
       }
     ]
-    stateful = [
-      for instance in aws_instance.stateful : {
+    coordinator = [
+      for instance in aws_instance.coordinator : {
         name = instance.tags.Name
         host = instance.public_ip
         user = var.ssh_username

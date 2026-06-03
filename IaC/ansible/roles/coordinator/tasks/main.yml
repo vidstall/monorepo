@@ -1,0 +1,4 @@
+---
+- name: Mark coordinator role as configured
+  ansible.builtin.debug:
+    msg: "Configuring coordinator node"

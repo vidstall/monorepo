@@ -30,8 +30,8 @@ output "inventory" {
         user = var.ssh_username
       }
     ]
-    stateful = [
-      for instance in digitalocean_droplet.stateful : {
+    coordinator = [
+      for instance in digitalocean_droplet.coordinator : {
         name = instance.name
         host = instance.ipv4_address
         user = var.ssh_username

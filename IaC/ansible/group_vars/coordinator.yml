@@ -1,0 +1,3 @@
+---
+# Role-level variables for coordinator nodes.
+role_name: coordinator

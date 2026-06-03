@@ -16,8 +16,8 @@ The application is split into three main runtime layers:
 
 - `src/livekit/` is the SFU layer.
   - It provides the media plane and conferencing runtime.
-- `src/stateful/` is the coordination layer.
-  - It handles Redis-backed cluster coordination, job dispatching, ingress, and egress.
+- `src/coordinator/` is the coordination layer.
+  - It provides Redis-backed cluster coordination, job dispatching, ingress, and egress state.
 - `src/routes/` is the meeting app backend routes service.
   - It contains the API/backend behavior split out from `livekit-examples/meet`.
 - `src/client/` is the meeting app frontend.
@@ -32,6 +32,7 @@ The contract should stay focused on registry and coordination responsibilities.
 - It should track worker registration and availability.
 - It should support the workflow that maps workers to video infrastructure participation.
 - It should expose the minimum metadata needed for the application to reason about rented rooms and node membership.
+- It should not own Redis runtime state; that belongs to `src/coordinator/`.
 - Operational secrets and deployment metadata for the mainnet contract live in `secrets/contract.env`.
 - That file is for private values only and should never be committed to git.
 
@@ -51,7 +52,7 @@ The internal infrastructure role model remains:
 
 - `worker`
 - `client`
-- `stateful`
+- `coordinator`
 
 For compatibility, the CLI still accepts these aliases:
 

@@ -8,7 +8,7 @@ The canonical infrastructure roles are:
 
 - `worker`
 - `client`
-- `stateful`
+- `coordinator`
 
 `vidctl.py` renders a transient inventory from Terraform output and passes that inventory to `ansible-playbook`.
 

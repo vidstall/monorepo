@@ -26,16 +26,16 @@ source "digitalocean" "client" {
   ]
 }
 
-source "digitalocean" "stateful" {
+source "digitalocean" "coordinator" {
   api_token    = env("DIGITALOCEAN_TOKEN")
   image        = var.digitalocean_image
   region       = var.digitalocean_region
   size         = var.digitalocean_size
   ssh_username = var.digitalocean_ssh_username
-  snapshot_name = "${var.testbed_name}-stateful-{{timestamp}}"
+  snapshot_name = "${var.testbed_name}-coordinator-{{timestamp}}"
   tags = [
     "testbed:${var.testbed_name}",
-    "role:stateful",
+    "role:coordinator",
     "source:depin-iac",
   ]
 }
@@ -44,7 +44,7 @@ build {
   sources = [
     "source.digitalocean.worker",
     "source.digitalocean.client",
-    "source.digitalocean.stateful",
+    "source.digitalocean.coordinator",
   ]
 
   provisioner "shell" {

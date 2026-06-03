@@ -9,7 +9,7 @@ A decentralized video conferencing platform powered by a contract-backed node re
 
 ## Overview
 
-Xaisen connects customers who need video conference rooms with workers that provide the infrastructure for running them. The contract layer acts as the node registry, while the runtime layer handles conferencing, media routing, backend APIs, frontend UX, and stateful coordination.
+Xaisen connects customers who need video conference rooms with workers that provide the infrastructure for running them. The contract layer acts as the node registry, while the runtime layer handles conferencing, media routing, backend APIs, frontend UX, and Redis-backed coordination.
 
 ![Xaisen system architecture](docs/images/architecture.svg)
 
@@ -49,6 +49,7 @@ Provider credentials live in `secrets/cloud/<provider>.env`. Contract deployment
 
 - [`docs/src/contract.md`](docs/src/contract.md) - on-chain contract boundary
 - [`docs/src/livekit.md`](docs/src/livekit.md) - LiveKit runtime layer
+- [`docs/src/coordinator.md`](docs/src/coordinator.md) - Redis coordination layer
 - [`docs/src/routes.md`](docs/src/routes.md) - backend routes service
 - [`docs/src/client.md`](docs/src/client.md) - browser client
 
@@ -64,7 +65,7 @@ Provider credentials live in `secrets/cloud/<provider>.env`. Contract deployment
 
 - [`src/contract/`](src/contract/) - node registry and on-chain coordination boundary
 - [`src/livekit/`](src/livekit/) - SFU and media runtime
-- [`src/stateful/`](src/stateful/) - Redis-backed coordination and dispatch layer
+- [`src/coordinator/`](src/coordinator/) - Redis-backed coordination and dispatch layer
 - [`src/routes/`](src/routes/) - backend API service
 - [`src/client/`](src/client/) - browser frontend
 

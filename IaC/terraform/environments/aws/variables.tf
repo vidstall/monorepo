@@ -21,9 +21,9 @@ variable "client_count" {
   default     = 1
 }
 
-variable "stateful_count" {
+variable "coordinator_count" {
   type        = number
-  description = "Number of stateful nodes."
+  description = "Number of coordinator nodes."
   default     = 1
 }
 

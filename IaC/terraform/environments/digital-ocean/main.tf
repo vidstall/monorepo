@@ -65,13 +65,13 @@ resource "digitalocean_droplet" "client" {
   tags      = concat(local.common_tags, ["role:client"])
 }
 
-resource "digitalocean_droplet" "stateful" {
-  count     = var.stateful_count
-  name      = "${var.testbed_name}-stateful-${count.index + 1}"
-  image     = local.image_ids.stateful
+resource "digitalocean_droplet" "coordinator" {
+  count     = var.coordinator_count
+  name      = "${var.testbed_name}-coordinator-${count.index + 1}"
+  image     = local.image_ids.coordinator
   region    = var.digitalocean_region
   size      = var.digitalocean_size
   ssh_keys  = [digitalocean_ssh_key.testbed.id]
   user_data = local.cloud_init
-  tags      = concat(local.common_tags, ["role:stateful"])
+  tags      = concat(local.common_tags, ["role:coordinator"])
 }

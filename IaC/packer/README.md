@@ -5,7 +5,7 @@ This directory contains the cloud-image build templates used by `vidctl.py`.
 ## Build model
 
 - One provider template per cloud
-- Three role sources per template: `worker`, `client`, `stateful`
+- Three role sources per template: `worker`, `client`, `coordinator`
 - One manifest post-processor that writes `artifacts/image/manifest.json`
 
 ## Notes

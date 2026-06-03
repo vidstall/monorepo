@@ -18,7 +18,7 @@ The application is split into distinct layers:
 - `src/livekit/` is the conferencing runtime and SFU layer.
 - `src/routes/` is the backend API service used by the browser app.
 - `src/client/` is the browser-facing conference UI.
-- `src/stateful/` provides Redis-backed coordination, job dispatch, ingress, and egress support.
+- `src/coordinator/` provides the Redis service package used for distributed coordination.
 - `src/contract/` is the on-chain registry boundary that governs worker participation.
 
 `src/livekit` sits closest to the media plane and is the layer that accepts and forwards real-time audio/video/data traffic.
@@ -88,3 +88,4 @@ Those tests validate single-node and multi-node behavior, webhook behavior, and 
 
 Those responsibilities belong to `src/client`, `src/routes`, and `src/contract` respectively.
 
+Redis coordinator setup lives in `docs/src/coordinator.md`.

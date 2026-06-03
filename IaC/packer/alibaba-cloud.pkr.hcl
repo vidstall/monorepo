@@ -34,12 +34,12 @@ source "alicloud-ecs" "client" {
   }
 }
 
-source "alicloud-ecs" "stateful" {
+source "alicloud-ecs" "coordinator" {
   access_key    = env("ALICLOUD_ACCESS_KEY")
   secret_key    = env("ALICLOUD_SECRET_KEY")
   region        = var.alicloud_region
   source_image  = var.alicloud_source_image
-  image_name    = "${var.testbed_name}-stateful-{{timestamp}}"
+  image_name    = "${var.testbed_name}-coordinator-{{timestamp}}"
   instance_type = var.alicloud_instance_type
   ssh_username  = var.alicloud_ssh_username
   io_optimized  = true
@@ -47,7 +47,7 @@ source "alicloud-ecs" "stateful" {
   image_force_delete   = true
   run_tags = {
     testbed = var.testbed_name
-    role    = "stateful"
+    role    = "coordinator"
     source  = "depin-iac"
   }
 }
@@ -56,7 +56,7 @@ build {
   sources = [
     "source.alicloud-ecs.worker",
     "source.alicloud-ecs.client",
-    "source.alicloud-ecs.stateful",
+    "source.alicloud-ecs.coordinator",
   ]
 
   provisioner "shell" {

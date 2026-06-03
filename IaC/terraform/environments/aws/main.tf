@@ -110,9 +110,9 @@ resource "aws_instance" "client" {
   })
 }
 
-resource "aws_instance" "stateful" {
-  count                       = var.stateful_count
-  ami                         = local.image_ids.stateful
+resource "aws_instance" "coordinator" {
+  count                       = var.coordinator_count
+  ami                         = local.image_ids.coordinator
   instance_type               = var.aws_instance_type
   key_name                    = aws_key_pair.testbed.key_name
   subnet_id                   = data.aws_subnets.default.ids[0]
@@ -121,7 +121,7 @@ resource "aws_instance" "stateful" {
   user_data                   = local.cloud_init
 
   tags = merge(local.common_tags, {
-    Name = "${var.testbed_name}-stateful-${count.index + 1}"
-    role = "stateful"
+    Name = "${var.testbed_name}-coordinator-${count.index + 1}"
+    role = "coordinator"
   })
 }

@@ -35,7 +35,7 @@ The infrastructure is role-based:
 
 - `worker`
 - `client`
-- `stateful`
+- `coordinator`
 
 The supported cloud providers are:
 
@@ -51,7 +51,7 @@ The IaC layer supports the runtime split documented elsewhere in the repo:
 - `src/livekit/` is the SFU/runtime layer.
 - `src/routes/` is the backend API service.
 - `src/client/` is the browser frontend.
-- `src/stateful/` is the Redis-backed coordination layer.
+- `src/coordinator/` is the Redis-backed coordination layer.
 - `src/contract/` is the on-chain node registry boundary.
 
 IaC should stay focused on deployment and validation, not app feature logic.

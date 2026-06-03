@@ -121,11 +121,11 @@ resource "alicloud_instance" "client" {
   tags = local.common_tags
 }
 
-resource "alicloud_instance" "stateful" {
-  count                      = var.stateful_count
-  instance_name              = "${var.testbed_name}-stateful-${count.index + 1}"
-  host_name                  = "${var.testbed_name}-stateful-${count.index + 1}"
-  image_id                   = local.image_ids.stateful
+resource "alicloud_instance" "coordinator" {
+  count                      = var.coordinator_count
+  instance_name              = "${var.testbed_name}-coordinator-${count.index + 1}"
+  host_name                  = "${var.testbed_name}-coordinator-${count.index + 1}"
+  image_id                   = local.image_ids.coordinator
   instance_type              = var.alicloud_instance_type
   security_groups            = [alicloud_security_group.ssh.id]
   vswitch_id                 = alicloud_vswitch.testbed.id
