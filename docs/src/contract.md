@@ -32,6 +32,8 @@ The contract should stay focused on registry and coordination responsibilities.
 - It should track worker registration and availability.
 - It should support the workflow that maps workers to video infrastructure participation.
 - It should expose the minimum metadata needed for the application to reason about rented rooms and node membership.
+- Operational secrets and deployment metadata for the mainnet contract live in `secrets/contract.env`.
+- That file is for private values only and should never be committed to git.
 
 Implementation details for the on-chain contract are intentionally kept separate from the cloud deployment testbed.
 

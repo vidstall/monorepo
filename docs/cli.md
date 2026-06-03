@@ -18,6 +18,9 @@ Store provider credentials in `secrets/cloud/`:
 - `secrets/cloud/hetzner.env`
 - `secrets/cloud/alibaba-cloud.env`
 
+Store contract deployment credentials and mainnet metadata in `secrets/contract.env`.
+This file should hold private deployment information for the on-chain registry, such as the contract address, network identifiers, and any other values needed by the CLI or future contract tooling.
+
 Example:
 
 ```env

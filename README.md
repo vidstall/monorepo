@@ -66,4 +66,5 @@ The intended deployment flow is:
 ## Credentials
 
 Provider credentials are loaded from `secrets/cloud/<provider>.env` when present.
+Contract deployment credentials and mainnet metadata are loaded from `secrets/contract.env` when present.
 Keep `secrets/` out of git.
