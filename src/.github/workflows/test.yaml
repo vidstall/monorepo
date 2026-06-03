@@ -1,0 +1,41 @@
+name: Test
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: pnpm/action-setup@v4
+    - name: Use Node.js 24
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: 'pnpm'
+        cache-dependency-path: |
+          client/pnpm-lock.yaml
+          routes/pnpm-lock.yaml
+
+    - name: Install client dependencies
+      run: pnpm --dir client install --frozen-lockfile
+
+    - name: Install routes dependencies
+      run: pnpm --dir routes install --frozen-lockfile
+
+    - name: ESLint
+      run: pnpm --dir client lint
+
+    - name: Prettier client
+      run: pnpm --dir client format:check
+
+    - name: Prettier routes
+      run: pnpm --dir routes format:check
+
+    - name: Run Tests
+      run: pnpm --dir client test
