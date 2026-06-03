@@ -1,6 +1,14 @@
 # IaC
 
-This directory contains the infrastructure pipeline for the testbed.
+This directory contains the cloud testbed for the web3 video conference app.
+
+## Purpose
+
+The infrastructure exists to validate the deployment model for the application:
+
+- `worker` nodes run the media/SFU workload
+- `client` nodes represent user-facing conference participants
+- `stateful` nodes host Redis-backed coordination, job dispatch, ingress, and egress
 
 ## Layout
 
@@ -12,7 +20,7 @@ This directory contains the infrastructure pipeline for the testbed.
 
 The expected flow is:
 
-1. Build provider images with Packer
-2. Read `artifacts/image/manifest.json` from Terraform
-3. Generate the transient Ansible inventory from Terraform output
-4. Run the Ansible playbook against the created nodes
+1. Build provider images with Packer.
+2. Read `artifacts/image/manifest.json` from Terraform.
+3. Generate the transient Ansible inventory from Terraform output.
+4. Run the Ansible playbook against the created nodes.

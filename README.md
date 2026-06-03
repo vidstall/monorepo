@@ -1,39 +1,67 @@
-# VidCtl
+# Web3 Video Conference Testbed
 
-VidCtl is a small orchestration CLI for a multi-cloud video testbed.
+This repository is for a web3 video conferencing app plus the cloud testbed used to deploy and validate it.
 
-It coordinates three tools:
+## Product Model
 
-- `Packer` builds cloud-native images
-- `Terraform` provisions provider infrastructure from the generated image manifest
-- `Ansible` configures the nodes after they are created
+The app is organized around a contract-backed node registry:
 
-## Repository Layout
+- The smart contract acts as the node registry.
+- Workers register to provide video infrastructure and earn mining/reward participation.
+- Customers rent video conference rooms through the application.
 
-- `vidctl.py` - CLI entrypoint and pipeline orchestrator
-- `IaC/packer/` - Packer templates for AWS, DigitalOcean, Hetzner, and Alibaba Cloud
-- `IaC/terraform/` - Provider roots that consume `artifacts/image/manifest.json`
-- `IaC/ansible/` - Post-provision configuration playbooks and role data
-- `artifacts/` - Generated build and runtime outputs, ignored by git
+## Application Layers
 
-## Roles
+- `src/livekit/` is the SFU layer.
+  - It is the LiveKit server/runtime used to handle media transport and conferencing.
+- `src/stateful/` is the coordination layer.
+  - It is responsible for Redis-backed cluster coordination, job dispatching, ingress, and egress.
+- `src/routes/` is the backend routes service for the meeting app.
+  - It provides the API/backend behavior.
+- `src/client/` is the web frontend for the meeting app.
+  - It contains the user-facing conferencing experience.
+  - Both pieces were split from `livekit-examples/meet`.
+- `src/contract/` is the contract boundary for the node registry and related on-chain coordination.
 
-The infrastructure contract is role-based:
+## Infrastructure Layer
+
+`IaC/` is the future cloud testbed for the app.
+
+- `IaC/packer/` builds cloud-native images for each provider.
+- `IaC/terraform/` provisions the nodes from the image manifest.
+- `IaC/ansible/` configures the instances after provisioning.
+- `vidctl.py` orchestrates the build, deploy, inventory, and destroy pipeline.
+
+## Current Role Model
+
+The infrastructure is role-based:
 
 - `worker`
 - `client`
 - `stateful`
 
-For compatibility, the CLI also accepts the older aliases:
+For compatibility, the CLI also accepts these aliases:
 
 - `livekit` -> `worker`
 - `meet` -> `client`
 
-## Typical Flow
+## Pipeline
 
-1. Build the provider images with `./vidctl.py build --provider aws`
-2. Provision the infrastructure with `./vidctl.py deploy --provider aws`
-3. Tear everything down with `./vidctl.py destroy --provider aws`
+The intended deployment flow is:
+
+1. Build cloud-native images with Packer.
+2. Write `artifacts/image/manifest.json`.
+3. Let Terraform read the manifest and provision the correct image IDs.
+4. Let Terraform generate SSH material and inventory data.
+5. Run Ansible against the transient inventory.
+
+## Repo Layout
+
+- `vidctl.py` - CLI entrypoint and orchestration layer
+- `src/` - application source code
+- `IaC/` - cloud testbed infrastructure
+- `docs/` - CLI and repository documentation
+- `artifacts/` - generated runtime outputs, ignored by git
 
 ## Credentials
 

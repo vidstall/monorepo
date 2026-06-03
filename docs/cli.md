@@ -1,6 +1,6 @@
 # VidCtl CLI
 
-`vidctl.py` is the repository entrypoint for the testbed pipeline.
+`vidctl.py` is the repository entrypoint for the cloud testbed pipeline.
 
 ## Prerequisites
 
@@ -55,6 +55,12 @@ Run the full pipeline:
 ```
 
 The CLI writes a transient inventory file and SSH private key under `artifacts/ssh_config/`.
+
+The deploy flow reflects the app architecture:
+
+- `worker` nodes run the video infrastructure layer.
+- `client` nodes represent the conferencing frontend side in `src/client/`.
+- `stateful` nodes carry the Redis/coordination layer.
 
 ### `destroy`
 
