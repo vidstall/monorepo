@@ -1,0 +1,55 @@
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Environment files
+*.env
+.env
+.env.*
+!.env.example
+.envpass
+secrets/
+
+# Node / Next.js
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+out/
+coverage/
+**/coverage/
+build/
+**/build/
+.vercel/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Go
+bin/
+**/bin/
+*.test
+*.out
+livekit-server
+coverage.out
+proto/
+vendor/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ansible
+*.retry
+*.pyc
+__pycache__/

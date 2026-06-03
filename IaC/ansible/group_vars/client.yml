@@ -1,0 +1,3 @@
+---
+# Role-level variables for client nodes.
+role_name: client
