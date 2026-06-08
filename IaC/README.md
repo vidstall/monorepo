@@ -12,15 +12,13 @@ The infrastructure exists to validate the deployment model for the application:
 
 ## Layout
 
-- `packer/` - cloud image build templates
-- `terraform/` - provider roots that provision instances from the image manifest
-- `ansible/` - role-based post-provision configuration
+- `terraform/` - provider roots that provision base instances
+- `ansible/` - Docker-based role configuration
 
 ## Pipeline Contract
 
 The expected flow is:
 
-1. Build provider images with Packer.
-2. Read `artifacts/image/manifest.json` from Terraform.
-3. Generate the transient Ansible inventory from Terraform output.
-4. Run the Ansible playbook against the created nodes.
+1. Provision provider instances from base OS images with Terraform.
+2. Generate the transient Ansible inventory from Terraform output.
+3. Install Docker and run role containers with Ansible.

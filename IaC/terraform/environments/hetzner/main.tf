@@ -1,22 +1,9 @@
-data "local_file" "image_manifest" {
-  filename = abspath("${path.root}/../../../artifacts/image/manifest.json")
-}
-
 locals {
   common_labels = {
     testbed = var.testbed_name
     source  = "depin-iac"
   }
 
-  manifest = jsondecode(data.local_file.image_manifest.content)
-  builds_by_role = {
-    for build in local.manifest.builds :
-    element(split(".", build.name), length(split(".", build.name)) - 1) => build
-  }
-  image_ids = {
-    for role, build in local.builds_by_role :
-    role => element(split(":", build.artifact_id), 1)
-  }
   ssh_home   = var.ssh_username == "root" ? "/root" : "/home/${var.ssh_username}"
   cloud_init = <<-EOT
     #cloud-config
@@ -46,7 +33,7 @@ resource "hcloud_ssh_key" "testbed" {
 resource "hcloud_server" "worker" {
   count       = var.worker_count
   name        = "${var.testbed_name}-worker-${count.index + 1}"
-  image       = local.image_ids.worker
+  image       = var.hcloud_image
   location    = var.hcloud_location
   server_type = var.hcloud_server_type
   ssh_keys    = [hcloud_ssh_key.testbed.id]
@@ -57,7 +44,7 @@ resource "hcloud_server" "worker" {
 resource "hcloud_server" "client" {
   count       = var.client_count
   name        = "${var.testbed_name}-client-${count.index + 1}"
-  image       = local.image_ids.client
+  image       = var.hcloud_image
   location    = var.hcloud_location
   server_type = var.hcloud_server_type
   ssh_keys    = [hcloud_ssh_key.testbed.id]
@@ -68,7 +55,7 @@ resource "hcloud_server" "client" {
 resource "hcloud_server" "coordinator" {
   count       = var.coordinator_count
   name        = "${var.testbed_name}-coordinator-${count.index + 1}"
-  image       = local.image_ids.coordinator
+  image       = var.hcloud_image
   location    = var.hcloud_location
   server_type = var.hcloud_server_type
   ssh_keys    = [hcloud_ssh_key.testbed.id]

@@ -53,7 +53,7 @@ variable "alicloud_vswitch_cidr" {
 
 variable "alicloud_source_image" {
   type        = string
-  description = "Alibaba Cloud base image ID used by Packer."
+  description = "Alibaba Cloud base image ID used for provisioned instances."
 }
 
 variable "ssh_username" {

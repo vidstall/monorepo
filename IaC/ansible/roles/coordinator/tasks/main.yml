@@ -1,4 +1,22 @@
 ---
-- name: Mark coordinator role as configured
-  ansible.builtin.debug:
-    msg: "Configuring coordinator node"
+- name: Pull coordinator Redis image
+  ansible.builtin.command:
+    cmd: "docker pull {{ coordinator_image }}"
+  changed_when: "'Downloaded newer image' in coordinator_pull.stdout"
+  register: coordinator_pull
+
+- name: Remove existing coordinator Redis container
+  ansible.builtin.command:
+    cmd: "docker rm -f {{ coordinator_container_name }}"
+  failed_when: false
+  changed_when: coordinator_remove.rc == 0
+  register: coordinator_remove
+
+- name: Run coordinator Redis container
+  ansible.builtin.command:
+    cmd: >-
+      docker run -d
+      --name {{ coordinator_container_name }}
+      --restart unless-stopped
+      -p 6379:6379
+      {{ coordinator_image }}

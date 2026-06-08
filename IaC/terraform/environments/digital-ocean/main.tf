@@ -1,22 +1,9 @@
-data "local_file" "image_manifest" {
-  filename = abspath("${path.root}/../../../artifacts/image/manifest.json")
-}
-
 locals {
   common_tags = [
     "testbed:${var.testbed_name}",
     "source:depin-iac",
   ]
 
-  manifest = jsondecode(data.local_file.image_manifest.content)
-  builds_by_role = {
-    for build in local.manifest.builds :
-    element(split(".", build.name), length(split(".", build.name)) - 1) => build
-  }
-  image_ids = {
-    for role, build in local.builds_by_role :
-    role => element(split(":", build.artifact_id), 1)
-  }
   ssh_home   = var.ssh_username == "root" ? "/root" : "/home/${var.ssh_username}"
   cloud_init = <<-EOT
     #cloud-config
@@ -46,7 +33,7 @@ resource "digitalocean_ssh_key" "testbed" {
 resource "digitalocean_droplet" "worker" {
   count     = var.worker_count
   name      = "${var.testbed_name}-worker-${count.index + 1}"
-  image     = local.image_ids.worker
+  image     = var.digitalocean_image
   region    = var.digitalocean_region
   size      = var.digitalocean_size
   ssh_keys  = [digitalocean_ssh_key.testbed.id]
@@ -57,7 +44,7 @@ resource "digitalocean_droplet" "worker" {
 resource "digitalocean_droplet" "client" {
   count     = var.client_count
   name      = "${var.testbed_name}-client-${count.index + 1}"
-  image     = local.image_ids.client
+  image     = var.digitalocean_image
   region    = var.digitalocean_region
   size      = var.digitalocean_size
   ssh_keys  = [digitalocean_ssh_key.testbed.id]
@@ -68,7 +55,7 @@ resource "digitalocean_droplet" "client" {
 resource "digitalocean_droplet" "coordinator" {
   count     = var.coordinator_count
   name      = "${var.testbed_name}-coordinator-${count.index + 1}"
-  image     = local.image_ids.coordinator
+  image     = var.digitalocean_image
   region    = var.digitalocean_region
   size      = var.digitalocean_size
   ssh_keys  = [digitalocean_ssh_key.testbed.id]

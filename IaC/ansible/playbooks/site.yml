@@ -6,6 +6,7 @@
     # This value is expected to be injected later from the smart-contract folder.
     node_registry_contract_id: "{{ node_registry_contract_id | default(omit) }}"
   roles:
+    - role: docker
     - role: worker
       when: "'worker' in group_names"
     - role: client

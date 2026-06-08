@@ -68,7 +68,7 @@
   <text class="label" x="64" y="562">Cloud Testbed</text>
 
   <rect class="box ops" x="226" y="552" width="150" height="58"/>
-  <text class="label" x="268" y="586">Packer</text>
+  <text class="label" x="268" y="586">Docker</text>
 
   <rect class="box ops" x="476" y="552" width="150" height="58"/>
   <text class="label" x="511" y="586">Terraform</text>

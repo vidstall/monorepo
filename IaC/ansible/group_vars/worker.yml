@@ -1,3 +1,6 @@
 ---
 # Role-level variables for worker nodes.
 role_name: worker
+worker_container_name: xaisen-livekit-worker
+worker_image: livekit/livekit-server:latest
+worker_command: "--dev --bind 0.0.0.0"

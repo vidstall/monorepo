@@ -42,6 +42,6 @@ src/coordinator/scripts/healthcheck.sh
 
 ## Deployment Notes
 
-This first implementation is manual-only. The existing Ansible, Terraform, and Packer testbed role names already use `coordinator`, but this package does not install Redis through IaC yet.
+For IaC deployments, the `coordinator` Ansible role runs Redis as a Docker container on coordinator nodes.
 
 For production deployment, keep Redis on a private network, enable authentication/TLS where appropriate, and avoid using Redis as a durable source of worker truth.

@@ -58,7 +58,7 @@ sui move build --path src/contract --build-env testnet
 
 `IaC/` is the cloud testbed for the app.
 
-- It is used to build images, provision infrastructure, and configure nodes for future deployments.
+- It is used to provision infrastructure and configure Docker-managed nodes for future deployments.
 - It is not the contract implementation itself.
 - It exists to validate how the app can be deployed across cloud providers once the contract-backed registry is in place.
 

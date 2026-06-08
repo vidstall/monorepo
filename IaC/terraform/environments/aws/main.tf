@@ -1,7 +1,3 @@
-data "local_file" "image_manifest" {
-  filename = abspath("${path.root}/../../../artifacts/image/manifest.json")
-}
-
 data "aws_vpc" "default" {
   default = true
 }
@@ -13,21 +9,27 @@ data "aws_subnets" "default" {
   }
 }
 
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = [var.aws_source_ami_owner]
+
+  filter {
+    name   = "name"
+    values = [var.aws_source_ami_name_regex]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
 locals {
   common_tags = {
     testbed = var.testbed_name
     source  = "depin-iac"
   }
 
-  manifest = jsondecode(data.local_file.image_manifest.content)
-  builds_by_role = {
-    for build in local.manifest.builds :
-    element(split(".", build.name), length(split(".", build.name)) - 1) => build
-  }
-  image_ids = {
-    for role, build in local.builds_by_role :
-    role => element(split(":", build.artifact_id), 1)
-  }
   ssh_home   = var.ssh_username == "root" ? "/root" : "/home/${var.ssh_username}"
   cloud_init = <<-EOT
     #cloud-config
@@ -80,7 +82,7 @@ resource "aws_security_group" "ssh" {
 
 resource "aws_instance" "worker" {
   count                       = var.worker_count
-  ami                         = local.image_ids.worker
+  ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.aws_instance_type
   key_name                    = aws_key_pair.testbed.key_name
   subnet_id                   = data.aws_subnets.default.ids[0]
@@ -96,7 +98,7 @@ resource "aws_instance" "worker" {
 
 resource "aws_instance" "client" {
   count                       = var.client_count
-  ami                         = local.image_ids.client
+  ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.aws_instance_type
   key_name                    = aws_key_pair.testbed.key_name
   subnet_id                   = data.aws_subnets.default.ids[0]
@@ -112,7 +114,7 @@ resource "aws_instance" "client" {
 
 resource "aws_instance" "coordinator" {
   count                       = var.coordinator_count
-  ami                         = local.image_ids.coordinator
+  ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.aws_instance_type
   key_name                    = aws_key_pair.testbed.key_name
   subnet_id                   = data.aws_subnets.default.ids[0]

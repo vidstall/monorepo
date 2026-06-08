@@ -1,4 +1,23 @@
 ---
-- name: Mark worker role as configured
-  ansible.builtin.debug:
-    msg: "Configuring worker node"
+- name: Pull LiveKit worker image
+  ansible.builtin.command:
+    cmd: "docker pull {{ worker_image }}"
+  changed_when: "'Downloaded newer image' in worker_pull.stdout"
+  register: worker_pull
+
+- name: Remove existing LiveKit worker container
+  ansible.builtin.command:
+    cmd: "docker rm -f {{ worker_container_name }}"
+  failed_when: false
+  changed_when: worker_remove.rc == 0
+  register: worker_remove
+
+- name: Run LiveKit worker container
+  ansible.builtin.command:
+    cmd: >-
+      docker run -d
+      --name {{ worker_container_name }}
+      --restart unless-stopped
+      --network host
+      {{ worker_image }}
+      {{ worker_command }}

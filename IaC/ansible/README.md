@@ -1,6 +1,6 @@
 # Ansible Layout
 
-Ansible configures nodes after Terraform has provisioned them.
+Ansible configures nodes after Terraform has provisioned them. It installs Docker and runs the role-specific containers.
 
 ## Role model
 

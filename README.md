@@ -3,7 +3,7 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Python 3.8+](https://img.shields.io/badge/Python-3.8%2B-blue.svg)
 ![Terraform 1.6+](https://img.shields.io/badge/Terraform-1.6%2B-844FBA.svg)
-![Packer 1.9+](https://img.shields.io/badge/Packer-1.9%2B-02A8EF.svg)
+![Docker](https://img.shields.io/badge/Docker-runtime-2496ED.svg)
 
 A decentralized video conferencing platform powered by a contract-backed node registry.
 
@@ -18,7 +18,7 @@ Xaisen connects customers who need video conference rooms with workers that prov
 - Decentralized infrastructure model where workers register through an on-chain node registry.
 - Rentable video conference rooms backed by registered worker capacity.
 - LiveKit SFU media plane for real-time conferencing and WebRTC transport.
-- Cloud testbed pipeline using Packer, Terraform, and Ansible for repeatable deployments.
+- Cloud testbed pipeline using Terraform, Ansible, and Docker for repeatable deployments.
 
 ## Quick Start
 
@@ -26,7 +26,7 @@ Xaisen connects customers who need video conference rooms with workers that prov
 
 - Python 3.8+
 - Terraform 1.6+
-- Packer 1.9+
+- Docker-compatible target hosts provisioned by Ansible
 - Ansible 2.14+
 
 ```bash

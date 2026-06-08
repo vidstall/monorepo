@@ -2,10 +2,6 @@ provider "alicloud" {
   region = var.alicloud_region
 }
 
-data "local_file" "image_manifest" {
-  filename = abspath("${path.root}/../../../artifacts/image/manifest.json")
-}
-
 data "alicloud_zones" "available" {
   available_instance_type     = var.alicloud_instance_type
   available_resource_creation = "Instance"
@@ -17,15 +13,6 @@ locals {
     source  = "depin-iac"
   }
 
-  manifest = jsondecode(data.local_file.image_manifest.content)
-  builds_by_role = {
-    for build in local.manifest.builds :
-    element(split(".", build.name), length(split(".", build.name)) - 1) => build
-  }
-  image_ids = {
-    for role, build in local.builds_by_role :
-    role => element(split(":", build.artifact_id), 1)
-  }
   ssh_home   = var.ssh_username == "root" ? "/root" : "/home/${var.ssh_username}"
   cloud_init = <<-EOT
     #cloud-config
@@ -93,7 +80,7 @@ resource "alicloud_instance" "worker" {
   count                      = var.worker_count
   instance_name              = "${var.testbed_name}-worker-${count.index + 1}"
   host_name                  = "${var.testbed_name}-worker-${count.index + 1}"
-  image_id                   = local.image_ids.worker
+  image_id                   = var.alicloud_source_image
   instance_type              = var.alicloud_instance_type
   security_groups            = [alicloud_security_group.ssh.id]
   vswitch_id                 = alicloud_vswitch.testbed.id
@@ -109,7 +96,7 @@ resource "alicloud_instance" "client" {
   count                      = var.client_count
   instance_name              = "${var.testbed_name}-client-${count.index + 1}"
   host_name                  = "${var.testbed_name}-client-${count.index + 1}"
-  image_id                   = local.image_ids.client
+  image_id                   = var.alicloud_source_image
   instance_type              = var.alicloud_instance_type
   security_groups            = [alicloud_security_group.ssh.id]
   vswitch_id                 = alicloud_vswitch.testbed.id
@@ -125,7 +112,7 @@ resource "alicloud_instance" "coordinator" {
   count                      = var.coordinator_count
   instance_name              = "${var.testbed_name}-coordinator-${count.index + 1}"
   host_name                  = "${var.testbed_name}-coordinator-${count.index + 1}"
-  image_id                   = local.image_ids.coordinator
+  image_id                   = var.alicloud_source_image
   instance_type              = var.alicloud_instance_type
   security_groups            = [alicloud_security_group.ssh.id]
   vswitch_id                 = alicloud_vswitch.testbed.id

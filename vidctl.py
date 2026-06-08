@@ -9,27 +9,17 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Sequence
+from typing import Dict, List, Mapping, Sequence
 
 
 REPO_ROOT = Path(__file__).resolve().parent
 ARTIFACTS_DIR = REPO_ROOT / "artifacts"
-IMAGE_ARTIFACT_DIR = ARTIFACTS_DIR / "image"
-IMAGE_MANIFEST = IMAGE_ARTIFACT_DIR / "manifest.json"
 SSH_CONFIG_DIR = ARTIFACTS_DIR / "ssh_config"
-PACKER_DIR = REPO_ROOT / "IaC" / "packer"
 TERRAFORM_ENV_DIR = REPO_ROOT / "IaC" / "terraform" / "environments"
 ANSIBLE_PLAYBOOK = REPO_ROOT / "IaC" / "ansible" / "playbooks" / "site.yml"
 
 PROVIDER_CHOICES = ("aws", "digital-ocean", "hetzner", "alibaba-cloud")
 ROLE_CHOICES = ("worker", "client", "coordinator")
-ROLE_ALIASES = {
-    "worker": "worker",
-    "client": "client",
-    "coordinator": "coordinator",
-    "livekit": "worker",
-    "meet": "client",
-}
 PROVIDER_ENV_FILES = {
     "aws": "aws.env",
     "digital-ocean": "digital-ocean.env",
@@ -42,18 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="vidctl.py")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    build = subparsers.add_parser("build", help="Build cloud-native images with Packer")
-    build.add_argument("--provider", required=True, choices=PROVIDER_CHOICES)
-    build.add_argument(
-        "--role",
-        default="all",
-        choices=("all", *ROLE_ALIASES.keys()),
-        help="Build all roles or a single role.",
-    )
-    build.add_argument("--testbed-name", default="depin-testbed")
-    build.set_defaults(func=cmd_build)
-
-    deploy = subparsers.add_parser("deploy", help="Build images, apply Terraform, then run Ansible")
+    deploy = subparsers.add_parser("deploy", help="Apply Terraform, then configure Docker with Ansible")
     deploy.add_argument("--provider", required=True, choices=PROVIDER_CHOICES)
     deploy.add_argument("--testbed-name", default="depin-testbed")
     deploy.add_argument("--node-registry-contract-id", default=None)
@@ -118,72 +97,16 @@ def build_env(provider: str) -> Dict[str, str]:
 
 
 def ensure_runtime_dirs() -> None:
-    IMAGE_ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     SSH_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def provider_packer_template(provider: str) -> Path:
-    return PACKER_DIR / f"{provider}.pkr.hcl"
 
 
 def provider_terraform_root(provider: str) -> Path:
     return TERRAFORM_ENV_DIR / provider
 
 
-def canonical_role(role: str) -> str:
-    if role == "all":
-        return role
-    try:
-        return ROLE_ALIASES[role]
-    except KeyError as exc:
-        raise SystemExit(f"Unsupported role: {role}") from exc
-
-
 def run_command(args: Sequence[str], *, cwd: Path, env: Mapping[str, str]) -> None:
     print(f"+ {shlex.join(args)}", flush=True)
     subprocess.run(args, cwd=str(cwd), env=dict(env), check=True)
-
-
-def validate_manifest(expected_roles: Iterable[str]) -> None:
-    if not IMAGE_MANIFEST.exists():
-        raise SystemExit(f"Missing manifest: {IMAGE_MANIFEST}")
-
-    manifest = json.loads(IMAGE_MANIFEST.read_text(encoding="utf-8"))
-    found_roles = set()
-    for build in manifest.get("builds", []):
-        name = build.get("name", "")
-        if "." in name:
-            found_roles.add(name.rsplit(".", 1)[-1])
-
-    missing = set(expected_roles) - found_roles
-    if missing:
-        raise SystemExit(
-            "Manifest does not include the expected roles: "
-            + ", ".join(sorted(missing))
-        )
-
-
-def packer_build(provider: str, role: str, testbed_name: str) -> None:
-    ensure_runtime_dirs()
-    env = build_env(provider)
-    env["PKR_VAR_testbed_name"] = testbed_name
-    env["PKR_VAR_artifacts_dir"] = str(ARTIFACTS_DIR.resolve())
-
-    template = provider_packer_template(provider)
-    if not template.exists():
-        raise SystemExit(f"Missing Packer template: {template}")
-
-    run_command(["packer", "init", "."], cwd=PACKER_DIR, env=env)
-
-    args: List[str] = ["packer", "build", "-force"]
-    if role != "all":
-        args.extend(["-only", f"*.{role}"])
-    args.append(".")
-
-    run_command(args, cwd=PACKER_DIR, env=env)
-
-    expected_roles = ROLE_CHOICES if role == "all" else [role]
-    validate_manifest(expected_roles)
 
 
 def terraform_args(
@@ -301,7 +224,11 @@ def render_inventory(provider: str, outputs: Mapping[str, object]) -> Path:
 def ansible_playbook(inventory_path: Path, env: Mapping[str, str]) -> None:
     if not ANSIBLE_PLAYBOOK.exists():
         raise SystemExit(f"Missing Ansible playbook: {ANSIBLE_PLAYBOOK}")
-    run_command(["ansible-playbook", "-i", str(inventory_path), str(ANSIBLE_PLAYBOOK)], cwd=REPO_ROOT, env=env)
+    run_command(
+        ["ansible-playbook", "-i", str(inventory_path), str(ANSIBLE_PLAYBOOK)],
+        cwd=ANSIBLE_PLAYBOOK.parent.parent,
+        env=env,
+    )
 
 
 def cleanup_provider_artifacts(provider: str) -> None:
@@ -310,18 +237,8 @@ def cleanup_provider_artifacts(provider: str) -> None:
         target.unlink(missing_ok=True)
 
 
-def cleanup_global_artifacts() -> None:
-    IMAGE_MANIFEST.unlink(missing_ok=True)
-
-
-def cmd_build(args: argparse.Namespace) -> None:
-    role = canonical_role(args.role)
-    packer_build(args.provider, role, args.testbed_name)
-
-
 def cmd_deploy(args: argparse.Namespace) -> None:
     env = build_env(args.provider)
-    packer_build(args.provider, "all", args.testbed_name)
     terraform_apply(args.provider, args, env)
     outputs = terraform_output(args.provider, env)
     inventory_path = render_inventory(args.provider, outputs)
@@ -334,11 +251,11 @@ def cmd_destroy(args: argparse.Namespace) -> None:
             env = build_env(provider)
             terraform_destroy(provider, args, env)
             cleanup_provider_artifacts(provider)
+        return
     else:
         env = build_env(args.provider)
         terraform_destroy(args.provider, args, env)
         cleanup_provider_artifacts(args.provider)
-    cleanup_global_artifacts()
 
 
 def cmd_inventory(args: argparse.Namespace) -> None:

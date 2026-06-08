@@ -1,4 +1,4 @@
 ---
-- name: Mark client role as configured
+- name: Mark client Docker runtime as ready
   ansible.builtin.debug:
-    msg: "Configuring client node"
+    msg: "Docker is installed; no client container image is configured yet."

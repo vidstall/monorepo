@@ -7,7 +7,7 @@ This repository uses infrastructure-as-code to build and validate the cloud depl
 `IaC/` is the testbed layer for the system.
 
 - It builds cloud-native images for each provider.
-- It provisions provider infrastructure from the image manifest.
+- It provisions provider infrastructure from base OS images.
 - It configures the resulting nodes after they are created.
 - It gives the app a repeatable way to exercise the deployment pipeline across cloud vendors.
 
@@ -15,9 +15,9 @@ This repository uses infrastructure-as-code to build and validate the cloud depl
 
 The orchestration flow is:
 
-1. Packer builds images for the selected provider and roles.
-2. Packer writes `artifacts/image/manifest.json`.
-3. Terraform reads that manifest and provisions infrastructure from the image IDs.
+1. Terraform provisions base instances for the selected provider and roles.
+2. Terraform generates SSH material and inventory data.
+3. Ansible installs Docker and runs the role containers.
 4. Terraform generates SSH material and inventory data.
 5. Ansible runs against the transient inventory.
 
@@ -25,7 +25,6 @@ The orchestration flow is:
 
 ## Layout
 
-- `IaC/packer/` contains the cloud image build templates.
 - `IaC/terraform/` contains the provider roots and shared modules.
 - `IaC/ansible/` contains the post-provision configuration.
 
@@ -61,7 +60,5 @@ IaC should stay focused on deployment and validation, not app feature logic.
 - [`README.md`](/Users/qvanle/projects/personal/livekit/codebase/README.md)
 - [`docs/cli.md`](/Users/qvanle/projects/personal/livekit/codebase/docs/cli.md)
 - [`IaC/README.md`](/Users/qvanle/projects/personal/livekit/codebase/IaC/README.md)
-- [`IaC/packer/README.md`](/Users/qvanle/projects/personal/livekit/codebase/IaC/packer/README.md)
 - [`IaC/terraform/README.md`](/Users/qvanle/projects/personal/livekit/codebase/IaC/terraform/README.md)
 - [`IaC/ansible/README.md`](/Users/qvanle/projects/personal/livekit/codebase/IaC/ansible/README.md)
-
