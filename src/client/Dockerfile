@@ -9,7 +9,7 @@ WORKDIR /app
 RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ARG NEXT_PUBLIC_ROUTES_URL=http://localhost:3001/api
+ARG NEXT_PUBLIC_ROUTES_URL=/api
 ENV NEXT_PUBLIC_ROUTES_URL=$NEXT_PUBLIC_ROUTES_URL
 RUN pnpm build
 

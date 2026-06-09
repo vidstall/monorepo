@@ -1,3 +1,7 @@
 ---
 # Role-level variables for client nodes.
 role_name: client
+client_container_name: xaisen-client
+routes_container_name: xaisen-routes
+proxy_container_name: xaisen-proxy
+proxy_config_path: /etc/xaisen/Caddyfile

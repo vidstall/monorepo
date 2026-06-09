@@ -2,4 +2,3 @@
 # Role-level variables for coordinator nodes.
 role_name: coordinator
 coordinator_container_name: xaisen-coordinator-redis
-coordinator_image: redis:7.4-alpine

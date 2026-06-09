@@ -1,4 +1,116 @@
 ---
-- name: Mark client Docker runtime as ready
-  ansible.builtin.debug:
-    msg: "Docker is installed; no client container image is configured yet."
+- name: Create Xaisen proxy configuration directory
+  ansible.builtin.file:
+    path: /etc/xaisen
+    state: directory
+    mode: "0755"
+
+- name: Write client reverse proxy configuration
+  ansible.builtin.copy:
+    dest: "{{ proxy_config_path }}"
+    mode: "0644"
+    content: |
+      :80 {
+        handle /api/* {
+          reverse_proxy 127.0.0.1:3001
+        }
+
+        handle {
+          reverse_proxy 127.0.0.1:3000
+        }
+      }
+
+- name: Pull routes image
+  ansible.builtin.command:
+    cmd: "docker pull {{ XAISEN_ROUTES_IMAGE }}"
+  changed_when: "'Downloaded newer image' in routes_pull.stdout"
+  register: routes_pull
+
+- name: Pull client image
+  ansible.builtin.command:
+    cmd: "docker pull {{ XAISEN_CLIENT_IMAGE }}"
+  changed_when: "'Downloaded newer image' in client_pull.stdout"
+  register: client_pull
+
+- name: Pull proxy image
+  ansible.builtin.command:
+    cmd: "docker pull {{ XAISEN_PROXY_IMAGE }}"
+  changed_when: "'Downloaded newer image' in proxy_pull.stdout"
+  register: proxy_pull
+
+- name: Remove existing routes container
+  ansible.builtin.command:
+    cmd: "docker rm -f {{ routes_container_name }}"
+  failed_when: false
+  changed_when: routes_remove.rc == 0
+  register: routes_remove
+
+- name: Remove existing client container
+  ansible.builtin.command:
+    cmd: "docker rm -f {{ client_container_name }}"
+  failed_when: false
+  changed_when: client_remove.rc == 0
+  register: client_remove
+
+- name: Remove existing proxy container
+  ansible.builtin.command:
+    cmd: "docker rm -f {{ proxy_container_name }}"
+  failed_when: false
+  changed_when: proxy_remove.rc == 0
+  register: proxy_remove
+
+- name: Run routes API container
+  ansible.builtin.command:
+    cmd: >-
+      docker run -d
+      --name {{ routes_container_name }}
+      --restart unless-stopped
+      -p 127.0.0.1:3001:3001
+      --env LIVEKIT_API_KEY
+      --env LIVEKIT_API_SECRET
+      --env LIVEKIT_URL
+      --env CONTRACT_NETWORK
+      --env CONTRACT_PACKAGE_ID
+      --env CONTRACT_REGISTRY_OBJECT_ID
+      --env CONTRACT_UPGRADE_CAP_ID
+      --env CONTRACT_DEPLOYER_ADDRESS
+      --env CONTRACT_PUBLISH_TX_DIGEST
+      --env CONTRACT_UPDATE_TX_DIGEST
+      {{ XAISEN_ROUTES_IMAGE }}
+  environment:
+    LIVEKIT_API_KEY: "{{ LIVEKIT_API_KEY }}"
+    LIVEKIT_API_SECRET: "{{ LIVEKIT_API_SECRET }}"
+    LIVEKIT_URL: "{{ LIVEKIT_URL }}"
+    CONTRACT_NETWORK: "{{ CONTRACT_NETWORK | default('testnet') }}"
+    CONTRACT_PACKAGE_ID: "{{ CONTRACT_PACKAGE_ID | default('') }}"
+    CONTRACT_REGISTRY_OBJECT_ID: "{{ CONTRACT_REGISTRY_OBJECT_ID | default('') }}"
+    CONTRACT_UPGRADE_CAP_ID: "{{ CONTRACT_UPGRADE_CAP_ID | default('') }}"
+    CONTRACT_DEPLOYER_ADDRESS: "{{ CONTRACT_DEPLOYER_ADDRESS | default('') }}"
+    CONTRACT_PUBLISH_TX_DIGEST: "{{ CONTRACT_PUBLISH_TX_DIGEST | default('') }}"
+    CONTRACT_UPDATE_TX_DIGEST: "{{ CONTRACT_UPDATE_TX_DIGEST | default('') }}"
+  no_log: true
+
+- name: Run client frontend container
+  ansible.builtin.command:
+    cmd: >-
+      docker run -d
+      --name {{ client_container_name }}
+      --restart unless-stopped
+      -p 127.0.0.1:3000:3000
+      --env NEXT_PUBLIC_ROUTES_URL
+      --env NEXT_PUBLIC_SHOW_SETTINGS_MENU
+      {{ XAISEN_CLIENT_IMAGE }}
+  environment:
+    NEXT_PUBLIC_ROUTES_URL: /api
+    NEXT_PUBLIC_SHOW_SETTINGS_MENU: "{{ NEXT_PUBLIC_SHOW_SETTINGS_MENU | default('') }}"
+
+- name: Run client reverse proxy container
+  ansible.builtin.command:
+    cmd: >-
+      docker run -d
+      --name {{ proxy_container_name }}
+      --restart unless-stopped
+      --network host
+      -v {{ proxy_config_path }}:/etc/caddy/Caddyfile:ro
+      {{ XAISEN_PROXY_IMAGE }}
+      run --config /etc/caddy/Caddyfile --adapter caddyfile

@@ -1,7 +1,31 @@
 ---
+- name: Create Xaisen configuration directory
+  ansible.builtin.file:
+    path: /etc/xaisen
+    state: directory
+    mode: "0755"
+
+- name: Write LiveKit worker configuration
+  ansible.builtin.copy:
+    dest: "{{ worker_config_path }}"
+    mode: "0600"
+    content: |
+      port: 7880
+      bind_addresses:
+        - "0.0.0.0"
+      rtc:
+        tcp_port: 7881
+        udp_port: 7882
+        node_ip: "{{ public_ip }}"
+      redis:
+        address: "{{ redis_address }}"
+      keys:
+        "{{ LIVEKIT_API_KEY }}": "{{ LIVEKIT_API_SECRET }}"
+  no_log: true
+
 - name: Pull LiveKit worker image
   ansible.builtin.command:
-    cmd: "docker pull {{ worker_image }}"
+    cmd: "docker pull {{ XAISEN_WORKER_IMAGE }}"
   changed_when: "'Downloaded newer image' in worker_pull.stdout"
   register: worker_pull
 
@@ -19,5 +43,7 @@
       --name {{ worker_container_name }}
       --restart unless-stopped
       --network host
-      {{ worker_image }}
-      {{ worker_command }}
+      -v {{ worker_config_path }}:/etc/livekit.yaml:ro
+      {{ XAISEN_WORKER_IMAGE }}
+      --config /etc/livekit.yaml
+  no_log: true
