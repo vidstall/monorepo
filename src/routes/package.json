@@ -10,6 +10,7 @@
     "format:write": "prettier --write \"**/*.{ts,tsx,md,json,js}\""
   },
   "dependencies": {
+    "@mysten/sui": "2.16.3",
     "livekit-server-sdk": "2.15.4",
     "next": "15.5.16",
     "react": "18.3.1",

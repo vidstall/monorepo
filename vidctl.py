@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -26,6 +27,21 @@ PROVIDER_ENV_FILES = {
     "hetzner": "hetzner.env",
     "alibaba-cloud": "alibaba-cloud.env",
 }
+CONTRACT_NETWORK_CHOICES = ("devnet", "testnet", "mainnet")
+CONTRACT_ENV_FILE = REPO_ROOT / "secrets" / "contract.env"
+CONTRACT_ENV_DIR = REPO_ROOT / "secrets" / "contract"
+CONTRACT_PACKAGE_PATH = REPO_ROOT / "src" / "contract"
+CONTRACT_ENV_KEYS = (
+    "CONTRACT_NETWORK",
+    "CONTRACT_PACKAGE_ID",
+    "CONTRACT_REGISTRY_OBJECT_ID",
+    "CONTRACT_UPGRADE_CAP_ID",
+    "CONTRACT_DEPLOYER_ADDRESS",
+    "CONTRACT_PUBLISH_TX_DIGEST",
+    "CONTRACT_GAS_OBJECT_ID",
+    "CONTRACT_GAS_OBJECT_VERSION",
+    "CONTRACT_GAS_OBJECT_DIGEST",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,6 +56,37 @@ def parse_args() -> argparse.Namespace:
     deploy.add_argument("--client-nodes", "--meet-nodes", dest="client_nodes", type=int, default=1)
     deploy.add_argument("--coordinator-nodes", type=int, default=1)
     deploy.set_defaults(func=cmd_deploy)
+
+    deploy_contract = subparsers.add_parser(
+        "deploy-contract",
+        help="Switch a Sui environment, build the Move package, and publish the contract",
+    )
+    deploy_contract.add_argument("--network", required=True, choices=CONTRACT_NETWORK_CHOICES)
+    deploy_contract.add_argument("--package-path", type=Path, default=CONTRACT_PACKAGE_PATH)
+    deploy_contract.add_argument("--gas-budget", type=int, default=1_000_000_000)
+    deploy_contract.add_argument(
+        "--gas-coin",
+        dest="gas_coins",
+        action="append",
+        default=[],
+        help="Explicit gas coin object ID to use for publish; repeatable.",
+    )
+    deploy_contract.set_defaults(func=cmd_deploy_contract)
+
+    init_contract = subparsers.add_parser(
+        "init-contract",
+        help="Create the shared SUI registry object for a published contract",
+    )
+    init_contract.add_argument("--network", required=True, choices=CONTRACT_NETWORK_CHOICES)
+    init_contract.add_argument("--gas-budget", type=int, default=100_000_000)
+    init_contract.add_argument(
+        "--gas-coin",
+        dest="gas_coins",
+        action="append",
+        default=[],
+        help="Explicit gas coin object ID to use for registry initialization; repeatable.",
+    )
+    init_contract.set_defaults(func=cmd_init_contract)
 
     destroy = subparsers.add_parser("destroy", help="Tear down Terraform-managed infrastructure")
     destroy.add_argument(
@@ -94,6 +141,127 @@ def build_env(provider: str) -> Dict[str, str]:
     env = os.environ.copy()
     env.update(load_env_file(REPO_ROOT / "secrets" / "cloud" / PROVIDER_ENV_FILES[provider]))
     return env
+
+
+def build_contract_env(network: str) -> Dict[str, str]:
+    env = os.environ.copy()
+    env.update(load_env_file(CONTRACT_ENV_FILE))
+    env.update(load_env_file(CONTRACT_ENV_DIR / f"{network}.env"))
+    env["SUI_NETWORK"] = network
+    return env
+
+
+def parse_publish_metadata(output: str) -> Dict[str, str]:
+    result: Dict[str, str] = {}
+
+    patterns = {
+        "CONTRACT_PUBLISH_TX_DIGEST": r"^Transaction Digest:\s*([0-9A-Za-z]+)$",
+        "CONTRACT_DEPLOYER_ADDRESS": r"^│ Sender:\s*(0x[0-9a-fA-F]+)\s*│$",
+        "CONTRACT_PACKAGE_ID": r"^│ │ PackageID:\s*(0x[0-9a-fA-F]+)\s+Version:\s*\d+\s+Digest:\s*[0-9A-Za-z]+\s*│$",
+        "CONTRACT_UPGRADE_CAP_ID": r"^│ │ ID:\s*(0x[0-9a-fA-F]+)\s*│$",
+        "CONTRACT_GAS_OBJECT_ID": r"^│ │ ID:\s*(0x[0-9a-fA-F]+)\s*│$",
+        "CONTRACT_GAS_OBJECT_VERSION": r"^│ │ Version:\s*(\d+)\s*│$",
+        "CONTRACT_GAS_OBJECT_DIGEST": r"^│ │ Digest:\s*([0-9A-Za-z]+)\s*│$",
+    }
+
+    lines = output.splitlines()
+
+    for line in lines:
+        for key, pattern in patterns.items():
+            if key in result:
+                continue
+            match = re.match(pattern, line)
+            if match:
+                result[key] = match.group(1)
+
+    upgrade_cap_id = None
+    gas_object_id = None
+    gas_object_version = None
+    gas_object_digest = None
+    in_created_objects = False
+    in_gas_object = False
+    in_published_objects = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "Created Objects:":
+            in_created_objects = True
+            in_gas_object = False
+            continue
+        if stripped == "Published Objects:":
+            in_published_objects = True
+            in_created_objects = False
+            in_gas_object = False
+            continue
+        if stripped == "Gas Object:":
+            in_gas_object = True
+            continue
+
+        if in_created_objects and stripped.startswith("ID:") and "UpgradeCap" not in result:
+            upgrade_cap_id = stripped.split()[1]
+            result["CONTRACT_UPGRADE_CAP_ID"] = upgrade_cap_id
+        if in_gas_object and stripped.startswith("ID:"):
+            gas_object_id = stripped.split()[1]
+        if in_gas_object and stripped.startswith("Version:"):
+            gas_object_version = stripped.split()[1]
+        if in_gas_object and stripped.startswith("Digest:"):
+            gas_object_digest = stripped.split()[1]
+            in_gas_object = False
+        if in_published_objects and stripped.startswith("PackageID:"):
+            result["CONTRACT_PACKAGE_ID"] = stripped.split()[1]
+
+    if gas_object_id is not None:
+        result["CONTRACT_GAS_OBJECT_ID"] = gas_object_id
+    if gas_object_version is not None:
+        result["CONTRACT_GAS_OBJECT_VERSION"] = gas_object_version
+    if gas_object_digest is not None:
+        result["CONTRACT_GAS_OBJECT_DIGEST"] = gas_object_digest
+
+    required = (
+        "CONTRACT_PACKAGE_ID",
+        "CONTRACT_UPGRADE_CAP_ID",
+        "CONTRACT_DEPLOYER_ADDRESS",
+        "CONTRACT_PUBLISH_TX_DIGEST",
+        "CONTRACT_GAS_OBJECT_ID",
+        "CONTRACT_GAS_OBJECT_VERSION",
+        "CONTRACT_GAS_OBJECT_DIGEST",
+    )
+    missing = [key for key in required if key not in result]
+    if missing:
+        raise SystemExit(f"Could not parse publish metadata from Sui output: {', '.join(missing)}")
+
+    return result
+
+
+def parse_registry_object_id(output: str) -> str:
+    current_object_id: str | None = None
+    fallback_object_id: str | None = None
+
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("ObjectID:"):
+            current_object_id = stripped.split()[1]
+            if fallback_object_id is None:
+                fallback_object_id = current_object_id
+        elif stripped.startswith("ID:"):
+            current_object_id = stripped.split()[1]
+            if fallback_object_id is None:
+                fallback_object_id = current_object_id
+        elif "ObjectType:" in stripped and "::node_registry::Registry<" in stripped and current_object_id:
+            return current_object_id
+
+    if fallback_object_id:
+        return fallback_object_id
+    raise SystemExit("Could not parse registry object ID from Sui output")
+
+
+def write_contract_env(network: str, metadata: Mapping[str, str]) -> None:
+    contract_env_file = CONTRACT_ENV_DIR / f"{network}.env"
+    contract_env_file.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"{key}={metadata.get(key, '')}" for key in CONTRACT_ENV_KEYS]
+    lines.insert(0, f"# Auto-generated by `vidctl.py deploy-contract --network {network}`")
+    contract_env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Wrote contract metadata to {contract_env_file}")
 
 
 def ensure_runtime_dirs() -> None:
@@ -243,6 +411,107 @@ def cmd_deploy(args: argparse.Namespace) -> None:
     outputs = terraform_output(args.provider, env)
     inventory_path = render_inventory(args.provider, outputs)
     ansible_playbook(inventory_path, env)
+
+
+def cmd_deploy_contract(args: argparse.Namespace) -> None:
+    if not args.package_path.exists():
+        raise SystemExit(f"Missing contract package path: {args.package_path}")
+
+    env = build_contract_env(args.network)
+    print(f"Switching Sui CLI to {args.network}...")
+    run_command(["sui", "client", "switch", "--env", args.network], cwd=REPO_ROOT, env=env)
+
+    print(f"Building Move package at {args.package_path} for {args.network}...")
+    run_command(
+        ["sui", "move", "build", "--path", str(args.package_path), "--build-env", args.network],
+        cwd=REPO_ROOT,
+        env=env,
+    )
+    print(f"Publishing contract from {args.package_path} to {args.network}...")
+    publish_args = ["sui", "client", "publish", "--gas-budget", str(args.gas_budget)]
+    if args.gas_coins:
+        publish_args.extend(["--gas", *args.gas_coins])
+    print(f"+ {shlex.join(publish_args)}", flush=True)
+    completed = subprocess.run(
+        publish_args,
+        cwd=str(args.package_path),
+        env=dict(env),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.stdout:
+        print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
+    if completed.stderr:
+        print(completed.stderr, end="" if completed.stderr.endswith("\n") else "\n", file=sys.stderr)
+    if completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            publish_args,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
+
+    metadata = parse_publish_metadata(completed.stdout)
+    metadata["CONTRACT_NETWORK"] = args.network
+    write_contract_env(args.network, metadata)
+
+
+def cmd_init_contract(args: argparse.Namespace) -> None:
+    env = build_contract_env(args.network)
+    package_id = env.get("CONTRACT_PACKAGE_ID")
+    if not package_id:
+        raise SystemExit(
+            f"Missing CONTRACT_PACKAGE_ID in {CONTRACT_ENV_DIR / f'{args.network}.env'}; "
+            "run deploy-contract first."
+        )
+
+    print(f"Switching Sui CLI to {args.network}...")
+    run_command(["sui", "client", "switch", "--env", args.network], cwd=REPO_ROOT, env=env)
+
+    print(f"Creating shared Registry<0x2::sui::SUI> for package {package_id}...")
+    call_args = [
+        "sui",
+        "client",
+        "call",
+        "--package",
+        package_id,
+        "--module",
+        "node_registry",
+        "--function",
+        "create_registry",
+        "--type-args",
+        "0x2::sui::SUI",
+        "--gas-budget",
+        str(args.gas_budget),
+    ]
+    if args.gas_coins:
+        call_args.extend(["--gas", *args.gas_coins])
+
+    print(f"+ {shlex.join(call_args)}", flush=True)
+    completed = subprocess.run(
+        call_args,
+        cwd=str(REPO_ROOT),
+        env=dict(env),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, end="")
+    if completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            call_args,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
+
+    metadata = {key: env.get(key, "") for key in CONTRACT_ENV_KEYS}
+    metadata["CONTRACT_NETWORK"] = args.network
+    metadata["CONTRACT_REGISTRY_OBJECT_ID"] = parse_registry_object_id(completed.stdout)
+    write_contract_env(args.network, metadata)
 
 
 def cmd_destroy(args: argparse.Namespace) -> None:

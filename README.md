@@ -36,7 +36,7 @@ python3 vidctl.py --help
 python3 vidctl.py deploy --provider aws --worker-nodes 1 --client-nodes 1 --coordinator-nodes 1
 ```
 
-Provider credentials live in `secrets/cloud/<provider>.env`. Contract deployment credentials and mainnet metadata live in `secrets/contract.env`. See [`docs/cli.md`](docs/cli.md) before running deployments.
+Provider credentials live in `secrets/cloud/<provider>.env`. Contract deployment metadata lives in `secrets/contract/<network>.env`, for example `secrets/contract/testnet.env` or `secrets/contract/mainnet.env`. Use [`vidctl.py deploy-contract`](docs/cli.md) to publish the Move package, then `vidctl.py init-contract` to create and store the shared registry object id.
 
 ## Documentation
 

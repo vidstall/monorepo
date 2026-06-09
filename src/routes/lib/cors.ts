@@ -1,5 +1,5 @@
 const ALLOWED_HEADERS = 'Content-Type, Authorization';
-const ALLOWED_METHODS = 'GET, OPTIONS';
+const ALLOWED_METHODS = 'GET, POST, OPTIONS';
 
 export function getCorsHeaders(origin: string | null) {
   const allowOrigin = origin ?? '*';
