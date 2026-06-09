@@ -33,10 +33,10 @@ Xaisen connects customers who need video conference rooms with workers that prov
 git clone https://github.com/your-username/xaisen.git
 cd xaisen
 python3 vidctl.py --help
-python3 vidctl.py build --provider aws --role worker
+python3 vidctl.py deploy --provider aws --worker-nodes 1 --client-nodes 1 --coordinator-nodes 1
 ```
 
-Provider credentials live in `secrets/cloud/<provider>.env`. Contract deployment credentials and mainnet metadata live in `secrets/contract.env`. See [`docs/cli.md`](docs/cli.md) before running provider builds or deployments.
+Provider credentials live in `secrets/cloud/<provider>.env`. Contract deployment credentials and mainnet metadata live in `secrets/contract.env`. See [`docs/cli.md`](docs/cli.md) before running deployments.
 
 ## Documentation
 

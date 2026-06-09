@@ -1,6 +1,8 @@
 services:
   redis:
-    image: redis:7.4-alpine
+    build:
+      context: .
+    image: xaisen-coordinator:latest
     container_name: xaisen-coordinator-redis
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     ports:

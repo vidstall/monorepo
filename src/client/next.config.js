@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: false,
   productionBrowserSourceMaps: true,
+  output: 'standalone',
   images: {
     formats: ['image/webp'],
   },
