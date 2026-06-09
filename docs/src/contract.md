@@ -1,53 +1,39 @@
 # Contract Layer
 
-This document describes the Sui on-chain contract boundary for the web3 video conferencing app.
+Sui on-chain contract boundary for Xaisen.
 
 ## Purpose
 
-The smart contract acts as the node registry for the system.
+The contract acts as the durable worker marketplace for the application:
 
-- Workers register through the contract before they participate in the network.
-- The registry is the on-chain source of truth for available worker nodes.
-- Customers use the application to rent video conference rooms backed by the registered infrastructure.
+- workers register node metadata and stake collateral before becoming rentable
+- clients hire available workers for room-backed service
+- client payments are held in escrow until completion or cancellation
+- completed rentals pay worker rewards on-chain
 
-The current implementation is a Sui Move package in `src/contract`.
+LiveKit media transport, participant tokens, Redis coordination, ingress, egress, and operational room state remain off-chain.
 
-## Role In The System
+## Current Implementation
 
-The application is split into three main runtime layers:
+The Sui Move package lives in `src/contract`.
 
-- `src/livekit/` is the SFU layer.
-  - It provides the media plane and conferencing runtime.
-- `src/coordinator/` is the coordination layer.
-  - It provides Redis-backed cluster coordination, job dispatching, ingress, and egress state.
-- `src/routes/` is the meeting app backend routes service.
-  - It contains the API/backend behavior split out from `livekit-examples/meet`.
-- `src/client/` is the meeting app frontend.
-  - It contains the user-facing conferencing UI split out from `livekit-examples/meet`.
+- `sources/node_registry.move` implements the generic `Registry<T>` marketplace.
+- `tests/node_registry_tests.move` covers registration, staking, hiring, escrow, completion, cancellation, rewards, and withdrawal guards.
+- `src/livekit/` remains the SFU/runtime layer.
+- `src/coordinator/` remains the Redis-backed runtime coordination layer.
+- `src/routes/` and `src/client/` remain the API/frontend layers.
 
-The contract layer sits above those components and provides the registry that ties worker participation to the application model.
+## Marketplace Model
 
-## Contract Boundary
+- Workers register with metadata URI, 32-byte metadata hash, fixed price per rental, and a required stake.
+- One worker can have one active rental at a time.
+- Clients hire a worker by paying exactly the worker's fixed price with `Coin<T>`.
+- Pending rental funds are held as contract escrow.
+- The client can complete a pending rental, releasing escrow to the worker owner.
+- The client can cancel a pending rental, refunding escrow.
+- Stake has no slashing in this version; it can be withdrawn only when the worker is inactive and idle.
 
-The contract should stay focused on registry and coordination responsibilities.
-
-- It should track worker registration and availability.
-- It should support the workflow that maps workers to video infrastructure participation.
-- It should expose the minimum metadata needed for the application to reason about rented rooms and node membership.
-- It should not own Redis runtime state; that belongs to `src/coordinator/`.
-- Operational secrets and deployment metadata for the mainnet contract live in `secrets/contract.env`.
-- That file is for private values only and should never be committed to git.
-
-The first contract version is registry-only. Rooms, rentals, payments, rewards, and staking are intentionally out of scope.
-
-## Package Shape
-
-- `Move.toml` defines the `xaisen_contract` Sui Move package.
-- `sources/node_registry.move` implements the worker registry.
-- `tests/node_registry_tests.move` covers registration, owner authorization, metadata validation, availability, and unregistering.
-- `Move.lock` pins framework dependency resolution for reproducible builds.
-
-## Validation
+## Build And Test
 
 ```bash
 sui move test --path src/contract --build-env testnet
@@ -56,11 +42,7 @@ sui move build --path src/contract --build-env testnet
 
 ## Relationship To IaC
 
-`IaC/` is the cloud testbed for the app.
-
-- It is used to provision infrastructure and configure Docker-managed nodes for future deployments.
-- It is not the contract implementation itself.
-- It exists to validate how the app can be deployed across cloud providers once the contract-backed registry is in place.
+`IaC/` is the cloud testbed for the app. It provisions infrastructure and configures Docker-managed nodes for deployments, but it is not the contract implementation itself.
 
 ## Naming Model
 
@@ -70,7 +52,7 @@ The internal infrastructure role model remains:
 - `client`
 - `coordinator`
 
-For compatibility, the CLI still accepts these aliases:
+CLI aliases remain:
 
 - `livekit` -> `worker`
 - `meet` -> `client`
