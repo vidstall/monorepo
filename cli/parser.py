@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from cli.config import CONTRACT_NETWORK_CHOICES, CONTRACT_PACKAGE_PATH, PROVIDER_CHOICES
-from cli.contract import cmd_deploy_contract, cmd_init_contract
+from cli.contract import cmd_deploy_contract, cmd_init_contract, cmd_update_contract
 from cli.infra import cmd_deploy, cmd_destroy, cmd_inventory
 
 
@@ -41,11 +41,33 @@ def parse_args() -> argparse.Namespace:
         help="Explicit gas coin object ID to use for publish; repeatable.",
     )
 
+    update_contract = subparsers.add_parser(
+        "update-contract",
+        help="Upgrade an existing Sui contract package using the stored UpgradeCap",
+    )
+    update_contract.add_argument("--network", required=True, choices=CONTRACT_NETWORK_CHOICES)
+    update_contract.add_argument("--package-path", type=Path, default=CONTRACT_PACKAGE_PATH)
+    update_contract.add_argument("--gas-budget", type=int, default=1_000_000_000)
+    update_contract.add_argument(
+        "--gas-coin",
+        dest="gas_coins",
+        action="append",
+        default=[],
+        help="Explicit gas coin object ID to use for upgrade; repeatable.",
+    )
+    update_contract.add_argument(
+        "--skip-verify-compatibility",
+        action="store_true",
+        help="Pass through to Sui CLI; only use when you intentionally bypass upgrade compatibility checks.",
+    )
+    update_contract.set_defaults(func=cmd_update_contract)
+
     init_contract = subparsers.add_parser(
         "init-contract",
         help="Create the shared SUI registry object for a published contract",
     )
     init_contract.add_argument("--network", required=True, choices=CONTRACT_NETWORK_CHOICES)
+    init_contract.add_argument("--package-path", type=Path, default=CONTRACT_PACKAGE_PATH)
     init_contract.add_argument("--gas-budget", type=int, default=100_000_000)
     init_contract.add_argument(
         "--gas-coin",
