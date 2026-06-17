@@ -17,11 +17,16 @@ The orchestration flow is:
 
 1. Terraform provisions base instances for the selected provider and roles.
 2. Terraform generates SSH material and inventory data.
-3. Ansible installs Docker and runs the role containers.
-4. Terraform generates SSH material and inventory data.
-5. Ansible runs against the transient inventory.
+3. (Optional) Contract is published to Sui and the shared Registry object is created.
+4. Ansible installs Docker and runs the role containers with contract config injected.
 
-`vidctl.py` is the entrypoint that sequences those steps.
+`vidctl.py` is the entrypoint that sequences those steps. Use `--deploy-contract` to include step 3:
+
+```bash
+python3 vidctl.py deploy --provider alibaba-cloud \
+  --worker-nodes 3 --client-nodes 1 --coordinator-nodes 1 \
+  --deploy-contract --contract-network testnet
+```
 
 ## Layout
 
@@ -57,8 +62,9 @@ IaC should stay focused on deployment and validation, not app feature logic.
 
 ## Related Docs
 
-- [`README.md`](/Users/qvanle/projects/personal/livekit/codebase/README.md)
-- [`docs/cli.md`](/Users/qvanle/projects/personal/livekit/codebase/docs/cli.md)
-- [`IaC/README.md`](/Users/qvanle/projects/personal/livekit/codebase/IaC/README.md)
-- [`IaC/terraform/README.md`](/Users/qvanle/projects/personal/livekit/codebase/IaC/terraform/README.md)
-- [`IaC/ansible/README.md`](/Users/qvanle/projects/personal/livekit/codebase/IaC/ansible/README.md)
+- [`README.md`](../README.md)
+- [`docs/cli.md`](cli.md)
+- [`docs/design.md`](design.md)
+- [`IaC/README.md`](../IaC/README.md)
+- [`IaC/terraform/README.md`](../IaC/terraform/README.md)
+- [`IaC/ansible/README.md`](../IaC/ansible/README.md)

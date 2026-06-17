@@ -4,11 +4,12 @@
 
 ## Purpose
 
-This package owns the user experience for joining and running video conferences.
+This package owns the user experience for joining and running video conferences, and provides the wallet-based interface for contract interactions.
 
 - It renders the landing page and room entry flows.
-- It connects to the routes service for room connection details, recording control, and server-side coordination.
+- It connects to the routes service for room connection details, recording control, and contract transactions.
 - It uses LiveKit client components and browser APIs for the media experience.
+- It integrates Sui wallet connectivity for on-chain operations.
 
 ## Main Responsibilities
 
@@ -16,6 +17,7 @@ This package owns the user experience for joining and running video conferences.
 - Create room IDs and encode end-to-end encryption passphrases.
 - Join rooms using the connection details returned by `src/routes`.
 - Handle in-room UI such as device selection, recording controls, keyboard shortcuts, and debug tooling.
+- Provide contract interaction forms for worker registration, room ordering, voting, and rental management.
 
 ## Package Shape
 
@@ -26,9 +28,30 @@ This package owns the user experience for joining and running video conferences.
 
 ## Key Flows
 
+### Owner flow
+
+The owner uses a Sui wallet to order a room on-chain:
+
+1. Owner connects wallet via `@mysten/dapp-kit-react`.
+2. Owner fills the "Order Room" form with room name, capacity, and payment.
+3. Frontend calls the routes API to build unsigned transaction bytes.
+4. Owner signs the transaction with their wallet.
+5. Workers vote on room assignment (via their own wallets).
+6. Once assigned, the owner shares the room link with guests.
+
+### Guest flow
+
+Guests join without a wallet:
+
+1. Guest opens the room link (`/rooms/<roomName>?rentalId=<id>`).
+2. Guest enters their name in the PreJoin screen.
+3. Frontend fetches connection details from the routes API.
+4. The routes service enforces room capacity via the `rentalId` — returns 403 if full.
+5. Guest connects to the LiveKit room.
+
 ### Demo flow
 
-The home page lets a user start a meeting without a custom server configuration.
+Quick start without contract interaction:
 
 - A room ID is generated on the client.
 - Optional E2EE passphrase state is embedded in the route.
@@ -36,39 +59,47 @@ The home page lets a user start a meeting without a custom server configuration.
 
 ### Custom connection flow
 
-The home page also supports connecting to a custom LiveKit server.
+For connecting to an external LiveKit server:
 
 - The user provides a LiveKit URL and access token.
-- The app navigates to a custom meeting page with those parameters.
-- Optional E2EE passphrase state is preserved in the URL fragment.
+- The app connects directly without going through the routes service.
 
-### Room flow
+## Contract Panel
 
-Room pages fetch connection details from the routes service.
+The `ContractPanel` component (rendered on the home page) provides forms for all contract operations:
 
-- The client resolves the backend endpoint through `getRoutesEndpoint()`.
-- The room page calls the routes API to get the LiveKit connection payload.
-- Recording actions are sent back to the routes service when enabled.
+| Form | Action |
+|---|---|
+| Register Worker | `register-worker` |
+| Hire Worker | `hire-worker` (with capacity) |
+| Order Room | `order-room` |
+| Cast Room Vote | `cast-room-vote` |
+| Propose Role | `propose-role` (SFU, Coordinator, Router) |
+| Cast Role Vote | `cast-role-vote` |
+| Cancel Expired Order | `cancel-expired-order` |
+| Complete Rental | `complete-rental` |
+| Cancel Rental | `cancel-rental` |
+| Withdraw Stake | `withdraw-stake` |
+
+Each form builds transaction bytes via the routes API and submits through the Sui wallet for signing.
 
 ## Notable Dependencies
 
-- `livekit-client`
-- `@livekit/components-react`
-- `@livekit/components-styles`
-- `react-hot-toast`
-- `tinykeys`
+- `livekit-client`, `@livekit/components-react`, `@livekit/components-styles`
+- `@mysten/dapp-kit-react`, `@mysten/sui`
+- `@livekit/krisp-noise-filter`
+- `react-hot-toast`, `tinykeys`
 
 ## Runtime Notes
 
-- The package is a Next.js app intended to run as a standalone frontend service.
-- Local development uses the default Next.js client workflow from `src/client/package.json`.
-- The package expects the routes service to be reachable separately.
+- Next.js app on port 3000.
+- Expects the routes service to be reachable at `NEXT_PUBLIC_ROUTES_URL` (defaults to `/api`).
+- Wallet state persisted in localStorage under `xaisen-sui-wallet`.
 
 ## Integration Boundary
 
 `src/client` should not own backend API logic.
 
 - It consumes the routes service.
-- It should stay focused on browser UX, media handling, and user interaction.
+- It should stay focused on browser UX, media handling, wallet integration, and user interaction.
 - Backend coordination, CORS policy, token helpers, and recording endpoints belong in `src/routes`.
-

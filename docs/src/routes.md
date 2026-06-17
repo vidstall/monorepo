@@ -4,18 +4,12 @@
 
 ## Purpose
 
-This package exposes the HTTP API used by the client app to join and manage rooms.
+This package exposes the HTTP API used by the client app to join rooms, manage recordings, and interact with the Sui contract.
 
-- It returns connection details for LiveKit sessions.
+- It returns connection details for LiveKit sessions with capacity enforcement.
+- It builds unsigned Sui transaction bytes for client-side wallet signing.
 - It handles recording control requests.
-- It keeps browser-facing API logic separate from the frontend app.
-
-## Main Responsibilities
-
-- Provide the connection-details endpoint used by the client.
-- Provide start/stop recording endpoints.
-- Apply response headers and CORS behavior for browser requests.
-- Translate route requests into LiveKit server-side SDK operations.
+- It exposes public contract configuration.
 
 ## Package Shape
 
@@ -28,44 +22,58 @@ This package exposes the HTTP API used by the client app to join and manage room
 
 Returns the LiveKit connection payload for a room.
 
-- Generates or reuses the LiveKit server URL for the target region.
-- Produces the token and room metadata needed by the client.
-- Serves as the main backend handoff from the frontend into LiveKit.
+- Query params: `roomName`, `participantName`, `metadata` (optional), `region` (optional), `rentalId` (optional)
+- Generates a participant token with a 5-minute TTL.
+- If `rentalId` is provided, queries the contract for room capacity and checks current participant count via LiveKit's `RoomServiceClient`. Returns 403 if the room is at capacity.
 
-### `POST /api/record/start`
+### `GET /api/contract/config`
 
-Starts room recording through LiveKit egress.
+Returns public contract configuration: network, package ID, registry object ID, deployer address, publish digest.
 
-- Uses the room name from the request.
-- Checks for existing recordings before creating a new one.
-- Returns a conflict-style failure when recording already exists.
+### `GET /api/contract/health`
 
-### `POST /api/record/stop`
+Returns contract config plus a `configured` boolean and optional error.
 
-Stops active room recordings through LiveKit egress.
+### Contract Transaction Endpoints
 
-- Lists active recordings for the room.
-- Stops each active egress session.
-- Returns a not-found-style failure when no recording exists.
+All accept `POST` with a JSON body including `sender` (Sui address). Return `{ network, packageId, registryObjectId, txBytes }` for client-side signing.
+
+| Endpoint | Body fields |
+|---|---|
+| `POST /api/contract/transactions/register-worker` | `metadataUri`, `metadataHash`, `pricePerRentalMist`, `stakeMist` |
+| `POST /api/contract/transactions/hire-worker` | `nodeId`, `roomName`, `capacity`, `paymentMist` |
+| `POST /api/contract/transactions/order-room` | `roomName`, `capacity`, `paymentMist` |
+| `POST /api/contract/transactions/cast-room-vote` | `voterNodeId`, `rentalId`, `nomineeNodeId` |
+| `POST /api/contract/transactions/propose-role` | `proposerNodeId`, `nomineeNodeId`, `role` |
+| `POST /api/contract/transactions/cast-role-vote` | `voterNodeId`, `proposalId` |
+| `POST /api/contract/transactions/cancel-expired-order` | `rentalId` |
+| `POST /api/contract/transactions/complete-rental` | `rentalId` |
+| `POST /api/contract/transactions/cancel-rental` | `rentalId` |
+| `POST /api/contract/transactions/withdraw-stake` | `nodeId` |
+
+### Recording
+
+- `GET /api/record/start?roomName=<name>` — start room recording to S3.
+- `GET /api/record/stop?roomName=<name>` — stop active recordings.
+
+## Key Libraries
+
+- `lib/contract-config.ts` — loads contract config from `secrets/contract/<network>.env`
+- `lib/contract-transactions.ts` — builds Move call transactions for all contract actions
+- `lib/contract-queries.ts` — reads contract state via `devInspectTransactionBlock` (e.g., rental capacity)
+- `lib/contract-route.ts` — CORS-aware route handler factory for transaction endpoints
+- `lib/cors.ts` — CORS header configuration
+- `lib/getLiveKitURL.ts` — LiveKit URL resolution with optional region
 
 ## Runtime Notes
 
-- The package is a standalone Next.js server and runs on its own port.
-- The package name in `src/routes/package.json` identifies it as the routes service.
-- The default dev server runs on port `3001`.
+- Next.js standalone server on port 3001.
+- Reads `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_URL` from environment.
+- Reads contract config from `secrets/contract/<network>.env` or `CONTRACT_ENV_PATH`.
 
 ## Integration Boundary
 
-`src/routes` should remain the backend API boundary for the meeting app.
+`src/routes` should remain the backend API boundary.
 
-- It should not contain the main browser UI.
-- It should not own the full conferencing experience.
-- It should stay focused on request handling, LiveKit token/URL generation, and recording control.
-
-## Dependencies
-
-- `livekit-server-sdk`
-- `next`
-- `react`
-- `react-dom`
-
+- It should not contain the browser UI.
+- It should stay focused on request handling, token generation, transaction building, and recording control.

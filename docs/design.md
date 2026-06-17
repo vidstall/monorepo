@@ -197,12 +197,44 @@ Optional variables with defaults:
 | `XAISEN_COORDINATOR_IMAGE` | `redis:7.4-alpine` | Docker image for coordinator |
 | `XAISEN_PROXY_IMAGE` | `caddy:2-alpine` | Docker image for reverse proxy |
 
-## Implementation Order
+## Scenario Framework
 
-1. **Fix `build_contract_env()`** — add the missing function in `cli/env.py` so contract CLI commands work.
-2. **Contract extensions** — add room capacity to rental records, add voting structs and entry functions, add role map storage.
-3. **Contract tests** — extend `node_registry_tests.move` to cover capacity, voting, and role assignment.
-4. **Routes API updates** — read contract role map, enforce room capacity on token generation, build vote transaction bytes.
-5. **Client frontend updates** — owner room ordering flow with capacity, guest join flow, wallet integration for voting.
-6. **IaC integration** — ensure the deploy pipeline wires contract addresses into all nodes, registers workers on-chain after provisioning.
-7. **End-to-end testbed validation** — deploy on Alibaba Cloud, create a room, assign via voting, join as guest, verify capacity enforcement.
+Test scenarios live in `scenario/` as executable Python scripts. Each scenario defines a topology, an ordered event timeline, and per-entity benchmarks.
+
+### Running scenarios
+
+```bash
+python3 vidctl.py run-scenario scenario/basic_room.py --dry-run
+python3 vidctl.py run-scenario scenario/basic_room.py --output artifacts/report.json
+```
+
+### Available scenarios
+
+| Script | Description |
+|---|---|
+| `basic_room.py` | 3 workers, 1 client, room with capacity 5, users join/leave, rental completes |
+| `worker_churn.py` | 5 workers joining, dropping, rejoining while serving rooms |
+| `capacity_stress.py` | Rapid user joins (20+50), capacity rejection, throughput |
+| `role_voting.py` | SFU/Coordinator/Router role assignment via voting |
+
+### Per-entity tracking
+
+Every worker, client, and user is tracked individually with:
+
+- **Workers**: registration latency, vote latency, uptime, active/inactive transitions
+- **Clients**: room order latency, rental completion latency
+- **Users**: join latency, session duration, disconnect type
+
+Reports include both aggregate statistics (min/avg/max/p50/p95) and per-entity breakdowns.
+
+## Implementation Status
+
+All items are implemented:
+
+1. `build_contract_env()` in `cli/env.py` — done
+2. Contract extensions (capacity, voting, roles) — done, 35 tests passing
+3. Contract tests — done, 12 new tests
+4. Routes API (new endpoints, capacity enforcement) — done
+5. Client frontend (voting forms, capacity error handling) — done
+6. IaC integration (`--deploy-contract` flag) — done
+7. Scenario framework with per-entity benchmarks — done
