@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping
 
-from cli.config import ANSIBLE_PLAYBOOK, PROVIDER_CHOICES, SSH_CONFIG_DIR, TERRAFORM_ENV_DIR
+from cli.config import ANSIBLE_PLAYBOOK, CONTRACT_PACKAGE_PATH, PROVIDER_CHOICES, SSH_CONFIG_DIR, TERRAFORM_ENV_DIR
 from cli.env import build_env
 from cli.process import run_command
 
@@ -338,6 +338,21 @@ def cmd_deploy(args: argparse.Namespace) -> None:
     env = build_env(args.provider)
     require_runtime_env(env)
     terraform_apply(args.provider, args, env)
+
+    if getattr(args, "deploy_contract", False):
+        from cli.contract import cmd_deploy_contract, cmd_init_contract
+
+        contract_network = getattr(args, "contract_network", "testnet")
+        contract_args = argparse.Namespace(
+            network=contract_network,
+            package_path=CONTRACT_PACKAGE_PATH,
+            gas_budget=1_000_000_000,
+            gas_coins=[],
+        )
+        cmd_deploy_contract(contract_args)
+        cmd_init_contract(contract_args)
+        env = build_env(args.provider)
+
     outputs = terraform_output(args.provider, env)
     inventory_path = render_inventory(args.provider, outputs)
     vars_path = render_ansible_vars(args.provider, outputs, env, args.node_registry_contract_id)

@@ -7,7 +7,12 @@ type ContractTransactionAction =
   | "hire-worker"
   | "complete-rental"
   | "cancel-rental"
-  | "withdraw-stake";
+  | "withdraw-stake"
+  | "order-room"
+  | "cast-room-vote"
+  | "propose-role"
+  | "cast-role-vote"
+  | "cancel-expired-order";
 
 export function options(request: NextRequest) {
   return new NextResponse(null, {

@@ -15,7 +15,12 @@ type TransactionAction =
   | "hire-worker"
   | "complete-rental"
   | "cancel-rental"
-  | "withdraw-stake";
+  | "withdraw-stake"
+  | "order-room"
+  | "cast-room-vote"
+  | "propose-role"
+  | "cast-role-vote"
+  | "cancel-expired-order";
 
 type BuildResult = {
   network: string;
@@ -100,6 +105,7 @@ function addMoveCall(
           "u8",
           metadataBytes(requireString(body.roomName, "roomName")),
         ),
+        tx.pure.u64(requireU64(body.capacity, "capacity")),
         tx.coin({ balance: requireU64(body.paymentMist, "paymentMist") }),
         clock,
       ],
@@ -134,6 +140,81 @@ function addMoveCall(
       target: moveTarget("withdraw_worker_stake"),
       typeArguments: [SUI_COIN_TYPE],
       arguments: [registry, tx.pure.u64(requireU64(body.nodeId, "nodeId"))],
+    });
+    return;
+  }
+
+  if (action === "order-room") {
+    tx.moveCall({
+      target: moveTarget("order_room"),
+      typeArguments: [SUI_COIN_TYPE],
+      arguments: [
+        registry,
+        tx.pure.vector(
+          "u8",
+          metadataBytes(requireString(body.roomName, "roomName")),
+        ),
+        tx.pure.u64(requireU64(body.capacity, "capacity")),
+        tx.coin({ balance: requireU64(body.paymentMist, "paymentMist") }),
+        clock,
+      ],
+    });
+    return;
+  }
+
+  if (action === "cast-room-vote") {
+    tx.moveCall({
+      target: moveTarget("cast_room_vote"),
+      typeArguments: [SUI_COIN_TYPE],
+      arguments: [
+        registry,
+        tx.pure.u64(requireU64(body.voterNodeId, "voterNodeId")),
+        tx.pure.u64(requireU64(body.rentalId, "rentalId")),
+        tx.pure.u64(requireU64(body.nomineeNodeId, "nomineeNodeId")),
+        clock,
+      ],
+    });
+    return;
+  }
+
+  if (action === "propose-role") {
+    tx.moveCall({
+      target: moveTarget("propose_role"),
+      typeArguments: [SUI_COIN_TYPE],
+      arguments: [
+        registry,
+        tx.pure.u64(requireU64(body.proposerNodeId, "proposerNodeId")),
+        tx.pure.u64(requireU64(body.nomineeNodeId, "nomineeNodeId")),
+        tx.pure.u8(Number(requireU64(body.role, "role"))),
+        clock,
+      ],
+    });
+    return;
+  }
+
+  if (action === "cast-role-vote") {
+    tx.moveCall({
+      target: moveTarget("cast_role_vote"),
+      typeArguments: [SUI_COIN_TYPE],
+      arguments: [
+        registry,
+        tx.pure.u64(requireU64(body.voterNodeId, "voterNodeId")),
+        tx.pure.u64(requireU64(body.proposalId, "proposalId")),
+        clock,
+      ],
+    });
+    return;
+  }
+
+  if (action === "cancel-expired-order") {
+    tx.moveCall({
+      target: moveTarget("cancel_expired_order"),
+      typeArguments: [SUI_COIN_TYPE],
+      arguments: [
+        registry,
+        tx.pure.u64(requireU64(body.rentalId, "rentalId")),
+        clock,
+      ],
     });
   }
 }

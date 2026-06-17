@@ -22,6 +22,10 @@ def parse_args() -> argparse.Namespace:
 
     deploy = subparsers.add_parser("deploy", help="Apply Terraform, configure Docker with Ansible")
     deploy.add_argument("--provider", required=True, choices=PROVIDER_CHOICES)
+    deploy.add_argument("--deploy-contract", action="store_true", default=False,
+                        help="Publish and initialize the Sui contract before running Ansible")
+    deploy.add_argument("--contract-network", default="testnet", choices=CONTRACT_NETWORK_CHOICES,
+                        help="Sui network for contract deployment (default: testnet)")
     add_infra_shape(deploy)
     deploy.set_defaults(func=cmd_deploy)
 

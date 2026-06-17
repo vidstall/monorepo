@@ -59,5 +59,45 @@ class EnvTests(unittest.TestCase):
             self.assertEqual(env["CONTRACT_REGISTRY_OBJECT_ID"], "registry")
 
 
+    def test_build_contract_env_loads_network_file_without_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "secrets" / "contract").mkdir(parents=True)
+            (root / "secrets" / "contract.env").write_text(
+                "CONTRACT_PACKAGE_ID=legacy\n", encoding="utf-8"
+            )
+            (root / "secrets" / "contract" / "testnet.env").write_text(
+                "CONTRACT_PACKAGE_ID=network\nCONTRACT_REGISTRY_OBJECT_ID=registry\n",
+                encoding="utf-8",
+            )
+
+            with patch.object(env_mod, "CONTRACT_ENV_FILE", root / "secrets" / "contract.env"), patch.object(
+                env_mod, "CONTRACT_ENV_DIR", root / "secrets" / "contract"
+            ), patch.dict(os.environ, {}, clear=True):
+                env = env_mod.build_contract_env("testnet")
+
+            self.assertEqual(env["CONTRACT_NETWORK"], "testnet")
+            self.assertEqual(env["SUI_NETWORK"], "testnet")
+            self.assertEqual(env["CONTRACT_PACKAGE_ID"], "network")
+            self.assertEqual(env["CONTRACT_REGISTRY_OBJECT_ID"], "registry")
+
+    def test_build_contract_env_forces_network_over_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "secrets" / "contract").mkdir(parents=True)
+            (root / "secrets" / "contract.env").write_text("", encoding="utf-8")
+            (root / "secrets" / "contract" / "devnet.env").write_text(
+                "CONTRACT_NETWORK=mainnet\n", encoding="utf-8"
+            )
+
+            with patch.object(env_mod, "CONTRACT_ENV_FILE", root / "secrets" / "contract.env"), patch.object(
+                env_mod, "CONTRACT_ENV_DIR", root / "secrets" / "contract"
+            ), patch.dict(os.environ, {}, clear=True):
+                env = env_mod.build_contract_env("devnet")
+
+            self.assertEqual(env["CONTRACT_NETWORK"], "devnet")
+            self.assertEqual(env["SUI_NETWORK"], "devnet")
+
+
 if __name__ == "__main__":
     unittest.main()

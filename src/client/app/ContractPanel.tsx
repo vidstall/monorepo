@@ -165,6 +165,11 @@ function ContractPanelInner() {
           <Field name="nodeId" placeholder="Node ID" inputMode="numeric" />
           <Field name="roomName" placeholder="Room name" />
           <Field
+            name="capacity"
+            placeholder="Capacity"
+            inputMode="numeric"
+          />
+          <Field
             name="paymentMist"
             placeholder="Payment, MIST"
             inputMode="numeric"
@@ -204,6 +209,100 @@ function ContractPanelInner() {
           <Field name="nodeId" placeholder="Node ID" inputMode="numeric" />
           <button className="lk-button" type="submit">
             Withdraw
+          </button>
+        </form>
+
+        <form
+          onSubmit={(event) => submit("order-room", event)}
+          style={{ display: "grid", gap: 8 }}
+        >
+          <strong>Order room</strong>
+          <Field name="roomName" placeholder="Room name" />
+          <Field name="capacity" placeholder="Capacity" inputMode="numeric" />
+          <Field
+            name="paymentMist"
+            placeholder="Payment, MIST"
+            inputMode="numeric"
+          />
+          <button className="lk-button" type="submit">
+            Order Room
+          </button>
+        </form>
+
+        <form
+          onSubmit={(event) => submit("cast-room-vote", event)}
+          style={{ display: "grid", gap: 8 }}
+        >
+          <strong>Cast room vote</strong>
+          <Field
+            name="voterNodeId"
+            placeholder="Your node ID"
+            inputMode="numeric"
+          />
+          <Field name="rentalId" placeholder="Rental ID" inputMode="numeric" />
+          <Field
+            name="nomineeNodeId"
+            placeholder="Nominee node ID"
+            inputMode="numeric"
+          />
+          <button className="lk-button" type="submit">
+            Vote
+          </button>
+        </form>
+
+        <form
+          onSubmit={(event) => submit("propose-role", event)}
+          style={{ display: "grid", gap: 8 }}
+        >
+          <strong>Propose role</strong>
+          <Field
+            name="proposerNodeId"
+            placeholder="Your node ID"
+            inputMode="numeric"
+          />
+          <Field
+            name="nomineeNodeId"
+            placeholder="Nominee node ID"
+            inputMode="numeric"
+          />
+          <select name="role" required style={{ minWidth: 0 }}>
+            <option value="0">SFU</option>
+            <option value="1">Coordinator</option>
+            <option value="2">Router</option>
+          </select>
+          <button className="lk-button" type="submit">
+            Propose
+          </button>
+        </form>
+
+        <form
+          onSubmit={(event) => submit("cast-role-vote", event)}
+          style={{ display: "grid", gap: 8 }}
+        >
+          <strong>Cast role vote</strong>
+          <Field
+            name="voterNodeId"
+            placeholder="Your node ID"
+            inputMode="numeric"
+          />
+          <Field
+            name="proposalId"
+            placeholder="Proposal ID"
+            inputMode="numeric"
+          />
+          <button className="lk-button" type="submit">
+            Vote
+          </button>
+        </form>
+
+        <form
+          onSubmit={(event) => submit("cancel-expired-order", event)}
+          style={{ display: "grid", gap: 8 }}
+        >
+          <strong>Cancel expired order</strong>
+          <Field name="rentalId" placeholder="Rental ID" inputMode="numeric" />
+          <button className="lk-button" type="submit">
+            Cancel Order
           </button>
         </form>
       </div>

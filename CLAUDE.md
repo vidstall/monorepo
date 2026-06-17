@@ -1,0 +1,87 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Xaisen is a decentralized video conferencing platform. Customers rent video conference rooms from workers who register infrastructure capacity through an on-chain Sui contract (node registry). The runtime handles media routing (LiveKit SFU), backend APIs, browser UX, and Redis-backed coordination.
+
+## Architecture
+
+The codebase has two layers:
+
+**Runtime layer** (`src/`):
+- `src/contract/` — Sui Move smart contract (`xaisen_contract`). On-chain node registry and coordination boundary. Tests in `src/contract/tests/`.
+- `src/livekit/` — LiveKit SFU server (Go, forked from `livekit/livekit-server`). WebRTC media plane.
+- `src/coordinator/` — Redis-backed coordination/dispatch. Docker Compose service with custom redis.conf.
+- `src/routes/` — Backend API service (Next.js on port 3001, pnpm). Builds Sui transaction bytes, exposes contract config, handles CORS. Key files in `lib/` (contract-config, contract-transactions, contract-route, cors).
+- `src/client/` — Browser frontend (Next.js on port 3000, pnpm). LiveKit React components, Sui dApp wallet integration (`@mysten/dapp-kit-react`), Krisp noise filter.
+
+**Operations layer**:
+- `cli/` — Python CLI modules backing `vidctl.py`. Subcommands: deploy, destroy, inventory, deploy-contract, init-contract, update-contract.
+- `IaC/terraform/` — Provider environments (aws, digital-ocean, hetzner, alibaba-cloud) with shared `modules/node_pool`.
+- `IaC/ansible/` — Post-provision configuration. Roles: worker, client, coordinator. Single playbook `playbooks/site.yml`.
+
+## Common Commands
+
+### CLI (vidctl.py)
+```bash
+python3 vidctl.py deploy --provider aws --worker-nodes 1 --client-nodes 1 --coordinator-nodes 1
+python3 vidctl.py destroy --provider aws
+python3 vidctl.py inventory --provider aws
+python3 vidctl.py deploy-contract --network testnet
+python3 vidctl.py update-contract --network testnet
+python3 vidctl.py init-contract --network testnet
+```
+
+### Frontend services (pnpm)
+```bash
+# Client (port 3000)
+cd src/client && pnpm install && pnpm dev
+
+# Routes (port 3001)
+cd src/routes && pnpm install && pnpm dev
+```
+
+### Linting and formatting
+```bash
+# Client
+cd src/client && pnpm lint && pnpm format:check
+
+# Routes
+cd src/routes && pnpm format:check
+```
+
+### Tests
+```bash
+# Python CLI tests
+python3 -m pytest tests/
+
+# Single test file
+python3 -m pytest tests/test_infra.py
+
+# Client
+cd src/client && pnpm test
+
+# Move contract tests
+cd src/contract && sui move test
+```
+
+### Terraform
+```bash
+cd IaC/terraform/environments/<provider> && terraform init && terraform plan
+```
+
+## Credentials
+
+- Cloud provider creds: `secrets/cloud/<provider>.env` (aws, digital-ocean, hetzner, alibaba-cloud)
+- Contract metadata: `secrets/contract/<network>.env` (devnet, testnet, mainnet)
+- Generated SSH keys and inventory: `artifacts/ssh_config/`
+
+## Key Conventions
+
+- The deployment pipeline is: Terraform provisions → generates SSH material/inventory → Ansible installs Docker and runs role containers.
+- `vidctl.py` is the single entrypoint that sequences Terraform and Ansible steps.
+- Contract lifecycle: `deploy-contract` (first publish) → `init-contract` (create shared Registry object) → `update-contract` (upgrades). Metadata is persisted in `secrets/contract/<network>.env`.
+- Each runtime service has its own Dockerfile for containerized deployment.
+- The `routes` service reads contract env files to expose public contract config and build wallet-signed Sui transaction bytes for the client.

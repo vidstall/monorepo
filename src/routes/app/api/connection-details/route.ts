@@ -1,8 +1,9 @@
 import { randomString } from '@/lib/client-utils';
+import { queryRentalCapacity } from '@/lib/contract-queries';
 import { getCorsHeaders } from '@/lib/cors';
 import { getLiveKitURL } from '@/lib/getLiveKitURL';
 import { ConnectionDetails } from '@/lib/types';
-import { AccessToken, AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
+import { AccessToken, AccessTokenOptions, RoomServiceClient, VideoGrant } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -45,6 +46,21 @@ export async function GET(request: NextRequest) {
         status: 400,
         headers: getCorsHeaders(request.headers.get('origin')),
       });
+    }
+
+    const rentalId = request.nextUrl.searchParams.get('rentalId');
+    if (rentalId) {
+      const capacity = await queryRentalCapacity(parseInt(rentalId, 10));
+      if (capacity !== null) {
+        const roomService = new RoomServiceClient(LIVEKIT_URL!, API_KEY!, API_SECRET!);
+        const participants = await roomService.listParticipants(roomName);
+        if (participants.length >= capacity) {
+          return new NextResponse('Room is at capacity', {
+            status: 403,
+            headers: getCorsHeaders(request.headers.get('origin')),
+          });
+        }
+      }
     }
 
     // Generate participant token

@@ -32,6 +32,17 @@ def load_env_file(path: Path) -> Dict[str, str]:
     return values
 
 
+def build_contract_env(network: str) -> Dict[str, str]:
+    env = os.environ.copy()
+    env.update(load_env_file(CONTRACT_ENV_FILE))
+    env["CONTRACT_NETWORK"] = network
+    env["SUI_NETWORK"] = network
+    env.update(load_env_file(CONTRACT_ENV_DIR / f"{network}.env"))
+    env["CONTRACT_NETWORK"] = network
+    env["SUI_NETWORK"] = network
+    return env
+
+
 def build_env(provider: str) -> Dict[str, str]:
     env = os.environ.copy()
     env.update(load_env_file(REPO_ROOT / "secrets" / "cloud" / PROVIDER_ENV_FILES[provider]))

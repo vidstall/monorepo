@@ -35,6 +35,7 @@ const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
 export function PageClientImpl(props: {
   roomName: string;
   region?: string;
+  rentalId?: string;
   hq: boolean;
   codec: VideoCodec;
   singlePeerConnection: boolean;
@@ -62,6 +63,9 @@ export function PageClientImpl(props: {
     if (props.region) {
       url.searchParams.append('region', props.region);
     }
+    if (props.rentalId) {
+      url.searchParams.append('rentalId', props.rentalId);
+    }
     const connectionDetailsResp = await fetch(url.toString(), {
       credentials: 'include',
     });
@@ -73,7 +77,7 @@ export function PageClientImpl(props: {
     }
     const connectionDetailsData = await connectionDetailsResp.json();
     setConnectionDetails(connectionDetailsData);
-  }, [props.region, props.roomName, routesEndpoint]);
+  }, [props.region, props.rentalId, props.roomName, routesEndpoint]);
   const handlePreJoinError = React.useCallback((e: any) => console.error(e), []);
 
   return (
