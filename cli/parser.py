@@ -6,6 +6,7 @@ from pathlib import Path
 from cli.config import CONTRACT_NETWORK_CHOICES, CONTRACT_PACKAGE_PATH, PROVIDER_CHOICES
 from cli.contract import cmd_deploy_contract, cmd_init_contract, cmd_update_contract
 from cli.infra import cmd_deploy, cmd_destroy, cmd_inventory
+from cli.scenario import cmd_run_scenario
 
 
 def add_infra_shape(parser: argparse.ArgumentParser) -> None:
@@ -97,5 +98,12 @@ def parse_args() -> argparse.Namespace:
     inventory.add_argument("--provider", required=True, choices=PROVIDER_CHOICES)
     add_infra_shape(inventory)
     inventory.set_defaults(func=cmd_inventory)
+
+    run_scenario = subparsers.add_parser("run-scenario", help="Execute a scenario script")
+    run_scenario.add_argument("scenario", help="Path to scenario Python script")
+    run_scenario.add_argument("--dry-run", action="store_true", default=False,
+                              help="Print steps without executing Sui transactions or API calls")
+    run_scenario.add_argument("--output", help="Path to write JSON benchmark report")
+    run_scenario.set_defaults(func=cmd_run_scenario)
 
     return parser.parse_args()
