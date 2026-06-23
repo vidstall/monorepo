@@ -101,9 +101,16 @@ def parse_args() -> argparse.Namespace:
 
     run_scenario = subparsers.add_parser("run-scenario", help="Execute a scenario script")
     run_scenario.add_argument("scenario", help="Path to scenario Python script")
+    run_scenario.add_argument("--provider", default="alibaba-cloud", choices=PROVIDER_CHOICES)
+    run_scenario.add_argument("--deploy-contract", action="store_true", default=False,
+                              help="Publish and initialize the Sui contract if deploying")
+    run_scenario.add_argument("--contract-network", default="testnet", choices=CONTRACT_NETWORK_CHOICES)
+    run_scenario.add_argument("--teardown", action="store_true", default=False,
+                              help="Destroy infrastructure after scenario completes")
     run_scenario.add_argument("--dry-run", action="store_true", default=False,
                               help="Print steps without executing Sui transactions or API calls")
     run_scenario.add_argument("--output", help="Path to write JSON benchmark report")
+    add_infra_shape(run_scenario)
     run_scenario.set_defaults(func=cmd_run_scenario)
 
     return parser.parse_args()

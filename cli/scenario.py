@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import importlib.util
 import json
+import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -72,6 +76,7 @@ class UserEntity:
     joined_at: Optional[float] = None
     left_at: Optional[float] = None
     session_duration_ms: Optional[float] = None
+    rejected: bool = False
 
     def summary_line(self) -> str:
         parts = [self.entity_id]
@@ -81,7 +86,9 @@ class UserEntity:
             parts.append(f"{s.name}={s.duration_ms:.0f}ms")
         if self.session_duration_ms is not None:
             parts.append(f"session={self.session_duration_ms:.0f}ms")
-        if self.left_at:
+        if self.rejected:
+            parts.append("rejected")
+        elif self.left_at:
             parts.append("left")
         elif self.joined_at:
             parts.append("connected")
@@ -152,6 +159,21 @@ class BenchmarkReport:
         return result
 
 
+class _AsyncBridge:
+    def __init__(self) -> None:
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
+        self._thread.start()
+
+    def run(self, coro: Any) -> Any:
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return future.result(timeout=30)
+
+    def shutdown(self) -> None:
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join(timeout=5)
+
+
 class ScenarioContext:
     """Runtime context passed to scenario scripts."""
 
@@ -161,6 +183,23 @@ class ScenarioContext:
         self.dry_run = dry_run
         self._step = 0
         self._env: Dict[str, str] = {}
+        self._async_bridge = _AsyncBridge()
+        self._rooms: Dict[str, Any] = {}
+        self._deployment: Any = None
+
+    def set_deployment(self, info: Any) -> None:
+        self._deployment = info
+
+    def cleanup(self) -> None:
+        for entity_id in list(self._rooms.keys()):
+            try:
+                room = self._rooms.pop(entity_id)
+                async def _disconnect(r: Any = room) -> None:
+                    await r.disconnect()
+                self._async_bridge.run(_disconnect())
+            except Exception:
+                pass
+        self._async_bridge.shutdown()
 
     # --- logging ---
 
@@ -349,6 +388,120 @@ class ScenarioContext:
 
         self.benchmark("cast_role_vote", _do, entity_id=entity_id, proposal_id=proposal_id)
 
+    def hire_worker(
+        self,
+        entity_id: str,
+        worker_node_id: int,
+        room_name: str,
+        capacity: int,
+        payment: int = 500,
+    ) -> Optional[int]:
+        def _do() -> int:
+            self.sui_cli([
+                "client", "call",
+                "--package", self._contract_package_id(),
+                "--module", "node_registry",
+                "--function", "hire_worker",
+                "--type-args", "0x2::sui::SUI",
+                "--args",
+                self._contract_registry_id(),
+                str(worker_node_id),
+                f'"{room_name}"',
+                str(capacity),
+                str(payment),
+                "0x6",
+                "--gas-budget", "100000000",
+            ])
+            return 0
+
+        return self.benchmark("hire_worker", _do, entity_id=entity_id,
+                              room_name=room_name, capacity=capacity,
+                              worker_node_id=worker_node_id)
+
+    def withdraw_worker_stake(self, entity_id: str) -> None:
+        worker = self.report.workers[entity_id]
+
+        def _do() -> None:
+            self.sui_cli([
+                "client", "call",
+                "--package", self._contract_package_id(),
+                "--module", "node_registry",
+                "--function", "withdraw_worker_stake",
+                "--type-args", "0x2::sui::SUI",
+                "--args",
+                self._contract_registry_id(),
+                str(worker.node_id or 0),
+                "--gas-budget", "100000000",
+            ])
+
+        self.benchmark("withdraw_worker_stake", _do, entity_id=entity_id)
+        worker.unregistered_at = time.time()
+        worker.active = False
+
+    def update_worker_metadata(
+        self,
+        entity_id: str,
+        metadata_uri: str = "ipfs://xaisen-worker",
+        metadata_hash: str = "0x" + "ab" * 32,
+    ) -> None:
+        worker = self.report.workers[entity_id]
+
+        def _do() -> None:
+            self.sui_cli([
+                "client", "call",
+                "--package", self._contract_package_id(),
+                "--module", "node_registry",
+                "--function", "update_worker_metadata",
+                "--type-args", "0x2::sui::SUI",
+                "--args",
+                self._contract_registry_id(),
+                str(worker.node_id or 0),
+                f'"{metadata_uri}"',
+                f'"{metadata_hash}"',
+                "0x6",
+                "--gas-budget", "100000000",
+            ])
+
+        self.benchmark("update_worker_metadata", _do, entity_id=entity_id)
+
+    def update_worker_price(self, entity_id: str, price_per_rental: int) -> None:
+        worker = self.report.workers[entity_id]
+
+        def _do() -> None:
+            self.sui_cli([
+                "client", "call",
+                "--package", self._contract_package_id(),
+                "--module", "node_registry",
+                "--function", "update_worker_price",
+                "--type-args", "0x2::sui::SUI",
+                "--args",
+                self._contract_registry_id(),
+                str(worker.node_id or 0),
+                str(price_per_rental),
+                "--gas-budget", "100000000",
+            ])
+
+        self.benchmark("update_worker_price", _do, entity_id=entity_id,
+                        price_per_rental=price_per_rental)
+
+    def cancel_expired_order(self, entity_id: str, rental_id: int) -> None:
+        def _do() -> None:
+            self.sui_cli([
+                "client", "call",
+                "--package", self._contract_package_id(),
+                "--module", "node_registry",
+                "--function", "cancel_expired_order",
+                "--type-args", "0x2::sui::SUI",
+                "--args",
+                self._contract_registry_id(),
+                str(rental_id),
+                "0x6",
+                "--gas-budget", "100000000",
+            ])
+
+        self.benchmark("cancel_expired_order", _do, entity_id=entity_id,
+                        rental_id=rental_id)
+
     # --- client lifecycle ---
 
     def add_client(self, entity_id: str, address: str = "") -> ClientEntity:
@@ -427,30 +580,52 @@ class ScenarioContext:
 
     def join_room(self, entity_id: str, routes_url: str = "", rental_id: Optional[int] = None) -> None:
         user = self.report.users[entity_id]
+        effective_url = routes_url or (self._deployment.routes_url if self._deployment else "")
 
         def _do() -> None:
-            import urllib.request
-            url = f"{routes_url}/connection-details?roomName={user.room_name}&participantName={entity_id}"
+            url = f"{effective_url}/api/connection-details?roomName={user.room_name}&participantName={entity_id}"
             if rental_id is not None:
                 url += f"&rentalId={rental_id}"
-            urllib.request.urlopen(url, timeout=10)
+            try:
+                resp = urllib.request.urlopen(url, timeout=10)
+            except urllib.error.HTTPError as e:
+                if e.code == 403:
+                    user.rejected = True
+                    return
+                raise
+            details = json.loads(resp.read())
+
+            from livekit.rtc import Room, RoomOptions
+            room = Room()
+
+            async def _connect() -> None:
+                await room.connect(
+                    details["serverUrl"],
+                    details["participantToken"],
+                    options=RoomOptions(auto_subscribe=True),
+                )
+
+            self._async_bridge.run(_connect())
+            self._rooms[entity_id] = room
 
         self.benchmark("join_room", _do, entity_id=entity_id, room_name=user.room_name)
-        user.joined_at = time.time()
+        if not user.rejected:
+            user.joined_at = time.time()
 
     def leave_room(self, entity_id: str) -> None:
         user = self.report.users[entity_id]
+
+        def _do() -> None:
+            room = self._rooms.pop(entity_id, None)
+            if room:
+                async def _disconnect() -> None:
+                    await room.disconnect()
+                self._async_bridge.run(_disconnect())
+
+        self.benchmark("leave_room", _do, entity_id=entity_id)
         user.left_at = time.time()
         if user.joined_at:
             user.session_duration_ms = (user.left_at - user.joined_at) * 1000
-        sample = BenchmarkSample(
-            name="leave_room",
-            duration_ms=0.0,
-            entity_id=entity_id,
-            metadata={"session_duration_ms": user.session_duration_ms or 0},
-        )
-        self.report.samples.append(sample)
-        user.samples.append(sample)
         self.log(f"user left: {entity_id} session={user.session_duration_ms:.0f}ms" if user.session_duration_ms else f"user left: {entity_id}")
 
     # --- helpers ---
@@ -552,6 +727,39 @@ def print_report(report: BenchmarkReport) -> None:
     print("=" * 60)
 
 
+def _write_report(report: BenchmarkReport, output_path: Optional[str]) -> None:
+    if not output_path:
+        return
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps({
+            "scenario": report.scenario_name,
+            "topology": {
+                "worker_nodes": report.topology.worker_nodes,
+                "client_nodes": report.topology.client_nodes,
+                "coordinator_nodes": report.topology.coordinator_nodes,
+                "contract_network": report.topology.contract_network,
+                "provider": report.topology.provider,
+            },
+            "total_duration_ms": report.total_duration_ms,
+            "samples": [
+                {
+                    "name": s.name,
+                    "duration_ms": round(s.duration_ms, 2),
+                    "entity_id": s.entity_id,
+                    "metadata": s.metadata,
+                }
+                for s in report.samples
+            ],
+            "summary": report.summary(),
+            "entities": report.entity_summary(),
+        }, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print(f"\nreport written to {out}")
+
+
 def cmd_run_scenario(args: argparse.Namespace) -> None:
     scenario_path = Path(args.scenario)
     if not scenario_path.exists():
@@ -559,19 +767,62 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
 
     scenario = load_scenario(scenario_path)
     dry_run = getattr(args, "dry_run", False)
+    provider = getattr(args, "provider", "alibaba-cloud")
+    teardown = getattr(args, "teardown", False)
+
+    topology = scenario.topology
+    if getattr(args, "worker_nodes", None) is not None:
+        topology.worker_nodes = args.worker_nodes
+    if getattr(args, "client_nodes", None) is not None:
+        topology.client_nodes = args.client_nodes
+    if getattr(args, "coordinator_nodes", None) is not None:
+        topology.coordinator_nodes = args.coordinator_nodes
+    topology.provider = provider
+    topology.contract_network = getattr(args, "contract_network", "testnet")
 
     print(f"scenario: {scenario.name}")
     print(f"  {scenario.description}")
-    print(f"  topology: {scenario.topology.worker_nodes} workers, {scenario.topology.client_nodes} clients, {scenario.topology.coordinator_nodes} coordinators")
-    print(f"  network: {scenario.topology.contract_network}")
+    print(f"  topology: {topology.worker_nodes} workers, {topology.client_nodes} clients, {topology.coordinator_nodes} coordinators")
+    print(f"  network: {topology.contract_network}")
+    print(f"  provider: {topology.provider}")
     if dry_run:
         print("  mode: DRY RUN")
 
-    report = BenchmarkReport(
-        scenario_name=scenario.name,
-        topology=scenario.topology,
-    )
-    ctx = ScenarioContext(topology=scenario.topology, report=report, dry_run=dry_run)
+    deployment = None
+    if not dry_run:
+        from cli.discovery import is_deployed, discover, wait_for_routes
+
+        if not is_deployed(provider):
+            print("\nInfrastructure not deployed. Running deploy...")
+            from cli.infra import cmd_deploy
+
+            deploy_args = argparse.Namespace(
+                provider=provider,
+                deploy_contract=getattr(args, "deploy_contract", False),
+                contract_network=topology.contract_network,
+                testbed_name=getattr(args, "testbed_name", "depin-testbed"),
+                node_registry_contract_id=getattr(args, "node_registry_contract_id", None),
+                worker_nodes=topology.worker_nodes,
+                client_nodes=topology.client_nodes,
+                coordinator_nodes=topology.coordinator_nodes,
+            )
+            try:
+                cmd_deploy(deploy_args)
+            except Exception as e:
+                raise SystemExit(f"Deploy failed: {e}")
+
+        deployment = discover(provider)
+        print(f"  routes: {deployment.routes_url}")
+        print(f"  livekit: {deployment.livekit_url}")
+
+        print("\nWaiting for routes service...")
+        wait_for_routes(deployment)
+        print("  routes service ready")
+
+    report = BenchmarkReport(scenario_name=scenario.name, topology=topology)
+    ctx = ScenarioContext(topology=topology, report=report, dry_run=dry_run)
+    if deployment:
+        ctx.set_deployment(deployment)
 
     report.started_at = time.time()
     try:
@@ -579,36 +830,22 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
     except KeyboardInterrupt:
         print("\n\nscenario interrupted by user")
     finally:
+        ctx.cleanup()
         report.finished_at = time.time()
         print_report(report)
+        _write_report(report, getattr(args, "output", None))
 
-        output_path = getattr(args, "output", None)
-        if output_path:
-            out = Path(output_path)
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(
-                json.dumps({
-                    "scenario": scenario.name,
-                    "topology": {
-                        "worker_nodes": scenario.topology.worker_nodes,
-                        "client_nodes": scenario.topology.client_nodes,
-                        "coordinator_nodes": scenario.topology.coordinator_nodes,
-                        "contract_network": scenario.topology.contract_network,
-                        "provider": scenario.topology.provider,
-                    },
-                    "total_duration_ms": report.total_duration_ms,
-                    "samples": [
-                        {
-                            "name": s.name,
-                            "duration_ms": round(s.duration_ms, 2),
-                            "entity_id": s.entity_id,
-                            "metadata": s.metadata,
-                        }
-                        for s in report.samples
-                    ],
-                    "summary": report.summary(),
-                    "entities": report.entity_summary(),
-                }, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            print(f"\nreport written to {out}")
+    if teardown and not dry_run:
+        print("\nTearing down infrastructure...")
+        from cli.infra import cmd_destroy
+
+        destroy_args = argparse.Namespace(
+            provider=provider,
+            testbed_name=getattr(args, "testbed_name", "depin-testbed"),
+            node_registry_contract_id=getattr(args, "node_registry_contract_id", None),
+            worker_nodes=topology.worker_nodes,
+            client_nodes=topology.client_nodes,
+            coordinator_nodes=topology.coordinator_nodes,
+            auto_approve=True,
+        )
+        cmd_destroy(destroy_args)
