@@ -17,6 +17,12 @@ PROVIDER_ENV_FILES = {
     "alibaba-cloud": "alibaba-cloud.env",
 }
 
+IMAGE_SERVICES = {
+    "worker": "src/livekit",
+    "routes": "src/routes",
+    "client": "src/client",
+}
+
 CONTRACT_NETWORK_CHOICES = ("devnet", "testnet", "mainnet")
 CONTRACT_ENV_FILE = REPO_ROOT / "secrets" / "contract.env"
 CONTRACT_ENV_DIR = REPO_ROOT / "secrets" / "contract"

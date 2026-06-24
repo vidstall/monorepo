@@ -5,7 +5,7 @@ from pathlib import Path
 
 from cli.config import CONTRACT_NETWORK_CHOICES, CONTRACT_PACKAGE_PATH, PROVIDER_CHOICES
 from cli.contract import cmd_deploy_contract, cmd_init_contract, cmd_update_contract
-from cli.infra import cmd_deploy, cmd_destroy, cmd_inventory, cmd_purge
+from cli.infra import cmd_build_images, cmd_deploy, cmd_destroy, cmd_inventory, cmd_purge
 from cli.scenario import cmd_run_scenario
 
 
@@ -20,6 +20,19 @@ def add_infra_shape(parser: argparse.ArgumentParser) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="vidctl.py")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    build_images = subparsers.add_parser(
+        "build-images",
+        help="Build Docker images locally and optionally push to a registry",
+    )
+    build_images.add_argument("--registry", required=True,
+                              help="Docker registry prefix (e.g. docker.io/myuser, ghcr.io/org)")
+    build_images.add_argument("--tag", default="latest", help="Image tag (default: latest)")
+    build_images.add_argument("--platform", default="linux/amd64",
+                              help="Target platform for cloud deployment (default: linux/amd64)")
+    build_images.add_argument("--push", action="store_true", default=False,
+                              help="Push images to registry after building")
+    build_images.set_defaults(func=cmd_build_images)
 
     deploy = subparsers.add_parser("deploy", help="Apply Terraform, configure Docker with Ansible")
     deploy.add_argument("--provider", required=True, choices=PROVIDER_CHOICES)

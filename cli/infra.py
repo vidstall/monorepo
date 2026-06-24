@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping
 
-from cli.config import ANSIBLE_PLAYBOOK, CONTRACT_PACKAGE_PATH, PROVIDER_CHOICES, SSH_CONFIG_DIR, TERRAFORM_ENV_DIR
+from cli.config import ANSIBLE_PLAYBOOK, CONTRACT_PACKAGE_PATH, IMAGE_SERVICES, PROVIDER_CHOICES, REPO_ROOT, SSH_CONFIG_DIR, TERRAFORM_ENV_DIR
 from cli.env import build_env
 from cli.process import run_command
 
@@ -372,6 +372,61 @@ def cmd_inventory(args: argparse.Namespace) -> None:
     outputs = terraform_output(args.provider, env)
     inventory_path = render_inventory(args.provider, outputs)
     print(inventory_path)
+
+
+def cmd_build_images(args: argparse.Namespace) -> None:
+    registry = args.registry.rstrip("/")
+    tag = args.tag
+    push = args.push
+    platform = args.platform
+
+    image_map: Dict[str, str] = {}
+    for service, src_dir in IMAGE_SERVICES.items():
+        image_name = f"{registry}/xaisen-{service}:{tag}"
+        build_context = REPO_ROOT / src_dir
+        if not build_context.exists():
+            raise SystemExit(f"Build context not found: {build_context}")
+
+        print(f"\n=== Building {service} ===")
+        print(f"  image: {image_name}")
+        print(f"  platform: {platform}")
+        print(f"  context: {build_context}")
+
+        build_cmd = ["docker", "build", "--platform", platform, "-t", image_name]
+        if push:
+            build_cmd.append("--push")
+        build_cmd.append(".")
+
+        subprocess.run(build_cmd, cwd=str(build_context), check=True)
+        image_map[service] = image_name
+
+    runtime_env_path = REPO_ROOT / "secrets" / "runtime.env"
+    runtime_env_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing_lines: Dict[str, str] = {}
+    if runtime_env_path.exists():
+        for line in runtime_env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, _, val = line.partition("=")
+            existing_lines[key.strip()] = val.strip()
+
+    existing_lines["XAISEN_WORKER_IMAGE"] = image_map["worker"]
+    existing_lines["XAISEN_ROUTES_IMAGE"] = image_map["routes"]
+    existing_lines["XAISEN_CLIENT_IMAGE"] = image_map["client"]
+
+    if "LIVEKIT_API_KEY" not in existing_lines or not existing_lines["LIVEKIT_API_KEY"]:
+        import secrets as _secrets
+        existing_lines["LIVEKIT_API_KEY"] = f"devkey_{_secrets.token_hex(8)}"
+        existing_lines["LIVEKIT_API_SECRET"] = _secrets.token_hex(32)
+        print("\n  generated LIVEKIT_API_KEY and LIVEKIT_API_SECRET")
+
+    env_content = "\n".join(f"{k}={v}" for k, v in existing_lines.items()) + "\n"
+    runtime_env_path.write_text(env_content, encoding="utf-8")
+    os.chmod(runtime_env_path, 0o600)
+    print(f"\n  wrote {runtime_env_path}")
+    print("\nDone. Images ready" + (" and pushed." if push else ". Use --push to push to registry."))
 
 
 def purge_terraform_state(provider: str) -> None:

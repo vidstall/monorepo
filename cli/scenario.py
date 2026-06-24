@@ -4,6 +4,8 @@ import argparse
 import asyncio
 import importlib.util
 import json
+import math
+import struct
 import threading
 import time
 import urllib.error
@@ -159,6 +161,22 @@ class BenchmarkReport:
         return result
 
 
+def _generate_audio_frame(sample_rate: int = 48000, num_channels: int = 1, duration_ms: int = 20) -> Any:
+    from livekit.rtc import AudioFrame
+    num_samples = sample_rate * duration_ms // 1000
+    samples = [int(32767 * 0.3 * math.sin(2 * math.pi * 440 * i / sample_rate))
+               for i in range(num_samples)]
+    data = struct.pack(f"<{num_samples}h", *samples)
+    return AudioFrame(data=data, sample_rate=sample_rate,
+                      num_channels=num_channels, samples_per_channel=num_samples)
+
+
+def _generate_video_frame(width: int = 640, height: int = 480) -> Any:
+    from livekit.rtc import VideoFrame
+    pixel = struct.pack("BBBB", 0, 180, 0, 255)
+    return VideoFrame(width, height, 0, pixel * (width * height))
+
+
 class _AsyncBridge:
     def __init__(self) -> None:
         self._loop = asyncio.new_event_loop()
@@ -185,12 +203,20 @@ class ScenarioContext:
         self._env: Dict[str, str] = {}
         self._async_bridge = _AsyncBridge()
         self._rooms: Dict[str, Any] = {}
+        self._track_stops: Dict[str, threading.Event] = {}
+        self._track_threads: Dict[str, threading.Thread] = {}
         self._deployment: Any = None
 
     def set_deployment(self, info: Any) -> None:
         self._deployment = info
 
     def cleanup(self) -> None:
+        for entity_id, stop_event in self._track_stops.items():
+            stop_event.set()
+        for entity_id, thread in self._track_threads.items():
+            thread.join(timeout=2)
+        self._track_stops.clear()
+        self._track_threads.clear()
         for entity_id in list(self._rooms.keys()):
             try:
                 room = self._rooms.pop(entity_id)
@@ -595,7 +621,11 @@ class ScenarioContext:
                 raise
             details = json.loads(resp.read())
 
-            from livekit.rtc import Room, RoomOptions
+            from livekit.rtc import (
+                AudioSource, LocalAudioTrack, LocalVideoTrack,
+                Room, RoomOptions, TrackPublishOptions, VideoSource,
+            )
+
             room = Room()
 
             async def _connect() -> None:
@@ -608,6 +638,39 @@ class ScenarioContext:
             self._async_bridge.run(_connect())
             self._rooms[entity_id] = room
 
+            audio_source = AudioSource(sample_rate=48000, num_channels=1)
+            audio_track = LocalAudioTrack.create_audio_track("mock-audio", audio_source)
+            video_source = VideoSource(640, 480)
+            video_track = LocalVideoTrack.create_video_track("mock-video", video_source)
+
+            async def _publish() -> None:
+                lp = room.local_participant
+                await lp.publish_track(audio_track, TrackPublishOptions())
+                await lp.publish_track(video_track, TrackPublishOptions())
+
+            self._async_bridge.run(_publish())
+
+            stop_event = threading.Event()
+            self._track_stops[entity_id] = stop_event
+
+            def _push_frames() -> None:
+                audio_frame = _generate_audio_frame()
+                video_frame = _generate_video_frame()
+                while not stop_event.is_set():
+                    try:
+                        video_source.capture_frame(video_frame)
+                        asyncio.run_coroutine_threadsafe(
+                            audio_source.capture_frame(audio_frame),
+                            self._async_bridge._loop,
+                        ).result(timeout=1)
+                    except Exception:
+                        break
+                    stop_event.wait(0.02)
+
+            thread = threading.Thread(target=_push_frames, daemon=True)
+            thread.start()
+            self._track_threads[entity_id] = thread
+
         self.benchmark("join_room", _do, entity_id=entity_id, room_name=user.room_name)
         if not user.rejected:
             user.joined_at = time.time()
@@ -616,6 +679,13 @@ class ScenarioContext:
         user = self.report.users[entity_id]
 
         def _do() -> None:
+            stop_event = self._track_stops.pop(entity_id, None)
+            if stop_event:
+                stop_event.set()
+            thread = self._track_threads.pop(entity_id, None)
+            if thread:
+                thread.join(timeout=2)
+
             room = self._rooms.pop(entity_id, None)
             if room:
                 async def _disconnect() -> None:
