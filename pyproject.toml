@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vidctl"
+version = "0.1.0"
+description = "CLI for Xaisen decentralized video conferencing testbed"
+requires-python = ">=3.10"
+dependencies = [
+    "livekit>=1.1,<2.0",
+    "livekit-api>=1.1,<2.0",
+    "pyyaml>=6.0,<7.0",
+]
+
+[project.scripts]
+vidctl = "cli.main:main"

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from cli.config import CONTRACT_NETWORK_CHOICES, CONTRACT_PACKAGE_PATH, PROVIDER_CHOICES
 from cli.contract import cmd_deploy_contract, cmd_init_contract, cmd_update_contract
-from cli.infra import cmd_deploy, cmd_destroy, cmd_inventory
+from cli.infra import cmd_deploy, cmd_destroy, cmd_inventory, cmd_purge
 from cli.scenario import cmd_run_scenario
 
 
@@ -93,6 +93,17 @@ def parse_args() -> argparse.Namespace:
     add_infra_shape(destroy)
     destroy.add_argument("--auto-approve", action="store_true", default=True)
     destroy.set_defaults(func=cmd_destroy)
+
+    purge = subparsers.add_parser("purge", help="Destroy infrastructure and clean all local state to stop billing")
+    purge.add_argument(
+        "--provider",
+        required=True,
+        choices=(*PROVIDER_CHOICES, "all"),
+        help="Purge one provider or every provider.",
+    )
+    add_infra_shape(purge)
+    purge.add_argument("--auto-approve", action="store_true", default=True)
+    purge.set_defaults(func=cmd_purge)
 
     inventory = subparsers.add_parser("inventory", help="Render Ansible inventory from Terraform output")
     inventory.add_argument("--provider", required=True, choices=PROVIDER_CHOICES)

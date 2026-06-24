@@ -372,3 +372,33 @@ def cmd_inventory(args: argparse.Namespace) -> None:
     outputs = terraform_output(args.provider, env)
     inventory_path = render_inventory(args.provider, outputs)
     print(inventory_path)
+
+
+def purge_terraform_state(provider: str) -> None:
+    root = provider_terraform_root(provider)
+    tf_dir = root / ".terraform"
+    if tf_dir.exists():
+        import shutil
+        shutil.rmtree(tf_dir)
+        print(f"  removed {tf_dir}")
+    for pattern in ("*.tfstate", "*.tfstate.*", ".terraform.lock.hcl"):
+        for f in root.glob(pattern):
+            f.unlink()
+            print(f"  removed {f}")
+
+
+def cmd_purge(args: argparse.Namespace) -> None:
+    ensure_runtime_dirs()
+    for provider in destroy_providers(args.provider):
+        env = build_env(provider)
+        print(f"\n=== Purging {provider} ===")
+        print("Destroying infrastructure...")
+        try:
+            terraform_destroy(provider, args, env)
+        except subprocess.CalledProcessError:
+            print(f"  terraform destroy failed for {provider}, cleaning up anyway")
+        print("Cleaning artifacts...")
+        cleanup_provider_artifacts(provider)
+        print("Cleaning Terraform local state...")
+        purge_terraform_state(provider)
+        print(f"  {provider} purged")
