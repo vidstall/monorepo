@@ -21,6 +21,11 @@ def add_infra_shape(parser: argparse.ArgumentParser) -> None:
 def _add_infra_group(subparsers: argparse._SubParsersAction) -> None:
     infra = subparsers.add_parser("infra", help="Infrastructure lifecycle commands")
     infra.set_defaults(func=cmd_infra_status)
+    infra.add_argument(
+        "--provider",
+        default=None,
+        help="Comma-separated providers to show (default: all). e.g. alibaba-cloud,aws",
+    )
     infra_sub = infra.add_subparsers(dest="subcommand")
 
     deploy = infra_sub.add_parser("deploy", help="Apply Terraform, configure Docker with Ansible")

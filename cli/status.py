@@ -54,9 +54,9 @@ def _load_runtime_images() -> Dict[str, Optional[str]]:
     return {svc: env.get(key) or None for svc, key in IMAGE_KEYS.items()}
 
 
-def _print_infra_section() -> None:
+def _print_infra_section(providers: tuple[str, ...] = PROVIDER_CHOICES) -> None:
     print("INFRASTRUCTURE")
-    for provider in PROVIDER_CHOICES:
+    for provider in providers:
         deployed = _is_provider_deployed(provider)
         inv = _has_inventory(provider)
         label = f"{provider:<{_W}}"
@@ -104,8 +104,16 @@ def _print_images_section() -> None:
 
 
 def cmd_infra_status(args: argparse.Namespace) -> None:
+    raw = getattr(args, "provider", None)
+    if raw:
+        providers = tuple(p.strip() for p in raw.split(",") if p.strip())
+        invalid = [p for p in providers if p not in PROVIDER_CHOICES]
+        if invalid:
+            raise SystemExit(f"Unknown provider(s): {', '.join(invalid)}. Choose from: {', '.join(PROVIDER_CHOICES)}")
+    else:
+        providers = PROVIDER_CHOICES
     print()
-    _print_infra_section()
+    _print_infra_section(providers)
     print(_rule())
     print('Run "python3 vidctl.py infra <subcommand> --help" for available actions.')
     print()
