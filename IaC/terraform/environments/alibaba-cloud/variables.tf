@@ -36,7 +36,7 @@ variable "alicloud_region" {
 variable "alicloud_instance_type" {
   type        = string
   description = "Alibaba Cloud ECS instance type."
-  default     = "ecs.t6-c1m1.small"
+  default     = "ecs.t5-lc1m1.small"
 }
 
 variable "alicloud_vpc_cidr" {
@@ -54,6 +54,13 @@ variable "alicloud_vswitch_cidr" {
 variable "alicloud_source_image" {
   type        = string
   description = "Alibaba Cloud base image ID used for provisioned instances."
+  default     = null
+}
+
+variable "alicloud_spot_strategy" {
+  type        = string
+  description = "Spot instance strategy: NoSpot, SpotAsPriceGo, or SpotWithPriceLimit."
+  default     = "SpotAsPriceGo"
 }
 
 variable "ssh_username" {

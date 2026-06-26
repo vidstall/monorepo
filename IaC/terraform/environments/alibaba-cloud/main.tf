@@ -6,8 +6,15 @@ data "alicloud_zones" "available" {
   available_resource_creation = "Instance"
 }
 
+data "alicloud_images" "ubuntu" {
+  owners      = "system"
+  name_regex  = "^ubuntu_22_04_x64_20G_alibase"
+  most_recent = true
+}
+
 locals {
-  ssh_home  = var.ssh_username == "root" ? "/root" : "/home/${var.ssh_username}"
+  effective_image = coalesce(var.alicloud_source_image, data.alicloud_images.ubuntu.images[0].id)
+  ssh_home        = var.ssh_username == "root" ? "/root" : "/home/${var.ssh_username}"
   user_data = <<-EOT
     #!/bin/sh
     set -eu
@@ -139,12 +146,13 @@ resource "alicloud_instance" "worker" {
   availability_zone          = data.alicloud_zones.available.zones[0].id
   security_groups            = [alicloud_security_group.testbed.id]
   instance_type              = var.alicloud_instance_type
-  image_id                   = var.alicloud_source_image
+  image_id                   = local.effective_image
   system_disk_category       = "cloud_efficiency"
   instance_name              = "${var.testbed_name}-worker-${count.index + 1}"
   vswitch_id                 = alicloud_vswitch.main.id
   internet_max_bandwidth_out = 100
   user_data                  = local.user_data
+  spot_strategy              = var.alicloud_spot_strategy
 
   tags = merge(local.common_tags, {
     Role = "worker"
@@ -157,12 +165,13 @@ resource "alicloud_instance" "client" {
   availability_zone          = data.alicloud_zones.available.zones[0].id
   security_groups            = [alicloud_security_group.testbed.id]
   instance_type              = var.alicloud_instance_type
-  image_id                   = var.alicloud_source_image
+  image_id                   = local.effective_image
   system_disk_category       = "cloud_efficiency"
   instance_name              = "${var.testbed_name}-client-${count.index + 1}"
   vswitch_id                 = alicloud_vswitch.main.id
   internet_max_bandwidth_out = 100
   user_data                  = local.user_data
+  spot_strategy              = var.alicloud_spot_strategy
 
   tags = merge(local.common_tags, {
     Role = "client"
@@ -175,12 +184,13 @@ resource "alicloud_instance" "coordinator" {
   availability_zone          = data.alicloud_zones.available.zones[0].id
   security_groups            = [alicloud_security_group.testbed.id]
   instance_type              = var.alicloud_instance_type
-  image_id                   = var.alicloud_source_image
+  image_id                   = local.effective_image
   system_disk_category       = "cloud_efficiency"
   instance_name              = "${var.testbed_name}-coordinator-${count.index + 1}"
   vswitch_id                 = alicloud_vswitch.main.id
   internet_max_bandwidth_out = 100
   user_data                  = local.user_data
+  spot_strategy              = var.alicloud_spot_strategy
 
   tags = merge(local.common_tags, {
     Role = "coordinator"

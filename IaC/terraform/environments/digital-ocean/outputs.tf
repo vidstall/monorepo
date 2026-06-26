@@ -18,23 +18,26 @@ output "inventory" {
   value = {
     worker = [
       for instance in digitalocean_droplet.worker : {
-        name = instance.name
-        host = instance.ipv4_address
-        user = var.ssh_username
+        name       = instance.name
+        host       = instance.ipv4_address
+        private_ip = instance.ipv4_address_private
+        user       = var.ssh_username
       }
     ]
     client = [
       for instance in digitalocean_droplet.client : {
-        name = instance.name
-        host = instance.ipv4_address
-        user = var.ssh_username
+        name       = instance.name
+        host       = instance.ipv4_address
+        private_ip = instance.ipv4_address_private
+        user       = var.ssh_username
       }
     ]
     coordinator = [
       for instance in digitalocean_droplet.coordinator : {
-        name = instance.name
-        host = instance.ipv4_address
-        user = var.ssh_username
+        name       = instance.name
+        host       = instance.ipv4_address
+        private_ip = instance.ipv4_address_private
+        user       = var.ssh_username
       }
     ]
   }

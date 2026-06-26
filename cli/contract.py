@@ -248,6 +248,10 @@ def cmd_deploy_contract(args: argparse.Namespace) -> None:
         raise SystemExit(f"Missing contract package path: {args.package_path}")
 
     env = build_contract_env(args.network)
+
+    if env.get("CONTRACT_PACKAGE_ID"):
+        print(f"Contract already published to {args.network} (package {env['CONTRACT_PACKAGE_ID']}). Skipping publish.")
+        return
     print(f"Switching Sui CLI to {args.network}...")
     run_command(["sui", "client", "switch", "--env", args.network], cwd=REPO_ROOT, env=env)
 
@@ -361,6 +365,11 @@ def cmd_update_contract(args: argparse.Namespace) -> None:
 
 def cmd_init_contract(args: argparse.Namespace) -> None:
     env = build_contract_env(args.network)
+
+    if env.get("CONTRACT_REGISTRY_OBJECT_ID"):
+        print(f"Registry already initialized on {args.network} (object {env['CONTRACT_REGISTRY_OBJECT_ID']}). Skipping init.")
+        return
+
     metadata = merge_published_fallback(env, args.package_path, args.network)
     package_id = metadata.get("CONTRACT_PACKAGE_ID")
     if not package_id:

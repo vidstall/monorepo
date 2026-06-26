@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping
 
-from cli.config import ANSIBLE_PLAYBOOK, CONTRACT_PACKAGE_PATH, IMAGE_SERVICES, PROVIDER_CHOICES, REPO_ROOT, SSH_CONFIG_DIR, TERRAFORM_ENV_DIR
+from cli.config import ANSIBLE_PLAYBOOK, CONTRACT_PACKAGE_PATH, IMAGE_SERVICES, PROVIDER_CHOICES, PROVIDER_CR_REGISTRY_KEY, PROVIDER_ENV_FILES, REPO_ROOT, SSH_CONFIG_DIR, TERRAFORM_ENV_DIR, TERRAFORM_REGISTRY_DIR
 from cli.env import build_env
 from cli.process import run_command
 
@@ -128,9 +128,20 @@ def terraform_value(outputs: Mapping[str, object], name: str) -> object:
 
 
 def write_private_key(provider: str, outputs: Mapping[str, object], output_dir: Path = SSH_CONFIG_DIR) -> Path:
-    private_key = terraform_value(outputs, "private_key_pem")
+    private_key = str(terraform_value(outputs, "private_key_pem"))
     key_path = output_dir / f"{provider}-id_ed25519"
-    key_path.write_text(str(private_key), encoding="utf-8")
+    if "BEGIN PRIVATE KEY" in private_key and "BEGIN OPENSSH" not in private_key:
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding,
+            NoEncryption,
+            PrivateFormat,
+            load_pem_private_key,
+        )
+        key_obj = load_pem_private_key(private_key.encode(), password=None)
+        openssh_bytes = key_obj.private_bytes(Encoding.PEM, PrivateFormat.OpenSSH, NoEncryption())
+        key_path.write_bytes(openssh_bytes)
+    else:
+        key_path.write_text(private_key, encoding="utf-8")
     os.chmod(key_path, 0o600)
     return key_path
 
@@ -181,6 +192,7 @@ def inventory_from_outputs(outputs: Mapping[str, object], key_path: Path) -> Dic
         "all": {
             "vars": {
                 "ansible_ssh_private_key_file": str(key_path),
+                "ansible_ssh_common_args": "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
                 "ansible_python_interpreter": "/usr/bin/python3",
             },
             "children": children,
@@ -374,11 +386,72 @@ def cmd_inventory(args: argparse.Namespace) -> None:
     print(inventory_path)
 
 
+def _update_env_file(path: Path, updates: Dict[str, str]) -> None:
+    existing: Dict[str, str] = {}
+    if path.exists():
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
+            if "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip()
+            if val and val[0] in {'"', "'"} and val[-1] == val[0]:
+                val = val[1:-1]
+            existing[key] = val
+    existing.update(updates)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(f"{k}={v}" for k, v in existing.items()) + "\n", encoding="utf-8")
+    os.chmod(path, 0o600)
+
+
 def cmd_build_images(args: argparse.Namespace) -> None:
-    registry = args.registry.rstrip("/")
+    provider = getattr(args, "provider", None)
+    explicit_registry = getattr(args, "registry", None)
+
+    if provider and explicit_registry:
+        raise SystemExit("--registry and --provider are mutually exclusive")
+    if not provider and not explicit_registry:
+        raise SystemExit("One of --registry or --provider is required")
+
+    if provider:
+        env = build_env(provider)
+        registry_key = PROVIDER_CR_REGISTRY_KEY.get(provider)
+        if not registry_key:
+            raise SystemExit(f"No registry configured for provider '{provider}'")
+        registry_url = env.get(registry_key, "").strip()
+        if not registry_url:
+            raise SystemExit(
+                f"{registry_key} is not set for {provider}. "
+                f"Run: python3 vidctl.py setup-registry --provider {provider}"
+            )
+        registry = registry_url.rstrip("/")
+    else:
+        env = {}
+        registry = explicit_registry.rstrip("/")
+
     tag = args.tag
     push = args.push
     platform = args.platform
+
+    if push and provider:
+        registry_host = registry.split("/")[0]
+        username = env.get("ALICLOUD_CR_USERNAME", "").strip() if provider == "alibaba-cloud" else ""
+        password = env.get("ALICLOUD_CR_PASSWORD", "").strip() if provider == "alibaba-cloud" else ""
+        if username and password:
+            print(f"\n=== Logging in to {registry_host} ===")
+            subprocess.run(
+                ["docker", "login", registry_host, "-u", username, "--password-stdin"],
+                input=password,
+                text=True,
+                check=True,
+            )
+        else:
+            print(f"\n  Skipping docker login (ALICLOUD_CR_USERNAME / ALICLOUD_CR_PASSWORD not set)")
 
     image_map: Dict[str, str] = {}
     for service, src_dir in IMAGE_SERVICES.items():
@@ -401,36 +474,78 @@ def cmd_build_images(args: argparse.Namespace) -> None:
         image_map[service] = image_name
 
     runtime_env_path = REPO_ROOT / "secrets" / "runtime.env"
-    runtime_env_path.parent.mkdir(parents=True, exist_ok=True)
+    _update_env_file(runtime_env_path, {
+        "XAISEN_WORKER_IMAGE": image_map["worker"],
+        "XAISEN_ROUTES_IMAGE": image_map["routes"],
+        "XAISEN_CLIENT_IMAGE": image_map["client"],
+    })
 
-    existing_lines: Dict[str, str] = {}
-    if runtime_env_path.exists():
-        for line in runtime_env_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            key, _, val = line.partition("=")
-            existing_lines[key.strip()] = val.strip()
-
-    existing_lines["XAISEN_WORKER_IMAGE"] = image_map["worker"]
-    existing_lines["XAISEN_ROUTES_IMAGE"] = image_map["routes"]
-    existing_lines["XAISEN_CLIENT_IMAGE"] = image_map["client"]
-
-    if "LIVEKIT_API_KEY" not in existing_lines or not existing_lines["LIVEKIT_API_KEY"]:
+    existing = {}
+    for line in runtime_env_path.read_text(encoding="utf-8").splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            existing[k.strip()] = v.strip()
+    if "LIVEKIT_API_KEY" not in existing or not existing["LIVEKIT_API_KEY"]:
         import secrets as _secrets
-        existing_lines["LIVEKIT_API_KEY"] = f"devkey_{_secrets.token_hex(8)}"
-        existing_lines["LIVEKIT_API_SECRET"] = _secrets.token_hex(32)
+        _update_env_file(runtime_env_path, {
+            "LIVEKIT_API_KEY": f"devkey_{_secrets.token_hex(8)}",
+            "LIVEKIT_API_SECRET": _secrets.token_hex(32),
+        })
         print("\n  generated LIVEKIT_API_KEY and LIVEKIT_API_SECRET")
 
-    env_content = "\n".join(f"{k}={v}" for k, v in existing_lines.items()) + "\n"
-    runtime_env_path.write_text(env_content, encoding="utf-8")
-    os.chmod(runtime_env_path, 0o600)
     print(f"\n  wrote {runtime_env_path}")
     print("\nDone. Images ready" + (" and pushed." if push else ". Use --push to push to registry."))
 
 
-def purge_terraform_state(provider: str) -> None:
-    root = provider_terraform_root(provider)
+def cmd_setup_registry(args: argparse.Namespace) -> None:
+    provider = args.provider
+    if provider not in PROVIDER_CR_REGISTRY_KEY:
+        raise SystemExit(f"setup-registry does not support provider '{provider}' yet")
+
+    env = build_env(provider)
+    tf_root = TERRAFORM_REGISTRY_DIR / provider
+    if not tf_root.exists():
+        raise SystemExit(f"No registry Terraform config found at {tf_root}")
+
+    region = env.get("ALICLOUD_REGION", "cn-hangzhou")
+
+    run_command(["terraform", "init", "-input=false"], cwd=tf_root, env=env)
+    run_command(
+        [
+            "terraform", "apply", "-auto-approve", "-input=false",
+            f"-var=namespace={args.namespace}",
+            f"-var=region={region}",
+        ],
+        cwd=tf_root,
+        env=env,
+    )
+
+    result = subprocess.run(
+        ["terraform", "output", "-raw", "registry"],
+        cwd=str(tf_root),
+        env=dict(env),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    registry_url = result.stdout.strip()
+
+    secrets_file = REPO_ROOT / "secrets" / "cloud" / PROVIDER_ENV_FILES[provider]
+    registry_key = PROVIDER_CR_REGISTRY_KEY[provider]
+    _update_env_file(secrets_file, {registry_key: registry_url})
+
+    print(f"\nRegistry ready: {registry_url}")
+    print(f"  {registry_key} written to {secrets_file}")
+    print(
+        f"\nNext: add credentials to {secrets_file}:\n"
+        f"  ALICLOUD_CR_USERNAME=<your-ram-username>\n"
+        f"  ALICLOUD_CR_PASSWORD=<acr-fixed-password>\n"
+        f"\nThen push images:\n"
+        f"  python3 vidctl.py build-images --provider {provider} --push"
+    )
+
+
+def purge_terraform_state(root: Path) -> None:
     tf_dir = root / ".terraform"
     if tf_dir.exists():
         import shutil
@@ -440,6 +555,17 @@ def purge_terraform_state(provider: str) -> None:
         for f in root.glob(pattern):
             f.unlink()
             print(f"  removed {f}")
+
+
+def destroy_registry(provider: str, env: Mapping[str, str]) -> None:
+    tf_root = TERRAFORM_REGISTRY_DIR / provider
+    state_file = tf_root / "terraform.tfstate"
+    if not state_file.exists():
+        print(f"  no registry state found for {provider}, skipping")
+        return
+    run_command(["terraform", "init", "-input=false"], cwd=tf_root, env=env)
+    run_command(["terraform", "destroy", "-auto-approve", "-input=false"], cwd=tf_root, env=env)
+    purge_terraform_state(tf_root)
 
 
 def cmd_purge(args: argparse.Namespace) -> None:
@@ -452,8 +578,13 @@ def cmd_purge(args: argparse.Namespace) -> None:
             terraform_destroy(provider, args, env)
         except subprocess.CalledProcessError:
             print(f"  terraform destroy failed for {provider}, cleaning up anyway")
+        print("Destroying container registry...")
+        try:
+            destroy_registry(provider, env)
+        except subprocess.CalledProcessError:
+            print(f"  registry destroy failed for {provider}, cleaning up anyway")
         print("Cleaning artifacts...")
         cleanup_provider_artifacts(provider)
         print("Cleaning Terraform local state...")
-        purge_terraform_state(provider)
+        purge_terraform_state(provider_terraform_root(provider))
         print(f"  {provider} purged")

@@ -17,6 +17,12 @@ PROVIDER_ENV_FILES = {
     "alibaba-cloud": "alibaba-cloud.env",
 }
 
+TERRAFORM_REGISTRY_DIR = REPO_ROOT / "IaC" / "terraform" / "registries"
+
+PROVIDER_CR_REGISTRY_KEY: dict[str, str] = {
+    "alibaba-cloud": "ALICLOUD_CR_REGISTRY",
+}
+
 IMAGE_SERVICES = {
     "worker": "src/livekit",
     "routes": "src/routes",

@@ -14,6 +14,7 @@ export const dAppKit = createDAppKit({
   createClient: (network) =>
     new SuiGrpcClient({ network, baseUrl: GRPC_URLS[network] }),
   autoConnect: true,
+  slushWalletConfig: null,
   storage: typeof window === "undefined" ? undefined : localStorage,
   storageKey: "xaisen-sui-wallet",
 });

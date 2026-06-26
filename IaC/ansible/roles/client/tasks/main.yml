@@ -113,4 +113,4 @@
       --network host
       -v {{ proxy_config_path }}:/etc/caddy/Caddyfile:ro
       {{ XAISEN_PROXY_IMAGE }}
-      run --config /etc/caddy/Caddyfile --adapter caddyfile
+      caddy run --config /etc/caddy/Caddyfile --adapter caddyfile

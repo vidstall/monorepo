@@ -7,8 +7,23 @@
     state: present
     update_cache: true
 
+- name: Configure Docker registry mirrors for mainland China
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "registry-mirrors": [
+          "https://hub-mirror.c.163.com",
+          "https://docker.mirrors.ustc.edu.cn"
+        ]
+      }
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: Enable Docker service
   ansible.builtin.service:
     name: docker
     enabled: true
     state: started
+    daemon_reload: true
