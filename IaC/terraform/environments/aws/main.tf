@@ -70,6 +70,13 @@ resource "aws_security_group" "ssh" {
     cidr_blocks = var.ssh_cidr_blocks
   }
 
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -96,8 +103,8 @@ resource "aws_instance" "worker" {
   })
 }
 
-resource "aws_instance" "client" {
-  count                       = var.client_count
+resource "aws_instance" "dist" {
+  count                       = var.dist_count
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.aws_instance_type
   key_name                    = aws_key_pair.testbed.key_name
@@ -107,8 +114,8 @@ resource "aws_instance" "client" {
   user_data                   = local.cloud_init
 
   tags = merge(local.common_tags, {
-    Name = "${var.testbed_name}-client-${count.index + 1}"
-    role = "client"
+    Name = "${var.testbed_name}-dist-${count.index + 1}"
+    role = "dist"
   })
 }
 

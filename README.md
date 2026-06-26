@@ -42,7 +42,7 @@ python3 vidctl.py --help
 
 # Deploy infrastructure + contract in one command
 python3 vidctl.py deploy --provider alibaba-cloud \
-  --worker-nodes 3 --client-nodes 1 --coordinator-nodes 1 \
+  --worker-nodes 3 --coordinator-nodes 1 \
   --deploy-contract --contract-network testnet
 ```
 

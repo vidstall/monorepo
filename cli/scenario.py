@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, List, Optional
 @dataclass
 class Topology:
     worker_nodes: int = 1
-    client_nodes: int = 1
+    dist_nodes: int = 1
     coordinator_nodes: int = 1
     contract_network: str = "testnet"
     provider: str = "alibaba-cloud"
@@ -777,7 +777,7 @@ def load_scenario(path: Path) -> Scenario:
 def print_report(report: BenchmarkReport) -> None:
     print("\n" + "=" * 60)
     print(f"BENCHMARK REPORT: {report.scenario_name}")
-    print(f"topology: {report.topology.worker_nodes}w / {report.topology.client_nodes}c / {report.topology.coordinator_nodes}coord")
+    print(f"topology: {report.topology.worker_nodes}w / {report.topology.dist_nodes}d / {report.topology.coordinator_nodes}coord")
     print(f"network: {report.topology.contract_network}")
     print(f"total duration: {report.total_duration_ms:.0f}ms")
     print("-" * 60)
@@ -816,7 +816,7 @@ def _write_report(report: BenchmarkReport, output_path: Optional[str]) -> None:
                 "region": report.topology.region,
                 "instance_type": report.topology.instance_type,
                 "worker_nodes": report.topology.worker_nodes,
-                "client_nodes": report.topology.client_nodes,
+                "dist_nodes": report.topology.dist_nodes,
                 "coordinator_nodes": report.topology.coordinator_nodes,
                 "contract_network": report.topology.contract_network,
             },
@@ -851,8 +851,8 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
     topology = scenario.topology
     if getattr(args, "worker_nodes", None) is not None:
         topology.worker_nodes = args.worker_nodes
-    if getattr(args, "client_nodes", None) is not None:
-        topology.client_nodes = args.client_nodes
+    if getattr(args, "dist_nodes", None) is not None:
+        topology.dist_nodes = args.dist_nodes
     if getattr(args, "coordinator_nodes", None) is not None:
         topology.coordinator_nodes = args.coordinator_nodes
     topology.provider = provider
@@ -860,7 +860,7 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
 
     print(f"scenario: {scenario.name}")
     print(f"  {scenario.description}")
-    print(f"  topology: {topology.worker_nodes} workers, {topology.client_nodes} clients, {topology.coordinator_nodes} coordinators")
+    print(f"  topology: {topology.worker_nodes} workers, {topology.dist_nodes} dist, {topology.coordinator_nodes} coordinators")
     print(f"  network: {topology.contract_network}")
     print(f"  provider: {topology.provider}")
     if dry_run:
@@ -881,7 +881,7 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
                 testbed_name=getattr(args, "testbed_name", "depin-testbed"),
                 node_registry_contract_id=getattr(args, "node_registry_contract_id", None),
                 worker_nodes=topology.worker_nodes,
-                client_nodes=topology.client_nodes,
+                dist_nodes=topology.dist_nodes,
                 coordinator_nodes=topology.coordinator_nodes,
             )
             try:
@@ -922,7 +922,7 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
             testbed_name=getattr(args, "testbed_name", "depin-testbed"),
             node_registry_contract_id=getattr(args, "node_registry_contract_id", None),
             worker_nodes=topology.worker_nodes,
-            client_nodes=topology.client_nodes,
+            dist_nodes=topology.dist_nodes,
             coordinator_nodes=topology.coordinator_nodes,
             auto_approve=True,
         )
@@ -959,7 +959,7 @@ def _list_scenarios() -> None:
                 t = s.topology
                 teardown_flag = "teardown" if t.teardown else "persistent"
                 topo_str = (
-                    f"{t.provider} | {t.worker_nodes}w/{t.client_nodes}c/{t.coordinator_nodes}coord"
+                    f"{t.provider} | {t.worker_nodes}w/{t.dist_nodes}d/{t.coordinator_nodes}coord"
                     f" | {t.contract_network} | {teardown_flag}"
                 )
                 print(f"    {path.name:<32} {s.name:<25} {topo_str}")
@@ -982,7 +982,7 @@ def _terraform_apply_with_topology(topo: Topology, env: Any) -> None:
         "-input=false",
         "-var=testbed_name=depin-testbed",
         f"-var=worker_count={topo.worker_nodes}",
-        f"-var=client_count={topo.client_nodes}",
+        f"-var=dist_count={topo.dist_nodes}",
         f"-var=coordinator_count={topo.coordinator_nodes}",
     ]
     if topo.provider == "alibaba-cloud":
@@ -1000,7 +1000,7 @@ def _print_launch_banner(scenario: "Scenario", topo: Topology, dry_run: bool = F
     print(f"  provider:    {topo.provider}  ({topo.region})")
     if topo.instance_type:
         print(f"  instance:    {topo.instance_type}")
-    print(f"  nodes:       {topo.worker_nodes} workers / {topo.client_nodes} clients / {topo.coordinator_nodes} coordinators")
+    print(f"  nodes:       {topo.worker_nodes} workers / {topo.dist_nodes} dist / {topo.coordinator_nodes} coordinators")
     print(f"  network:     {topo.contract_network}")
     print(f"  contract:    {'deploy+init' if topo.deploy_contract else 'use existing'}")
     print(f"  teardown:    {topo.teardown}")
@@ -1099,7 +1099,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
             auto_approve=True,
             testbed_name="depin-testbed",
             worker_nodes=topo.worker_nodes,
-            client_nodes=topo.client_nodes,
+            dist_nodes=topo.dist_nodes,
             coordinator_nodes=topo.coordinator_nodes,
             node_registry_contract_id=None,
         )

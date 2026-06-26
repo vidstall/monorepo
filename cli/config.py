@@ -9,7 +9,7 @@ TERRAFORM_ENV_DIR = REPO_ROOT / "IaC" / "terraform" / "environments"
 ANSIBLE_PLAYBOOK = REPO_ROOT / "IaC" / "ansible" / "playbooks" / "site.yml"
 
 PROVIDER_CHOICES = ("aws", "digital-ocean", "hetzner", "alibaba-cloud")
-ROLE_CHOICES = ("worker", "client", "coordinator")
+ROLE_CHOICES = ("worker", "dist", "coordinator")
 PROVIDER_ENV_FILES = {
     "aws": "aws.env",
     "digital-ocean": "digital-ocean.env",

@@ -24,8 +24,8 @@ output "inventory" {
         user       = var.ssh_username
       }
     ]
-    client = [
-      for instance in digitalocean_droplet.client : {
+    dist = [
+      for instance in digitalocean_droplet.dist : {
         name       = instance.name
         host       = instance.ipv4_address
         private_ip = instance.ipv4_address_private

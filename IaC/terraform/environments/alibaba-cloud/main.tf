@@ -74,7 +74,7 @@ resource "alicloud_security_group_rule" "ssh_ingress" {
   cidr_ip           = each.value
 }
 
-resource "alicloud_security_group_rule" "client_http_ingress" {
+resource "alicloud_security_group_rule" "http_ingress" {
   type              = "ingress"
   ip_protocol       = "tcp"
   nic_type          = "intranet"
@@ -159,22 +159,22 @@ resource "alicloud_instance" "worker" {
   })
 }
 
-resource "alicloud_instance" "client" {
-  count = var.client_count
+resource "alicloud_instance" "dist" {
+  count = var.dist_count
 
   availability_zone          = data.alicloud_zones.available.zones[0].id
   security_groups            = [alicloud_security_group.testbed.id]
   instance_type              = var.alicloud_instance_type
   image_id                   = local.effective_image
   system_disk_category       = "cloud_efficiency"
-  instance_name              = "${var.testbed_name}-client-${count.index + 1}"
+  instance_name              = "${var.testbed_name}-dist-${count.index + 1}"
   vswitch_id                 = alicloud_vswitch.main.id
   internet_max_bandwidth_out = 100
   user_data                  = local.user_data
   spot_strategy              = var.alicloud_spot_strategy
 
   tags = merge(local.common_tags, {
-    Role = "client"
+    Role = "dist"
   })
 }
 

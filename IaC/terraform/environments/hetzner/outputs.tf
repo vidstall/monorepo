@@ -23,8 +23,8 @@ output "inventory" {
         user = var.ssh_username
       }
     ]
-    client = [
-      for instance in hcloud_server.client : {
+    dist = [
+      for instance in hcloud_server.dist : {
         name = instance.name
         host = instance.ipv4_address
         user = var.ssh_username

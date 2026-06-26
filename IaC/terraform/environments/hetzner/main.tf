@@ -41,15 +41,15 @@ resource "hcloud_server" "worker" {
   labels      = merge(local.common_labels, { role = "worker" })
 }
 
-resource "hcloud_server" "client" {
-  count       = var.client_count
-  name        = "${var.testbed_name}-client-${count.index + 1}"
+resource "hcloud_server" "dist" {
+  count       = var.dist_count
+  name        = "${var.testbed_name}-dist-${count.index + 1}"
   image       = var.hcloud_image
   location    = var.hcloud_location
   server_type = var.hcloud_server_type
   ssh_keys    = [hcloud_ssh_key.testbed.id]
   user_data   = local.cloud_init
-  labels      = merge(local.common_labels, { role = "client" })
+  labels      = merge(local.common_labels, { role = "dist" })
 }
 
 resource "hcloud_server" "coordinator" {

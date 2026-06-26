@@ -21,13 +21,13 @@ def terraform_outputs() -> dict[str, object]:
                         "role": "worker",
                     }
                 ],
-                "client": [
+                "dist": [
                     {
-                        "name": "testbed-client-1",
+                        "name": "testbed-dist-1",
                         "public_ip": "198.51.100.20",
                         "private_ip": "10.42.1.20",
                         "ssh_user": "ecs-user",
-                        "role": "client",
+                        "role": "dist",
                     }
                 ],
                 "coordinator": [
@@ -52,7 +52,7 @@ class InfraTests(unittest.TestCase):
 
         self.assertTrue(inventory_path.name.endswith("-inventory.yml"))
         self.assertIn("worker:", inventory)
-        self.assertIn("client:", inventory)
+        self.assertIn("dist:", inventory)
         self.assertIn("coordinator:", inventory)
         self.assertIn('ansible_host: "198.51.100.10"', inventory)
         self.assertIn('private_ip: "10.42.1.30"', inventory)

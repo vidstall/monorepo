@@ -9,7 +9,7 @@
     - role: docker
     - role: worker
       when: "'worker' in group_names"
-    - role: client
-      when: "'client' in group_names"
+    - role: dist
+      when: "'dist' in group_names"
     - role: coordinator
       when: "'coordinator' in group_names"

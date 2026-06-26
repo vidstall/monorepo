@@ -15,9 +15,9 @@ variable "worker_count" {
   default     = 1
 }
 
-variable "client_count" {
+variable "dist_count" {
   type        = number
-  description = "Number of client nodes."
+  description = "Number of dist (frontend) nodes."
   default     = 1
 }
 

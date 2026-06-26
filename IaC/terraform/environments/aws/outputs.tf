@@ -23,8 +23,8 @@ output "inventory" {
         user = var.ssh_username
       }
     ]
-    client = [
-      for instance in aws_instance.client : {
+    dist = [
+      for instance in aws_instance.dist : {
         name = instance.tags.Name
         host = instance.public_ip
         user = var.ssh_username

@@ -58,14 +58,14 @@ Contract deployment metadata is auto-generated in `secrets/contract/<network>.en
 Provision infrastructure and configure nodes with Docker containers:
 
 ```bash
-python3 vidctl.py deploy --provider alibaba-cloud --worker-nodes 3 --client-nodes 1 --coordinator-nodes 1
+python3 vidctl.py deploy --provider alibaba-cloud --worker-nodes 3 --coordinator-nodes 1
 ```
 
 With integrated contract deployment (first-time setup):
 
 ```bash
 python3 vidctl.py deploy --provider alibaba-cloud \
-  --worker-nodes 3 --client-nodes 1 --coordinator-nodes 1 \
+  --worker-nodes 3 --coordinator-nodes 1 \
   --deploy-contract --contract-network testnet
 ```
 

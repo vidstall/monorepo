@@ -134,7 +134,7 @@ The IaC layer provisions a testbed on Alibaba Cloud for validating the full syst
 ### Testbed Shape
 
 ```
-vidctl.py deploy --provider alibaba-cloud --worker-nodes 3 --client-nodes 2 --coordinator-nodes 1
+vidctl.py deploy --provider alibaba-cloud --worker-nodes 3 --coordinator-nodes 1
 ```
 
 This provisions:

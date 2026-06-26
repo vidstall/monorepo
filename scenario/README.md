@@ -18,7 +18,7 @@ python3 vidctl.py run-scenario scenario/basic_room.py --dry-run
 
 # Full E2E: deploy infra + run scenario + teardown
 python3 vidctl.py run-scenario scenario/basic_room.py \
-  --provider alibaba-cloud --worker-nodes 3 --client-nodes 1 --coordinator-nodes 1 \
+  --provider alibaba-cloud --worker-nodes 3 --coordinator-nodes 1 \
   --deploy-contract --contract-network testnet \
   --output artifacts/report.json --teardown
 
@@ -32,7 +32,6 @@ python3 vidctl.py run-scenario scenario/basic_room.py --provider alibaba-cloud
 |------|-------------|
 | `--provider` | Cloud provider (default: alibaba-cloud) |
 | `--worker-nodes` | Override worker count from topology |
-| `--client-nodes` | Override client count from topology |
 | `--coordinator-nodes` | Override coordinator count from topology |
 | `--deploy-contract` | Publish + initialize Sui contract during deploy |
 | `--contract-network` | Sui network (default: testnet) |
@@ -49,7 +48,7 @@ from cli.scenario import Topology, ScenarioContext
 
 NAME = "my-scenario"
 DESCRIPTION = "What this scenario tests"
-TOPOLOGY = Topology(worker_nodes=3, client_nodes=1, coordinator_nodes=1, contract_network="testnet")
+TOPOLOGY = Topology(worker_nodes=3, dist_nodes=1, coordinator_nodes=1, contract_network="testnet")
 
 def run(ctx: ScenarioContext) -> None:
     # event timeline goes here

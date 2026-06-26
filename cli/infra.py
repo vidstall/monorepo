@@ -44,7 +44,7 @@ def provider_terraform_root(provider: str) -> Path:
 def terraform_args(
     testbed_name: str,
     worker_nodes: int,
-    client_nodes: int,
+    dist_nodes: int,
     coordinator_nodes: int,
     node_registry_contract_id: str | None,
 ) -> List[str]:
@@ -52,7 +52,7 @@ def terraform_args(
         "-input=false",
         f"-var=testbed_name={testbed_name}",
         f"-var=worker_count={worker_nodes}",
-        f"-var=client_count={client_nodes}",
+        f"-var=dist_count={dist_nodes}",
         f"-var=coordinator_count={coordinator_nodes}",
     ]
     if node_registry_contract_id is not None:
@@ -75,7 +75,7 @@ def terraform_apply(provider: str, args: argparse.Namespace, env: Mapping[str, s
             *terraform_args(
                 testbed_name=args.testbed_name,
                 worker_nodes=args.worker_nodes,
-                client_nodes=args.client_nodes,
+                dist_nodes=args.dist_nodes,
                 coordinator_nodes=args.coordinator_nodes,
                 node_registry_contract_id=args.node_registry_contract_id,
             ),
@@ -96,7 +96,7 @@ def terraform_destroy(provider: str, args: argparse.Namespace, env: Mapping[str,
             *terraform_args(
                 testbed_name=args.testbed_name,
                 worker_nodes=args.worker_nodes,
-                client_nodes=args.client_nodes,
+                dist_nodes=args.dist_nodes,
                 coordinator_nodes=args.coordinator_nodes,
                 node_registry_contract_id=args.node_registry_contract_id,
             ),
@@ -179,7 +179,7 @@ def normalize_role_hosts(inventory_data: object, role: str) -> List[Dict[str, st
 def inventory_from_outputs(outputs: Mapping[str, object], key_path: Path) -> Dict[str, object]:
     inventory_data = terraform_value(outputs, "inventory")
     children: Dict[str, object] = {}
-    for role in ("worker", "client", "coordinator"):
+    for role in ("worker", "dist", "coordinator"):
         role_hosts = normalize_role_hosts(inventory_data, role)
         children[role] = {
             "hosts": {
