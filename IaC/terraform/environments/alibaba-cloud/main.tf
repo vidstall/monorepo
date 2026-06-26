@@ -2,18 +2,21 @@ provider "alicloud" {
   region = var.alicloud_region
 }
 
-data "alicloud_zones" "available" {
-  available_resource_creation = "Instance"
-}
-
 data "alicloud_images" "ubuntu" {
   owners      = "system"
   name_regex  = "^ubuntu_22_04_x64_20G_alibase"
   most_recent = true
 }
 
+data "alicloud_instance_types" "small" {
+  cpu_core_count = 1
+  memory_size    = 1
+}
+
 locals {
-  effective_image = coalesce(var.alicloud_source_image, data.alicloud_images.ubuntu.images[0].id)
+  effective_image         = coalesce(var.alicloud_source_image, data.alicloud_images.ubuntu.images[0].id)
+  effective_instance_type = coalesce(var.alicloud_instance_type, data.alicloud_instance_types.small.instance_types[0].id)
+  effective_zone          = data.alicloud_instance_types.small.instance_types[0].availability_zones[0]
   ssh_home        = var.ssh_username == "root" ? "/root" : "/home/${var.ssh_username}"
   user_data = <<-EOT
     #!/bin/sh
@@ -52,7 +55,7 @@ resource "alicloud_vpc" "main" {
 resource "alicloud_vswitch" "main" {
   vpc_id       = alicloud_vpc.main.id
   cidr_block   = var.alicloud_vswitch_cidr
-  zone_id      = data.alicloud_zones.available.zones[0].id
+  zone_id      = local.effective_zone
   vswitch_name = var.testbed_name
 }
 
@@ -143,9 +146,9 @@ resource "alicloud_security_group_rule" "egress_all" {
 resource "alicloud_instance" "worker" {
   count = var.worker_count
 
-  availability_zone          = data.alicloud_zones.available.zones[0].id
+  availability_zone          = local.effective_zone
   security_groups            = [alicloud_security_group.testbed.id]
-  instance_type              = var.alicloud_instance_type
+  instance_type              = local.effective_instance_type
   image_id                   = local.effective_image
   system_disk_category       = "cloud_efficiency"
   instance_name              = "${var.testbed_name}-worker-${count.index + 1}"
@@ -162,9 +165,9 @@ resource "alicloud_instance" "worker" {
 resource "alicloud_instance" "dist" {
   count = var.dist_count
 
-  availability_zone          = data.alicloud_zones.available.zones[0].id
+  availability_zone          = local.effective_zone
   security_groups            = [alicloud_security_group.testbed.id]
-  instance_type              = var.alicloud_instance_type
+  instance_type              = local.effective_instance_type
   image_id                   = local.effective_image
   system_disk_category       = "cloud_efficiency"
   instance_name              = "${var.testbed_name}-dist-${count.index + 1}"
@@ -181,9 +184,9 @@ resource "alicloud_instance" "dist" {
 resource "alicloud_instance" "vclient" {
   count = var.vclient_count
 
-  availability_zone          = data.alicloud_zones.available.zones[0].id
+  availability_zone          = local.effective_zone
   security_groups            = [alicloud_security_group.testbed.id]
-  instance_type              = var.alicloud_instance_type
+  instance_type              = local.effective_instance_type
   image_id                   = local.effective_image
   system_disk_category       = "cloud_efficiency"
   instance_name              = "${var.testbed_name}-vclient-${count.index + 1}"
@@ -200,9 +203,9 @@ resource "alicloud_instance" "vclient" {
 resource "alicloud_instance" "coordinator" {
   count = var.coordinator_count
 
-  availability_zone          = data.alicloud_zones.available.zones[0].id
+  availability_zone          = local.effective_zone
   security_groups            = [alicloud_security_group.testbed.id]
-  instance_type              = var.alicloud_instance_type
+  instance_type              = local.effective_instance_type
   image_id                   = local.effective_image
   system_disk_category       = "cloud_efficiency"
   instance_name              = "${var.testbed_name}-coordinator-${count.index + 1}"

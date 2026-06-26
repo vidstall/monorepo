@@ -41,8 +41,8 @@ variable "alicloud_region" {
 
 variable "alicloud_instance_type" {
   type        = string
-  description = "Alibaba Cloud ECS instance type."
-  default     = "ecs.t5-lc1m1.small"
+  description = "Alibaba Cloud ECS instance type. If null, the cheapest available 1 vCPU / 1 GB spot type is selected automatically."
+  default     = null
 }
 
 variable "alicloud_vpc_cidr" {

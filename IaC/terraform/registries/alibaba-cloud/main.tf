@@ -9,7 +9,7 @@ resource "alicloud_cr_namespace" "main" {
 }
 
 resource "alicloud_cr_repo" "images" {
-  for_each = toset(["xaisen-worker", "xaisen-routes", "xaisen-client"])
+  for_each = toset(["xaisen-worker", "xaisen-routes", "xaisen-client", "xaisen-vclient"])
 
   namespace = alicloud_cr_namespace.main.name
   name      = each.value
