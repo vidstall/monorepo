@@ -27,6 +27,7 @@ class Topology:
     instance_type: Optional[str] = None
     deploy_contract: bool = True
     teardown: bool = True
+    build_images: bool = False
     session_duration_secs: int = 5
     benchmark_targets: Dict[str, int] = field(default_factory=dict)
 
@@ -611,7 +612,8 @@ class ScenarioContext:
         self.log(f"add user: {entity_id} room={room_name}")
         return user
 
-    def join_room(self, entity_id: str, routes_url: str = "", rental_id: Optional[int] = None) -> None:
+    def join_room(self, entity_id: str, routes_url: str = "", rental_id: Optional[int] = None,
+                  video_file: Optional[str] = None) -> None:
         user = self.report.users[entity_id]
         effective_url = routes_url or (self._deployment.routes_url if self._deployment else "")
 
@@ -633,6 +635,21 @@ class ScenarioContext:
                 Room, RoomOptions, TrackPublishOptions, VideoSource,
             )
 
+            # Probe video file dimensions if streaming a file
+            vw, vh, vfps = 640, 480, 30.0
+            if video_file:
+                import cv2 as _cv2
+                _cap = _cv2.VideoCapture(video_file)
+                raw_w = int(_cap.get(_cv2.CAP_PROP_FRAME_WIDTH))
+                raw_h = int(_cap.get(_cv2.CAP_PROP_FRAME_HEIGHT))
+                vfps = _cap.get(_cv2.CAP_PROP_FPS) or 30.0
+                _cap.release()
+                if raw_w > 1280:
+                    scale = 1280.0 / raw_w
+                    vw, vh = 1280, int(raw_h * scale)
+                else:
+                    vw, vh = raw_w, raw_h
+
             room = Room()
 
             async def _connect() -> None:
@@ -647,8 +664,10 @@ class ScenarioContext:
 
             audio_source = AudioSource(sample_rate=48000, num_channels=1)
             audio_track = LocalAudioTrack.create_audio_track("mock-audio", audio_source)
-            video_source = VideoSource(640, 480)
-            video_track = LocalVideoTrack.create_video_track("mock-video", video_source)
+            video_source = VideoSource(vw, vh)
+            video_track = LocalVideoTrack.create_video_track(
+                "file-video" if video_file else "mock-video", video_source
+            )
 
             async def _publish() -> None:
                 lp = room.local_participant
@@ -662,17 +681,42 @@ class ScenarioContext:
 
             def _push_frames() -> None:
                 audio_frame = _generate_audio_frame()
-                video_frame = _generate_video_frame()
-                while not stop_event.is_set():
-                    try:
-                        video_source.capture_frame(video_frame)
-                        asyncio.run_coroutine_threadsafe(
-                            audio_source.capture_frame(audio_frame),
-                            self._async_bridge._loop,
-                        ).result(timeout=1)
-                    except Exception:
-                        break
-                    stop_event.wait(0.02)
+                if video_file:
+                    import cv2 as _cv2
+                    from livekit.rtc import VideoFrame
+                    cap = _cv2.VideoCapture(video_file)
+                    frame_interval = 1.0 / vfps
+                    while not stop_event.is_set():
+                        ret, bgr = cap.read()
+                        if not ret:
+                            cap.set(_cv2.CAP_PROP_POS_FRAMES, 0)
+                            continue
+                        if bgr.shape[1] != vw or bgr.shape[0] != vh:
+                            bgr = _cv2.resize(bgr, (vw, vh))
+                        rgba = _cv2.cvtColor(bgr, _cv2.COLOR_BGR2RGBA)
+                        vf = VideoFrame(vw, vh, 0, rgba.tobytes())
+                        try:
+                            video_source.capture_frame(vf)
+                            asyncio.run_coroutine_threadsafe(
+                                audio_source.capture_frame(audio_frame),
+                                self._async_bridge._loop,
+                            ).result(timeout=1)
+                        except Exception:
+                            break
+                        stop_event.wait(frame_interval)
+                    cap.release()
+                else:
+                    video_frame = _generate_video_frame()
+                    while not stop_event.is_set():
+                        try:
+                            video_source.capture_frame(video_frame)
+                            asyncio.run_coroutine_threadsafe(
+                                audio_source.capture_frame(audio_frame),
+                                self._async_bridge._loop,
+                            ).result(timeout=1)
+                        except Exception:
+                            break
+                        stop_event.wait(0.02)
 
             thread = threading.Thread(target=_push_frames, daemon=True)
             thread.start()
@@ -1001,6 +1045,19 @@ def _terraform_apply_with_topology(topo: Topology, env: Any) -> None:
     run_command(["terraform", "apply", "-auto-approve", *vars], cwd=root, env=env)
 
 
+def _setup_and_push_images(topo: Topology, env: Any) -> None:
+    from cli.infra import cmd_build_images
+
+    build_args = argparse.Namespace(
+        provider=None,
+        registry=None,
+        tag="latest",
+        push=False,
+        platform="linux/amd64",
+    )
+    cmd_build_images(build_args)
+
+
 def _print_launch_banner(scenario: "Scenario", topo: Topology, dry_run: bool = False) -> None:
     print(f"\n{'='*60}")
     print(f"LAUNCH: {scenario.name}")
@@ -1051,28 +1108,57 @@ def cmd_launch(args: argparse.Namespace) -> None:
         )
 
         env = build_env(topo.provider)
-        require_runtime_env(env)
+        if not topo.build_images:
+            require_runtime_env(env)
+
+        infra_provisioned_here = False
+        _purge_args = argparse.Namespace(
+            provider=topo.provider,
+            auto_approve=True,
+            testbed_name="depin-testbed",
+            worker_nodes=topo.worker_nodes,
+            dist_nodes=topo.dist_nodes,
+            vclient_nodes=topo.vclient_nodes,
+            coordinator_nodes=topo.coordinator_nodes,
+            node_registry_contract_id=None,
+        )
 
         if not is_deployed(topo.provider):
             print("Provisioning infrastructure from topology spec...")
             _terraform_apply_with_topology(topo, env)
+            infra_provisioned_here = True
 
-            if topo.deploy_contract:
-                from cli.config import CONTRACT_PACKAGE_PATH
-                contract_args = argparse.Namespace(
-                    network=topo.contract_network,
-                    package_path=CONTRACT_PACKAGE_PATH,
-                    gas_budget=1_000_000_000,
-                    gas_coins=[],
-                )
-                cmd_deploy_contract(contract_args)
-                cmd_init_contract(contract_args)
+            if topo.build_images:
+                print("\nSetting up container registry and building images...")
+                _setup_and_push_images(topo, env)
                 env = build_env(topo.provider)
+                require_runtime_env(env)
 
-            outputs = terraform_output(topo.provider, env)
-            inventory_path = render_inventory(topo.provider, outputs)
-            vars_path = render_ansible_vars(topo.provider, outputs, env)
-            ansible_playbook(inventory_path, vars_path, env)
+            try:
+                if topo.deploy_contract:
+                    from cli.config import CONTRACT_PACKAGE_PATH
+                    contract_args = argparse.Namespace(
+                        network=topo.contract_network,
+                        package_path=CONTRACT_PACKAGE_PATH,
+                        gas_budget=1_000_000_000,
+                        gas_coins=[],
+                    )
+                    cmd_deploy_contract(contract_args)
+                    cmd_init_contract(contract_args)
+                    env = build_env(topo.provider)
+
+                outputs = terraform_output(topo.provider, env)
+                inventory_path = render_inventory(topo.provider, outputs)
+                vars_path = render_ansible_vars(topo.provider, outputs, env)
+                ansible_playbook(inventory_path, vars_path, env)
+            except Exception as exc:
+                print(f"\n[atomic] step failed — purging infrastructure to avoid partial state...")
+                try:
+                    from cli.infra import cmd_purge
+                    cmd_purge(_purge_args)
+                except Exception as purge_exc:
+                    print(f"[atomic] purge also failed: {purge_exc}")
+                raise SystemExit(f"Launch aborted and infrastructure purged. Original error: {exc}")
         else:
             print(f"Infrastructure already deployed for {topo.provider} — skipping provisioning.")
 
@@ -1080,7 +1166,17 @@ def cmd_launch(args: argparse.Namespace) -> None:
         print(f"  routes:   {deployment.routes_url}")
         print(f"  livekit:  {deployment.livekit_url}")
         print("\nWaiting for routes service...")
-        wait_for_routes(deployment)
+        try:
+            wait_for_routes(deployment)
+        except Exception as exc:
+            if infra_provisioned_here:
+                print(f"\n[atomic] routes service unreachable — purging infrastructure...")
+                try:
+                    from cli.infra import cmd_purge
+                    cmd_purge(_purge_args)
+                except Exception as purge_exc:
+                    print(f"[atomic] purge also failed: {purge_exc}")
+            raise SystemExit(f"Routes service did not become ready: {exc}")
         print("  routes service ready\n")
 
     report = BenchmarkReport(scenario_name=scenario.name, topology=topo)
