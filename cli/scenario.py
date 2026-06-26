@@ -934,30 +934,40 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
 def _list_scenarios() -> None:
     from cli.config import REPO_ROOT
     scenario_dir = REPO_ROOT / "scenario"
-    scripts = sorted(scenario_dir.glob("*.py"))
-    if not scripts:
+
+    # Collect groups: named subdirectories first, then top-level files
+    groups: Dict[str, List[Path]] = {}
+    for subdir in sorted(scenario_dir.iterdir()):
+        if subdir.is_dir() and not subdir.name.startswith("_") and not subdir.name.startswith("."):
+            scripts = sorted(subdir.glob("*.py"))
+            if scripts:
+                groups[subdir.name] = scripts
+    top_level = sorted(scenario_dir.glob("*.py"))
+    if top_level:
+        groups["(root)"] = top_level
+
+    if not groups:
         print("No scenario scripts found in scenario/")
         return
 
     print()
-    rows = []
-    for path in scripts:
-        try:
-            s = load_scenario(path)
-            t = s.topology
-            topo_str = f"{t.provider} | {t.worker_nodes}w/{t.client_nodes}c/{t.coordinator_nodes}coord | {t.contract_network}"
-            rows.append((path.name, s.name, s.description, topo_str))
-        except Exception as e:
-            rows.append((path.name, "?", f"(load error: {e})", "?"))
-
-    name_w = max(len(r[1]) for r in rows)
-    file_w = max(len(r[0]) for r in rows)
-    print(f"  {'FILE':<{file_w}}  {'SCENARIO':<{name_w}}  TOPOLOGY")
-    print("  " + "─" * (file_w + name_w + 40))
-    for fname, name, desc, topo_str in rows:
-        print(f"  {fname:<{file_w}}  {name:<{name_w}}  {topo_str}")
-        print(f"  {'':<{file_w}}  {'':<{name_w}}  {desc}")
-    print()
+    for group_name, scripts in groups.items():
+        print(f"  [{group_name.upper()}]")
+        for path in scripts:
+            try:
+                s = load_scenario(path)
+                t = s.topology
+                teardown_flag = "teardown" if t.teardown else "persistent"
+                topo_str = (
+                    f"{t.provider} | {t.worker_nodes}w/{t.client_nodes}c/{t.coordinator_nodes}coord"
+                    f" | {t.contract_network} | {teardown_flag}"
+                )
+                print(f"    {path.name:<32} {s.name:<25} {topo_str}")
+                print(f"    {'':32} {s.description}")
+            except Exception as e:
+                print(f"    {path.name:<32} (load error: {e})")
+        print()
+    print(f"  Run: python3 vidctl.py launch scenario/<category>/<file>.py")
 
 
 def _terraform_apply_with_topology(topo: Topology, env: Any) -> None:
