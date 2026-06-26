@@ -28,6 +28,11 @@ def _add_infra_group(subparsers: argparse._SubParsersAction) -> None:
     )
     infra_sub = infra.add_subparsers(dest="subcommand")
 
+    status_p = infra_sub.add_parser("status", help="Show deployment status (default when no subcommand given)")
+    status_p.add_argument("--provider", default=None,
+                          help="Comma-separated providers (default: all). e.g. alibaba-cloud,aws")
+    status_p.set_defaults(func=cmd_infra_status)
+
     deploy = infra_sub.add_parser("deploy", help="Apply Terraform, configure Docker with Ansible")
     deploy.add_argument("--provider", required=True, choices=PROVIDER_CHOICES)
     deploy.add_argument("--deploy-contract", action="store_true", default=False,
