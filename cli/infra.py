@@ -45,6 +45,7 @@ def terraform_args(
     testbed_name: str,
     worker_nodes: int,
     dist_nodes: int,
+    vclient_nodes: int,
     coordinator_nodes: int,
     node_registry_contract_id: str | None,
 ) -> List[str]:
@@ -53,6 +54,7 @@ def terraform_args(
         f"-var=testbed_name={testbed_name}",
         f"-var=worker_count={worker_nodes}",
         f"-var=dist_count={dist_nodes}",
+        f"-var=vclient_count={vclient_nodes}",
         f"-var=coordinator_count={coordinator_nodes}",
     ]
     if node_registry_contract_id is not None:
@@ -76,6 +78,7 @@ def terraform_apply(provider: str, args: argparse.Namespace, env: Mapping[str, s
                 testbed_name=args.testbed_name,
                 worker_nodes=args.worker_nodes,
                 dist_nodes=args.dist_nodes,
+                vclient_nodes=getattr(args, "vclient_nodes", 0),
                 coordinator_nodes=args.coordinator_nodes,
                 node_registry_contract_id=args.node_registry_contract_id,
             ),
@@ -97,6 +100,7 @@ def terraform_destroy(provider: str, args: argparse.Namespace, env: Mapping[str,
                 testbed_name=args.testbed_name,
                 worker_nodes=args.worker_nodes,
                 dist_nodes=args.dist_nodes,
+                vclient_nodes=getattr(args, "vclient_nodes", 0),
                 coordinator_nodes=args.coordinator_nodes,
                 node_registry_contract_id=args.node_registry_contract_id,
             ),
@@ -179,7 +183,7 @@ def normalize_role_hosts(inventory_data: object, role: str) -> List[Dict[str, st
 def inventory_from_outputs(outputs: Mapping[str, object], key_path: Path) -> Dict[str, object]:
     inventory_data = terraform_value(outputs, "inventory")
     children: Dict[str, object] = {}
-    for role in ("worker", "dist", "coordinator"):
+    for role in ("worker", "dist", "vclient", "coordinator"):
         role_hosts = normalize_role_hosts(inventory_data, role)
         children[role] = {
             "hosts": {
@@ -285,6 +289,7 @@ def ansible_extra_vars(
     inventory_data = terraform_value(outputs, "inventory")
     worker = first_host(inventory_data, "worker")
     coordinator = first_host(inventory_data, "coordinator")
+    dist = first_host(inventory_data, "dist")
 
     values: Dict[str, object] = runtime_env(env)
     if node_registry_contract_id:
@@ -299,6 +304,7 @@ def ansible_extra_vars(
     else:
         values["coordinator_private_ip"] = ""
         values["redis_address"] = ""
+    values["dist_url"] = f"http://{dist['public_ip']}" if dist else ""
     return values
 
 
@@ -470,6 +476,7 @@ def cmd_build_images(args: argparse.Namespace) -> None:
         "XAISEN_WORKER_IMAGE": image_map["worker"],
         "XAISEN_ROUTES_IMAGE": image_map["routes"],
         "XAISEN_CLIENT_IMAGE": image_map["client"],
+        "XAISEN_VCLIENT_IMAGE": image_map["vclient"],
     })
 
     existing = {}

@@ -94,7 +94,7 @@ def _tfstate_node_counts(provider: str) -> Optional[Dict[str, int]]:
         if not isinstance(inv_val, dict):
             return None
         counts = {}
-        for role in ("worker", "dist", "coordinator"):
+        for role in ("worker", "dist", "vclient", "coordinator"):
             nodes = inv_val.get(role, [])
             if isinstance(nodes, list) and nodes:
                 counts[role] = len(nodes)

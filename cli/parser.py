@@ -15,6 +15,7 @@ def add_infra_shape(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--node-registry-contract-id", default=None)
     parser.add_argument("--worker-nodes", "--livekit-nodes", dest="worker_nodes", type=int, default=1)
     parser.add_argument("--dist-nodes", dest="dist_nodes", type=int, default=1)
+    parser.add_argument("--vclient-nodes", dest="vclient_nodes", type=int, default=0)
     parser.add_argument("--coordinator-nodes", type=int, default=1)
 
 
