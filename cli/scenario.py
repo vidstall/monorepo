@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Optional
 class Topology:
     worker_nodes: int = 1
     dist_nodes: int = 1
+    vclient_nodes: int = 0
     coordinator_nodes: int = 1
     contract_network: str = "testnet"
     provider: str = "alibaba-cloud"
@@ -777,7 +778,9 @@ def load_scenario(path: Path) -> Scenario:
 def print_report(report: BenchmarkReport) -> None:
     print("\n" + "=" * 60)
     print(f"BENCHMARK REPORT: {report.scenario_name}")
-    print(f"topology: {report.topology.worker_nodes}w / {report.topology.dist_nodes}d / {report.topology.coordinator_nodes}coord")
+    topo = report.topology
+    vc_str = f" / {topo.vclient_nodes}vc" if topo.vclient_nodes else ""
+    print(f"topology: {topo.worker_nodes}w / {topo.dist_nodes}d{vc_str} / {topo.coordinator_nodes}coord")
     print(f"network: {report.topology.contract_network}")
     print(f"total duration: {report.total_duration_ms:.0f}ms")
     print("-" * 60)
@@ -817,6 +820,7 @@ def _write_report(report: BenchmarkReport, output_path: Optional[str]) -> None:
                 "instance_type": report.topology.instance_type,
                 "worker_nodes": report.topology.worker_nodes,
                 "dist_nodes": report.topology.dist_nodes,
+                "vclient_nodes": report.topology.vclient_nodes,
                 "coordinator_nodes": report.topology.coordinator_nodes,
                 "contract_network": report.topology.contract_network,
             },
@@ -882,6 +886,7 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
                 node_registry_contract_id=getattr(args, "node_registry_contract_id", None),
                 worker_nodes=topology.worker_nodes,
                 dist_nodes=topology.dist_nodes,
+                vclient_nodes=topology.vclient_nodes,
                 coordinator_nodes=topology.coordinator_nodes,
             )
             try:
@@ -923,6 +928,7 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
             node_registry_contract_id=getattr(args, "node_registry_contract_id", None),
             worker_nodes=topology.worker_nodes,
             dist_nodes=topology.dist_nodes,
+            vclient_nodes=topology.vclient_nodes,
             coordinator_nodes=topology.coordinator_nodes,
             auto_approve=True,
         )
@@ -958,8 +964,9 @@ def _list_scenarios() -> None:
                 s = load_scenario(path)
                 t = s.topology
                 teardown_flag = "teardown" if t.teardown else "persistent"
+                vc_part = f"/{t.vclient_nodes}vc" if t.vclient_nodes else ""
                 topo_str = (
-                    f"{t.provider} | {t.worker_nodes}w/{t.dist_nodes}d/{t.coordinator_nodes}coord"
+                    f"{t.provider} | {t.worker_nodes}w/{t.dist_nodes}d{vc_part}/{t.coordinator_nodes}coord"
                     f" | {t.contract_network} | {teardown_flag}"
                 )
                 print(f"    {path.name:<32} {s.name:<25} {topo_str}")
@@ -983,6 +990,7 @@ def _terraform_apply_with_topology(topo: Topology, env: Any) -> None:
         "-var=testbed_name=depin-testbed",
         f"-var=worker_count={topo.worker_nodes}",
         f"-var=dist_count={topo.dist_nodes}",
+        f"-var=vclient_count={topo.vclient_nodes}",
         f"-var=coordinator_count={topo.coordinator_nodes}",
     ]
     if topo.provider == "alibaba-cloud":
@@ -1000,7 +1008,8 @@ def _print_launch_banner(scenario: "Scenario", topo: Topology, dry_run: bool = F
     print(f"  provider:    {topo.provider}  ({topo.region})")
     if topo.instance_type:
         print(f"  instance:    {topo.instance_type}")
-    print(f"  nodes:       {topo.worker_nodes} workers / {topo.dist_nodes} dist / {topo.coordinator_nodes} coordinators")
+    vc_nodes_str = f" / {topo.vclient_nodes} vclient" if topo.vclient_nodes else ""
+    print(f"  nodes:       {topo.worker_nodes} workers / {topo.dist_nodes} dist{vc_nodes_str} / {topo.coordinator_nodes} coordinators")
     print(f"  network:     {topo.contract_network}")
     print(f"  contract:    {'deploy+init' if topo.deploy_contract else 'use existing'}")
     print(f"  teardown:    {topo.teardown}")
@@ -1100,6 +1109,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
             testbed_name="depin-testbed",
             worker_nodes=topo.worker_nodes,
             dist_nodes=topo.dist_nodes,
+            vclient_nodes=topo.vclient_nodes,
             coordinator_nodes=topo.coordinator_nodes,
             node_registry_contract_id=None,
         )

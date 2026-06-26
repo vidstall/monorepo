@@ -9,6 +9,7 @@ TOPOLOGY = Topology(
     instance_type="ecs.g6.large",
     worker_nodes=5,
     dist_nodes=2,
+    vclient_nodes=0,
     coordinator_nodes=1,
     contract_network="mainnet",
     deploy_contract=False,

@@ -9,6 +9,7 @@ TOPOLOGY = Topology(
     instance_type="ecs.t5-lc1m1.small",
     worker_nodes=3,
     dist_nodes=1,
+    vclient_nodes=0,
     coordinator_nodes=1,
     contract_network="testnet",
     deploy_contract=True,

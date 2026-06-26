@@ -9,6 +9,7 @@ TOPOLOGY = Topology(
     instance_type=None,
     worker_nodes=0,
     dist_nodes=0,
+    vclient_nodes=0,
     coordinator_nodes=0,
     contract_network="testnet",
     deploy_contract=False,
