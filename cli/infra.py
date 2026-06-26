@@ -371,14 +371,6 @@ def cmd_deploy(args: argparse.Namespace) -> None:
     ansible_playbook(inventory_path, vars_path, env)
 
 
-def cmd_destroy(args: argparse.Namespace) -> None:
-    ensure_runtime_dirs()
-    for provider in destroy_providers(args.provider):
-        env = build_env(provider)
-        terraform_destroy(provider, args, env)
-        cleanup_provider_artifacts(provider)
-
-
 def cmd_inventory(args: argparse.Namespace) -> None:
     env = build_env(args.provider)
     outputs = terraform_output(args.provider, env)
