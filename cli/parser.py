@@ -7,6 +7,7 @@ from cli.config import CONTRACT_NETWORK_CHOICES, CONTRACT_PACKAGE_PATH, PROVIDER
 from cli.contract import cmd_deploy_contract, cmd_init_contract, cmd_update_contract
 from cli.infra import cmd_build_images, cmd_deploy, cmd_inventory, cmd_purge, cmd_setup_registry
 from cli.scenario import cmd_run_scenario
+from cli.status import cmd_status
 
 
 def add_infra_shape(parser: argparse.ArgumentParser) -> None:
@@ -143,9 +144,16 @@ def _add_observe_group(subparsers: argparse._SubParsersAction) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="vidctl.py")
+    parser = argparse.ArgumentParser(
+        prog="vidctl.py",
+        description="vidctl — xaisen testbed CLI. Run with no args to see current status.",
+    )
+    parser.set_defaults(func=cmd_status)
+
     subparsers = parser.add_subparsers(dest="group")
-    subparsers.required = True
+
+    status_p = subparsers.add_parser("status", help="Show current deployment and contract status")
+    status_p.set_defaults(func=cmd_status)
 
     _add_infra_group(subparsers)
     _add_contract_group(subparsers)
