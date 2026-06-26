@@ -7,7 +7,7 @@ from cli.config import CONTRACT_NETWORK_CHOICES, CONTRACT_PACKAGE_PATH, PROVIDER
 from cli.contract import cmd_deploy_contract, cmd_init_contract, cmd_update_contract
 from cli.infra import cmd_build_images, cmd_deploy, cmd_inventory, cmd_purge, cmd_setup_registry
 from cli.scenario import cmd_run_scenario
-from cli.status import cmd_status
+from cli.status import cmd_infra_status, cmd_status
 
 
 def add_infra_shape(parser: argparse.ArgumentParser) -> None:
@@ -20,8 +20,8 @@ def add_infra_shape(parser: argparse.ArgumentParser) -> None:
 
 def _add_infra_group(subparsers: argparse._SubParsersAction) -> None:
     infra = subparsers.add_parser("infra", help="Infrastructure lifecycle commands")
+    infra.set_defaults(func=cmd_infra_status)
     infra_sub = infra.add_subparsers(dest="subcommand")
-    infra_sub.required = True
 
     deploy = infra_sub.add_parser("deploy", help="Apply Terraform, configure Docker with Ansible")
     deploy.add_argument("--provider", required=True, choices=PROVIDER_CHOICES)

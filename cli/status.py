@@ -103,6 +103,14 @@ def _print_images_section() -> None:
     print()
 
 
+def cmd_infra_status(args: argparse.Namespace) -> None:
+    print()
+    _print_infra_section()
+    print(_rule())
+    print('Run "python3 vidctl.py infra <subcommand> --help" for available actions.')
+    print()
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     print()
     print("vidctl — xaisen testbed status")
