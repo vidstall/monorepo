@@ -1,0 +1,7 @@
+---
+# Role-level variables for vclient (virtual-client bot) nodes.
+role_name: vclient
+vclient_container_name: xaisen-vclient
+vclient_room_name: bot-room
+vclient_bot_count: 2
+vclient_session_duration: 30
