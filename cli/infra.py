@@ -36,6 +36,15 @@ ROUTES_CONTRACT_ENV_KEYS = (
     "CONTRACT_UPDATE_TX_DIGEST",
 )
 
+IMAGES_DIR = REPO_ROOT / "artifacts" / "images"
+
+IMAGE_TAR_KEYS = (
+    "XAISEN_WORKER_IMAGE_TAR",
+    "XAISEN_ROUTES_IMAGE_TAR",
+    "XAISEN_CLIENT_IMAGE_TAR",
+    "XAISEN_VCLIENT_IMAGE_TAR",
+)
+
 
 def provider_terraform_root(provider: str) -> Path:
     return TERRAFORM_ENV_DIR / provider
@@ -263,7 +272,7 @@ def runtime_env(env: Mapping[str, str]) -> Dict[str, str]:
     for key in DEFAULT_RUNTIME_VARS:
         if key in env:
             values[key] = env[key]
-    for key in ("LIVEKIT_URL", "NEXT_PUBLIC_SHOW_SETTINGS_MENU", *ROUTES_CONTRACT_ENV_KEYS):
+    for key in ("LIVEKIT_URL", "NEXT_PUBLIC_SHOW_SETTINGS_MENU", *ROUTES_CONTRACT_ENV_KEYS, *IMAGE_TAR_KEYS):
         if key in env and env[key] != "":
             values[key] = env[key]
     return values
@@ -357,24 +366,32 @@ def cmd_deploy(args: argparse.Namespace) -> None:
     require_runtime_env(env)
     terraform_apply(args.provider, args, env)
 
-    if getattr(args, "deploy_contract", False):
-        from cli.contract import cmd_deploy_contract, cmd_init_contract
+    try:
+        if getattr(args, "deploy_contract", False):
+            from cli.contract import cmd_deploy_contract, cmd_init_contract
 
-        contract_network = getattr(args, "contract_network", "testnet")
-        contract_args = argparse.Namespace(
-            network=contract_network,
-            package_path=CONTRACT_PACKAGE_PATH,
-            gas_budget=1_000_000_000,
-            gas_coins=[],
-        )
-        cmd_deploy_contract(contract_args)
-        cmd_init_contract(contract_args)
-        env = build_env(args.provider)
+            contract_network = getattr(args, "contract_network", "testnet")
+            contract_args = argparse.Namespace(
+                network=contract_network,
+                package_path=CONTRACT_PACKAGE_PATH,
+                gas_budget=1_000_000_000,
+                gas_coins=[],
+            )
+            cmd_deploy_contract(contract_args)
+            cmd_init_contract(contract_args)
+            env = build_env(args.provider)
 
-    outputs = terraform_output(args.provider, env)
-    inventory_path = render_inventory(args.provider, outputs)
-    vars_path = render_ansible_vars(args.provider, outputs, env, args.node_registry_contract_id)
-    ansible_playbook(inventory_path, vars_path, env)
+        outputs = terraform_output(args.provider, env)
+        inventory_path = render_inventory(args.provider, outputs)
+        vars_path = render_ansible_vars(args.provider, outputs, env, args.node_registry_contract_id)
+        ansible_playbook(inventory_path, vars_path, env)
+    except Exception as exc:
+        print(f"\n[atomic] step failed — purging infrastructure to avoid partial state...")
+        try:
+            cmd_purge(args)
+        except Exception as purge_exc:
+            print(f"[atomic] purge also failed: {purge_exc}")
+        raise
 
 
 def cmd_inventory(args: argparse.Namespace) -> None:
@@ -410,33 +427,34 @@ def _update_env_file(path: Path, updates: Dict[str, str]) -> None:
 def cmd_build_images(args: argparse.Namespace) -> None:
     provider = getattr(args, "provider", None)
     explicit_registry = getattr(args, "registry", None)
-
-    if provider and explicit_registry:
-        raise SystemExit("--registry and --provider are mutually exclusive")
-    if not provider and not explicit_registry:
-        raise SystemExit("One of --registry or --provider is required")
-
-    if provider:
-        env = build_env(provider)
-        registry_key = PROVIDER_CR_REGISTRY_KEY.get(provider)
-        if not registry_key:
-            raise SystemExit(f"No registry configured for provider '{provider}'")
-        registry_url = env.get(registry_key, "").strip()
-        if not registry_url:
-            raise SystemExit(
-                f"{registry_key} is not set for {provider}. "
-                f"Run: python3 vidctl.py setup-registry --provider {provider}"
-            )
-        registry = registry_url.rstrip("/")
-    else:
-        env = {}
-        registry = explicit_registry.rstrip("/")
-
-    tag = args.tag
     push = args.push
+    tag = args.tag
     platform = args.platform
 
-    if push and provider:
+    registry: str | None = None
+    env: Mapping[str, str] = {}
+
+    if push:
+        if provider and explicit_registry:
+            raise SystemExit("--registry and --provider are mutually exclusive")
+        if not provider and not explicit_registry:
+            raise SystemExit("--push requires --registry or --provider")
+
+        if provider:
+            env = build_env(provider)
+            registry_key = PROVIDER_CR_REGISTRY_KEY.get(provider)
+            if not registry_key:
+                raise SystemExit(f"No registry configured for provider '{provider}'")
+            registry_url = env.get(registry_key, "").strip()
+            if not registry_url:
+                raise SystemExit(
+                    f"{registry_key} is not set for {provider}. "
+                    f"Run: python3 vidctl.py infra registry --provider {provider}"
+                )
+            registry = registry_url.rstrip("/")
+        else:
+            registry = explicit_registry.rstrip("/")
+
         registry_host = registry.split("/")[0]
         username = env.get("ALICLOUD_CR_USERNAME", "").strip() if provider == "alibaba-cloud" else ""
         password = env.get("ALICLOUD_CR_PASSWORD", "").strip() if provider == "alibaba-cloud" else ""
@@ -448,12 +466,12 @@ def cmd_build_images(args: argparse.Namespace) -> None:
                 text=True,
                 check=True,
             )
-        else:
-            print(f"\n  Skipping docker login (ALICLOUD_CR_USERNAME / ALICLOUD_CR_PASSWORD not set)")
 
     image_map: Dict[str, str] = {}
+    tar_map: Dict[str, str] = {}
+
     for service, src_dir in IMAGE_SERVICES.items():
-        image_name = f"{registry}/xaisen-{service}:{tag}"
+        image_name = f"{registry}/xaisen-{service}:{tag}" if registry else f"xaisen-{service}:{tag}"
         build_context = REPO_ROOT / src_dir
         if not build_context.exists():
             raise SystemExit(f"Build context not found: {build_context}")
@@ -463,21 +481,39 @@ def cmd_build_images(args: argparse.Namespace) -> None:
         print(f"  platform: {platform}")
         print(f"  context: {build_context}")
 
-        build_cmd = ["docker", "build", "--platform", platform, "-t", image_name]
         if push:
-            build_cmd.append("--push")
-        build_cmd.append(".")
+            subprocess.run(
+                ["docker", "buildx", "build", "--platform", platform, "-t", image_name, "--push", "."],
+                cwd=str(build_context),
+                check=True,
+            )
+        else:
+            subprocess.run(
+                ["docker", "buildx", "build", "--platform", platform, "-t", image_name, "--load", "."],
+                cwd=str(build_context),
+                check=True,
+            )
+            IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+            tar_path = IMAGES_DIR / f"xaisen-{service}.tar"
+            print(f"  saving: {tar_path}")
+            subprocess.run(["docker", "save", "-o", str(tar_path), image_name], check=True)
+            tar_map[service] = str(tar_path)
 
-        subprocess.run(build_cmd, cwd=str(build_context), check=True)
         image_map[service] = image_name
 
     runtime_env_path = REPO_ROOT / "secrets" / "runtime.env"
-    _update_env_file(runtime_env_path, {
+    env_updates: Dict[str, str] = {
         "XAISEN_WORKER_IMAGE": image_map["worker"],
         "XAISEN_ROUTES_IMAGE": image_map["routes"],
         "XAISEN_CLIENT_IMAGE": image_map["client"],
         "XAISEN_VCLIENT_IMAGE": image_map["vclient"],
-    })
+    }
+    if tar_map:
+        env_updates["XAISEN_WORKER_IMAGE_TAR"] = tar_map.get("worker", "")
+        env_updates["XAISEN_ROUTES_IMAGE_TAR"] = tar_map.get("routes", "")
+        env_updates["XAISEN_CLIENT_IMAGE_TAR"] = tar_map.get("client", "")
+        env_updates["XAISEN_VCLIENT_IMAGE_TAR"] = tar_map.get("vclient", "")
+    _update_env_file(runtime_env_path, env_updates)
 
     existing = {}
     for line in runtime_env_path.read_text(encoding="utf-8").splitlines():
@@ -493,7 +529,10 @@ def cmd_build_images(args: argparse.Namespace) -> None:
         print("\n  generated LIVEKIT_API_KEY and LIVEKIT_API_SECRET")
 
     print(f"\n  wrote {runtime_env_path}")
-    print("\nDone. Images ready" + (" and pushed." if push else ". Use --push to push to registry."))
+    if push:
+        print("\nDone. Images pushed to registry.")
+    else:
+        print(f"\nDone. Images saved to {IMAGES_DIR}. Transfer via Ansible on next deploy.")
 
 
 def cmd_setup_registry(args: argparse.Namespace) -> None:

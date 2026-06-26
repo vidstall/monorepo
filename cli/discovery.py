@@ -18,7 +18,7 @@ class DeploymentInfo:
     livekit_api_key: str
     livekit_api_secret: str
     worker_ips: List[str] = field(default_factory=list)
-    client_ips: List[str] = field(default_factory=list)
+    dist_ips: List[str] = field(default_factory=list)
     coordinator_ips: List[str] = field(default_factory=list)
     provider: str = "alibaba-cloud"
 
@@ -60,15 +60,15 @@ def discover(provider: str) -> DeploymentInfo:
     vars_data = json.loads(vars_path.read_text(encoding="utf-8"))
 
     worker_ips = _parse_inventory_ips(inventory, "worker")
-    client_ips = _parse_inventory_ips(inventory, "client")
+    dist_ips = _parse_inventory_ips(inventory, "dist")
     coordinator_ips = _parse_inventory_ips(inventory, "coordinator")
 
-    if not client_ips:
-        raise SystemExit("No client nodes found in inventory.")
+    if not dist_ips:
+        raise SystemExit("No dist nodes found in inventory.")
     if not worker_ips:
         raise SystemExit("No worker nodes found in inventory.")
 
-    routes_url = f"http://{client_ips[0]}"
+    routes_url = f"http://{dist_ips[0]}"
     livekit_url = vars_data.get("LIVEKIT_URL", f"ws://{worker_ips[0]}:7880")
     livekit_api_key = vars_data.get("LIVEKIT_API_KEY", "")
     livekit_api_secret = vars_data.get("LIVEKIT_API_SECRET", "")
@@ -79,7 +79,7 @@ def discover(provider: str) -> DeploymentInfo:
         livekit_api_key=livekit_api_key,
         livekit_api_secret=livekit_api_secret,
         worker_ips=worker_ips,
-        client_ips=client_ips,
+        dist_ips=dist_ips,
         coordinator_ips=coordinator_ips,
         provider=provider,
     )

@@ -55,14 +55,15 @@ def _add_infra_group(subparsers: argparse._SubParsersAction) -> None:
     inventory.set_defaults(func=cmd_inventory)
 
     build = infra_sub.add_parser("build", help="Build Docker images locally and optionally push to a registry")
-    registry_group = build.add_mutually_exclusive_group(required=True)
+    registry_group = build.add_mutually_exclusive_group(required=False)
     registry_group.add_argument("--registry",
                                 help="Explicit Docker registry prefix (e.g. docker.io/myuser, ghcr.io/org)")
     registry_group.add_argument("--provider", choices=PROVIDER_CHOICES,
-                                help="Cloud provider — reads registry URL from its secrets file")
+                                help="Cloud provider — reads registry URL from its secrets file (only needed with --push)")
     build.add_argument("--tag", default="latest")
     build.add_argument("--platform", default="linux/amd64")
-    build.add_argument("--push", action="store_true", default=False)
+    build.add_argument("--push", action="store_true", default=False,
+                       help="Push to registry (requires --registry or --provider); without this flag, images are saved as tarballs in artifacts/images/")
     build.set_defaults(func=cmd_build_images)
 
     registry = infra_sub.add_parser("registry", help="Create a container registry for the given provider")
