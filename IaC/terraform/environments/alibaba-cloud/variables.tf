@@ -21,6 +21,12 @@ variable "dist_count" {
   default     = 1
 }
 
+variable "vclient_count" {
+  type        = number
+  description = "Number of vclient (bot) nodes."
+  default     = 0
+}
+
 variable "coordinator_count" {
   type        = number
   description = "Number of coordinator nodes."

@@ -32,6 +32,14 @@ output "inventory" {
         user       = var.ssh_username
       }
     ]
+    vclient = [
+      for instance in digitalocean_droplet.vclient : {
+        name       = instance.name
+        host       = instance.ipv4_address
+        private_ip = instance.ipv4_address_private
+        user       = var.ssh_username
+      }
+    ]
     coordinator = [
       for instance in digitalocean_droplet.coordinator : {
         name       = instance.name

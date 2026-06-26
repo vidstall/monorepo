@@ -34,6 +34,15 @@ output "inventory" {
         role       = "dist"
       }
     ]
+    vclient = [
+      for instance in alicloud_instance.vclient : {
+        name       = instance.instance_name
+        public_ip  = try(instance.public_ip, instance.public_ip_address, "")
+        private_ip = try(instance.private_ip, instance.private_ip_address, "")
+        ssh_user   = var.ssh_username
+        role       = "vclient"
+      }
+    ]
     coordinator = [
       for instance in alicloud_instance.coordinator : {
         name       = instance.instance_name

@@ -119,6 +119,22 @@ resource "aws_instance" "dist" {
   })
 }
 
+resource "aws_instance" "vclient" {
+  count                       = var.vclient_count
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = var.aws_instance_type
+  key_name                    = aws_key_pair.testbed.key_name
+  subnet_id                   = data.aws_subnets.default.ids[0]
+  vpc_security_group_ids      = [aws_security_group.ssh.id]
+  associate_public_ip_address = true
+  user_data                   = local.cloud_init
+
+  tags = merge(local.common_tags, {
+    Name = "${var.testbed_name}-vclient-${count.index + 1}"
+    role = "vclient"
+  })
+}
+
 resource "aws_instance" "coordinator" {
   count                       = var.coordinator_count
   ami                         = data.aws_ami.ubuntu.id

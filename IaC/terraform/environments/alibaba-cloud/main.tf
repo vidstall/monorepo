@@ -178,6 +178,25 @@ resource "alicloud_instance" "dist" {
   })
 }
 
+resource "alicloud_instance" "vclient" {
+  count = var.vclient_count
+
+  availability_zone          = data.alicloud_zones.available.zones[0].id
+  security_groups            = [alicloud_security_group.testbed.id]
+  instance_type              = var.alicloud_instance_type
+  image_id                   = local.effective_image
+  system_disk_category       = "cloud_efficiency"
+  instance_name              = "${var.testbed_name}-vclient-${count.index + 1}"
+  vswitch_id                 = alicloud_vswitch.main.id
+  internet_max_bandwidth_out = 100
+  user_data                  = local.user_data
+  spot_strategy              = var.alicloud_spot_strategy
+
+  tags = merge(local.common_tags, {
+    Role = "vclient"
+  })
+}
+
 resource "alicloud_instance" "coordinator" {
   count = var.coordinator_count
 

@@ -30,6 +30,13 @@ output "inventory" {
         user = var.ssh_username
       }
     ]
+    vclient = [
+      for instance in hcloud_server.vclient : {
+        name = instance.name
+        host = instance.ipv4_address
+        user = var.ssh_username
+      }
+    ]
     coordinator = [
       for instance in hcloud_server.coordinator : {
         name = instance.name

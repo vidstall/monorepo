@@ -59,6 +59,18 @@ resource "digitalocean_droplet" "dist" {
   tags      = concat(local.common_tags, ["role:dist"])
 }
 
+resource "digitalocean_droplet" "vclient" {
+  count     = var.vclient_count
+  name      = "${var.testbed_name}-vclient-${count.index + 1}"
+  image     = var.digitalocean_image
+  region    = var.digitalocean_region
+  size      = var.digitalocean_size
+  vpc_uuid  = digitalocean_vpc.main.id
+  ssh_keys  = [digitalocean_ssh_key.testbed.id]
+  user_data = local.cloud_init
+  tags      = concat(local.common_tags, ["role:vclient"])
+}
+
 resource "digitalocean_droplet" "coordinator" {
   count     = var.coordinator_count
   name      = "${var.testbed_name}-coordinator-${count.index + 1}"
@@ -76,6 +88,7 @@ resource "digitalocean_firewall" "testbed" {
   droplet_ids = concat(
     digitalocean_droplet.worker[*].id,
     digitalocean_droplet.dist[*].id,
+    digitalocean_droplet.vclient[*].id,
     digitalocean_droplet.coordinator[*].id,
   )
 

@@ -30,6 +30,13 @@ output "inventory" {
         user = var.ssh_username
       }
     ]
+    vclient = [
+      for instance in aws_instance.vclient : {
+        name = instance.tags.Name
+        host = instance.public_ip
+        user = var.ssh_username
+      }
+    ]
     coordinator = [
       for instance in aws_instance.coordinator : {
         name = instance.tags.Name
