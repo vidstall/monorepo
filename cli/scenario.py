@@ -22,6 +22,12 @@ class Topology:
     coordinator_nodes: int = 1
     contract_network: str = "testnet"
     provider: str = "alibaba-cloud"
+    region: str = "cn-hangzhou"
+    instance_type: Optional[str] = None
+    deploy_contract: bool = True
+    teardown: bool = True
+    session_duration_secs: int = 5
+    benchmark_targets: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -806,11 +812,13 @@ def _write_report(report: BenchmarkReport, output_path: Optional[str]) -> None:
         json.dumps({
             "scenario": report.scenario_name,
             "topology": {
+                "provider": report.topology.provider,
+                "region": report.topology.region,
+                "instance_type": report.topology.instance_type,
                 "worker_nodes": report.topology.worker_nodes,
                 "client_nodes": report.topology.client_nodes,
                 "coordinator_nodes": report.topology.coordinator_nodes,
                 "contract_network": report.topology.contract_network,
-                "provider": report.topology.provider,
             },
             "total_duration_ms": report.total_duration_ms,
             "samples": [
@@ -919,3 +927,170 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
             auto_approve=True,
         )
         cmd_destroy(destroy_args)
+
+
+# ── launch command ────────────────────────────────────────────────────────────
+
+def _list_scenarios() -> None:
+    from cli.config import REPO_ROOT
+    scenario_dir = REPO_ROOT / "scenario"
+    scripts = sorted(scenario_dir.glob("*.py"))
+    if not scripts:
+        print("No scenario scripts found in scenario/")
+        return
+
+    print()
+    rows = []
+    for path in scripts:
+        try:
+            s = load_scenario(path)
+            t = s.topology
+            topo_str = f"{t.provider} | {t.worker_nodes}w/{t.client_nodes}c/{t.coordinator_nodes}coord | {t.contract_network}"
+            rows.append((path.name, s.name, s.description, topo_str))
+        except Exception as e:
+            rows.append((path.name, "?", f"(load error: {e})", "?"))
+
+    name_w = max(len(r[1]) for r in rows)
+    file_w = max(len(r[0]) for r in rows)
+    print(f"  {'FILE':<{file_w}}  {'SCENARIO':<{name_w}}  TOPOLOGY")
+    print("  " + "─" * (file_w + name_w + 40))
+    for fname, name, desc, topo_str in rows:
+        print(f"  {fname:<{file_w}}  {name:<{name_w}}  {topo_str}")
+        print(f"  {'':<{file_w}}  {'':<{name_w}}  {desc}")
+    print()
+
+
+def _terraform_apply_with_topology(topo: Topology, env: Any) -> None:
+    """Run terraform apply passing region/instance_type from topology."""
+    from cli.infra import provider_terraform_root, terraform_init
+    from cli.process import run_command
+
+    root = provider_terraform_root(topo.provider)
+    terraform_init(topo.provider, env)
+
+    vars = [
+        "-input=false",
+        "-var=testbed_name=depin-testbed",
+        f"-var=worker_count={topo.worker_nodes}",
+        f"-var=client_count={topo.client_nodes}",
+        f"-var=coordinator_count={topo.coordinator_nodes}",
+    ]
+    if topo.provider == "alibaba-cloud":
+        vars.append(f"-var=alicloud_region={topo.region}")
+        if topo.instance_type:
+            vars.append(f"-var=alicloud_instance_type={topo.instance_type}")
+
+    run_command(["terraform", "apply", "-auto-approve", *vars], cwd=root, env=env)
+
+
+def _print_launch_banner(scenario: "Scenario", topo: Topology, dry_run: bool = False) -> None:
+    print(f"\n{'='*60}")
+    print(f"LAUNCH: {scenario.name}")
+    print(f"  {scenario.description}")
+    print(f"  provider:    {topo.provider}  ({topo.region})")
+    if topo.instance_type:
+        print(f"  instance:    {topo.instance_type}")
+    print(f"  nodes:       {topo.worker_nodes} workers / {topo.client_nodes} clients / {topo.coordinator_nodes} coordinators")
+    print(f"  network:     {topo.contract_network}")
+    print(f"  contract:    {'deploy+init' if topo.deploy_contract else 'use existing'}")
+    print(f"  teardown:    {topo.teardown}")
+    if topo.benchmark_targets:
+        targets = "  ".join(f"{k}<{v}ms" for k, v in topo.benchmark_targets.items())
+        print(f"  targets:     {targets}")
+    if dry_run:
+        print("  mode:        DRY RUN")
+    print(f"{'='*60}\n")
+
+
+def cmd_launch(args: argparse.Namespace) -> None:
+    if getattr(args, "list", False) or not getattr(args, "scenario", None):
+        _list_scenarios()
+        return
+
+    scenario_path = Path(args.scenario)
+    if not scenario_path.exists():
+        raise SystemExit(f"Scenario file not found: {scenario_path}")
+
+    scenario = load_scenario(scenario_path)
+    topo = scenario.topology
+    dry_run = getattr(args, "dry_run", False)
+    no_teardown = getattr(args, "no_teardown", False)
+
+    _print_launch_banner(scenario, topo, dry_run)
+
+    deployment = None
+    if not dry_run:
+        from cli.contract import cmd_deploy_contract, cmd_init_contract
+        from cli.discovery import discover, is_deployed, wait_for_routes
+        from cli.env import build_env
+        from cli.infra import (
+            ansible_playbook,
+            render_ansible_vars,
+            render_inventory,
+            require_runtime_env,
+            terraform_output,
+        )
+
+        env = build_env(topo.provider)
+        require_runtime_env(env)
+
+        if not is_deployed(topo.provider):
+            print("Provisioning infrastructure from topology spec...")
+            _terraform_apply_with_topology(topo, env)
+
+            if topo.deploy_contract:
+                from cli.config import CONTRACT_PACKAGE_PATH
+                contract_args = argparse.Namespace(
+                    network=topo.contract_network,
+                    package_path=CONTRACT_PACKAGE_PATH,
+                    gas_budget=1_000_000_000,
+                    gas_coins=[],
+                )
+                cmd_deploy_contract(contract_args)
+                cmd_init_contract(contract_args)
+                env = build_env(topo.provider)
+
+            outputs = terraform_output(topo.provider, env)
+            inventory_path = render_inventory(topo.provider, outputs)
+            vars_path = render_ansible_vars(topo.provider, outputs, env)
+            ansible_playbook(inventory_path, vars_path, env)
+        else:
+            print(f"Infrastructure already deployed for {topo.provider} — skipping provisioning.")
+
+        deployment = discover(topo.provider)
+        print(f"  routes:   {deployment.routes_url}")
+        print(f"  livekit:  {deployment.livekit_url}")
+        print("\nWaiting for routes service...")
+        wait_for_routes(deployment)
+        print("  routes service ready\n")
+
+    report = BenchmarkReport(scenario_name=scenario.name, topology=topo)
+    ctx = ScenarioContext(topology=topo, report=report, dry_run=dry_run)
+    if deployment:
+        ctx.set_deployment(deployment)
+
+    report.started_at = time.time()
+    try:
+        scenario.run(ctx)
+    except KeyboardInterrupt:
+        print("\n\nscenario interrupted by user")
+    finally:
+        ctx.cleanup()
+        report.finished_at = time.time()
+        print_report(report)
+        _write_report(report, getattr(args, "output", None))
+
+    should_teardown = topo.teardown and not no_teardown
+    if should_teardown and not dry_run:
+        print("\nTearing down infrastructure (topology.teardown=True)...")
+        from cli.infra import cmd_purge
+        purge_args = argparse.Namespace(
+            provider=topo.provider,
+            auto_approve=True,
+            testbed_name="depin-testbed",
+            worker_nodes=topo.worker_nodes,
+            client_nodes=topo.client_nodes,
+            coordinator_nodes=topo.coordinator_nodes,
+            node_registry_contract_id=None,
+        )
+        cmd_purge(purge_args)

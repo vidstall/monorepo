@@ -6,7 +6,7 @@ from pathlib import Path
 from cli.config import CONTRACT_NETWORK_CHOICES, CONTRACT_PACKAGE_PATH, PROVIDER_CHOICES
 from cli.contract import cmd_deploy_contract, cmd_init_contract, cmd_update_contract
 from cli.infra import cmd_build_images, cmd_deploy, cmd_inventory, cmd_purge, cmd_setup_registry
-from cli.scenario import cmd_run_scenario
+from cli.scenario import cmd_launch
 from cli.status import cmd_infra_status, cmd_status
 
 
@@ -101,32 +101,26 @@ def _add_contract_group(subparsers: argparse._SubParsersAction) -> None:
     update.set_defaults(func=cmd_update_contract)
 
 
-def _add_testbed_group(subparsers: argparse._SubParsersAction) -> None:
-    from cli.testbed import cmd_testbed_clean, cmd_testbed_list, cmd_testbed_results
-
-    testbed = subparsers.add_parser("testbed", help="Run and manage E2E test scenarios")
-    testbed_sub = testbed.add_subparsers(dest="subcommand")
-    testbed_sub.required = True
-
-    run = testbed_sub.add_parser("run", help="Execute a scenario script")
-    run.add_argument("scenario", help="Path to scenario Python script")
-    run.add_argument("--provider", default="alibaba-cloud", choices=PROVIDER_CHOICES)
-    run.add_argument("--deploy-contract", action="store_true", default=False)
-    run.add_argument("--contract-network", default="testnet", choices=CONTRACT_NETWORK_CHOICES)
-    run.add_argument("--teardown", action="store_true", default=False)
-    run.add_argument("--dry-run", action="store_true", default=False)
-    run.add_argument("--output", help="Path to write JSON benchmark report")
-    add_infra_shape(run)
-    run.set_defaults(func=cmd_run_scenario)
-
-    list_cmd = testbed_sub.add_parser("list", help="List available scenario scripts")
-    list_cmd.set_defaults(func=cmd_testbed_list)
-
-    clean = testbed_sub.add_parser("clean", help="Delete benchmark artifacts")
-    clean.set_defaults(func=cmd_testbed_clean)
-
-    results = testbed_sub.add_parser("results", help="Show the most recent benchmark report")
-    results.set_defaults(func=cmd_testbed_results)
+def _add_launch_command(subparsers: argparse._SubParsersAction) -> None:
+    launch = subparsers.add_parser(
+        "launch",
+        help="Run a scenario: provision infra, deploy contract, benchmark, teardown",
+    )
+    launch.add_argument(
+        "scenario",
+        nargs="?",
+        default=None,
+        help="Path to scenario .py file (omit to list available scenarios)",
+    )
+    launch.add_argument("--dry-run", action="store_true", default=False,
+                        help="Print steps without executing real infra or contract calls")
+    launch.add_argument("--no-teardown", action="store_true", default=False,
+                        help="Keep infrastructure running after scenario completes")
+    launch.add_argument("--output", default=None,
+                        help="Write benchmark report JSON to this path")
+    launch.add_argument("--list", action="store_true", default=False,
+                        help="List available scenarios")
+    launch.set_defaults(func=cmd_launch)
 
 
 def _add_observe_group(subparsers: argparse._SubParsersAction) -> None:
@@ -167,7 +161,7 @@ def parse_args() -> argparse.Namespace:
 
     _add_infra_group(subparsers)
     _add_contract_group(subparsers)
-    _add_testbed_group(subparsers)
+    _add_launch_command(subparsers)
     _add_observe_group(subparsers)
 
     return parser.parse_args()

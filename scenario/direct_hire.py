@@ -3,7 +3,25 @@ from cli.scenario import Topology, ScenarioContext
 
 NAME = "direct-hire"
 DESCRIPTION = "Compare direct-hire vs vote-based assignment, both with real WebRTC sessions"
-TOPOLOGY = Topology(worker_nodes=3, client_nodes=1, coordinator_nodes=1, contract_network="testnet")
+TOPOLOGY = Topology(
+    provider="alibaba-cloud",
+    region="cn-hangzhou",
+    instance_type="ecs.t5-lc1m1.small",
+    worker_nodes=3,
+    client_nodes=1,
+    coordinator_nodes=1,
+    contract_network="testnet",
+    deploy_contract=True,
+    teardown=True,
+    session_duration_secs=5,
+    benchmark_targets={
+        "register_worker": 3000,
+        "hire_worker": 3000,
+        "order_room": 5000,
+        "worker_vote_room": 2000,
+        "join_room": 4000,
+    },
+)
 
 
 def run(ctx: ScenarioContext) -> None:

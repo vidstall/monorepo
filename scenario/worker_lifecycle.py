@@ -3,7 +3,26 @@ from cli.scenario import Topology, ScenarioContext
 
 NAME = "worker-lifecycle"
 DESCRIPTION = "Workers register with varying stakes, serve rooms with real WebRTC, exit via withdraw_stake vs unregister"
-TOPOLOGY = Topology(worker_nodes=4, client_nodes=1, coordinator_nodes=1, contract_network="testnet")
+TOPOLOGY = Topology(
+    provider="alibaba-cloud",
+    region="cn-hangzhou",
+    instance_type="ecs.t5-lc1m1.small",
+    worker_nodes=4,
+    client_nodes=1,
+    coordinator_nodes=1,
+    contract_network="testnet",
+    deploy_contract=True,
+    teardown=True,
+    session_duration_secs=5,
+    benchmark_targets={
+        "register_worker": 3000,
+        "order_room": 5000,
+        "worker_vote_room": 2000,
+        "join_room": 4000,
+        "withdraw_stake": 2000,
+        "unregister_worker": 2000,
+    },
+)
 
 
 def run(ctx: ScenarioContext) -> None:
