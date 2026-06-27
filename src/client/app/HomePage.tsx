@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { createContractTransaction } from "@/lib/contract-api";
+import { createContractTransaction, fetchContractConfig } from "@/lib/contract-api";
 import { dAppKit } from "@/lib/sui-dapp-kit";
 import styles from "../styles/Home.module.css";
 
@@ -14,12 +14,7 @@ const ContractPanel = dynamic(() => import("./ContractPanel"), { ssr: false });
 
 const showSettings = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU === "true";
 
-const CONTRACT = {
-  network: process.env.NEXT_PUBLIC_CONTRACT_NETWORK as "testnet" | "devnet" | "mainnet" ?? "testnet",
-  packageId: process.env.NEXT_PUBLIC_CONTRACT_PACKAGE_ID ?? "",
-  registryObjectId: process.env.NEXT_PUBLIC_CONTRACT_REGISTRY_OBJECT_ID ?? "",
-  deployerAddress: process.env.NEXT_PUBLIC_CONTRACT_DEPLOYER_ADDRESS ?? "",
-} as const;
+const CONTRACT_NETWORK = (process.env.NEXT_PUBLIC_CONTRACT_NETWORK ?? "testnet") as "testnet" | "devnet" | "mainnet";
 
 const GRPC_URLS = {
   devnet: "https://fullnode.devnet.sui.io:443",
@@ -31,15 +26,20 @@ type RegistryStats = {
   nodeCount: bigint;
   activeWorkerCount: bigint;
   nextRentalId: bigint;
+  packageId: string;
+  registryObjectId: string;
+  network: string;
 };
 
 async function fetchRegistryStats(): Promise<RegistryStats> {
+  const config = await fetchContractConfig();
+  const network = (config.network ?? CONTRACT_NETWORK) as "testnet" | "devnet" | "mainnet";
   const client = new SuiGrpcClient({
-    network: CONTRACT.network,
-    baseUrl: GRPC_URLS[CONTRACT.network],
+    network,
+    baseUrl: GRPC_URLS[network],
   });
   const obj = await client.getObject({
-    objectId: CONTRACT.registryObjectId,
+    objectId: config.registryObjectId,
     include: { json: true },
   });
   const fields = obj.object.json as Record<string, string> | null;
@@ -48,6 +48,9 @@ async function fetchRegistryStats(): Promise<RegistryStats> {
     nodeCount: BigInt(fields.node_count ?? 0),
     activeWorkerCount: BigInt(fields.active_worker_count ?? 0),
     nextRentalId: BigInt(fields.next_rental_id ?? 0),
+    packageId: config.packageId,
+    registryObjectId: config.registryObjectId,
+    network,
   };
 }
 
@@ -89,8 +92,8 @@ function ContractStatusCard() {
 
           <div className={styles.statusRow}>
             <span className={styles.statusKey}>network</span>
-            <span className={styles.networkBadge} data-network={CONTRACT.network}>
-              {CONTRACT.network}
+            <span className={styles.networkBadge} data-network={stats?.network ?? CONTRACT_NETWORK}>
+              {stats?.network ?? CONTRACT_NETWORK}
             </span>
           </div>
 
@@ -115,11 +118,11 @@ function ContractStatusCard() {
               </div>
               <div className={styles.statusRow}>
                 <span className={styles.statusKey}>package</span>
-                <span className={styles.statusVal}>{truncateAddr(CONTRACT.packageId)}</span>
+                <span className={styles.statusVal}>{truncateAddr(stats!.packageId)}</span>
               </div>
               <div className={styles.statusRow}>
                 <span className={styles.statusKey}>registry</span>
-                <span className={styles.statusVal}>{truncateAddr(CONTRACT.registryObjectId)}</span>
+                <span className={styles.statusVal}>{truncateAddr(stats!.registryObjectId)}</span>
               </div>
             </>
           )}
