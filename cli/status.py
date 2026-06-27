@@ -189,7 +189,7 @@ def _print_images_section() -> None:
     images = _load_runtime_images()
     any_set = any(v for v in images.values())
     if not any_set:
-        print(f"  {'(none)':<{_W}} ─  run: vidctl infra build --provider <provider> --push")
+        print(f"  {'(none)':<{_W}} ─  run: vidctl infra registry build --provider <provider>")
     else:
         for svc, url in images.items():
             label = f"{svc:<{_W}}"

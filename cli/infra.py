@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping
 
@@ -24,6 +25,11 @@ REQUIRED_RUNTIME_VARS = (
 DEFAULT_RUNTIME_VARS = {
     "XAISEN_COORDINATOR_IMAGE": "redis:7.4-alpine",
     "XAISEN_PROXY_IMAGE": "caddy:2-alpine",
+}
+
+BASE_IMAGE_SERVICES = {
+    "coordinator": ("redis:7.4-alpine", "xaisen-redis", "XAISEN_COORDINATOR_IMAGE"),
+    "proxy": ("caddy:2-alpine", "xaisen-caddy", "XAISEN_PROXY_IMAGE"),
 }
 
 ROUTES_CONTRACT_ENV_KEYS = (
@@ -449,38 +455,34 @@ def cmd_build_images(args: argparse.Namespace) -> None:
             if not registry_url:
                 raise SystemExit(
                     f"{registry_key} is not set for {provider}. "
-                    f"Run: python3 vidctl.py infra registry --provider {provider}"
+                    f"Run: python3 vidctl.py infra registry init --provider {provider}"
                 )
             registry = registry_url.rstrip("/")
         else:
             registry = explicit_registry.rstrip("/")
 
         registry_host = registry.split("/")[0]
-        username = env.get("ALICLOUD_CR_USERNAME", "").strip() if provider == "alibaba-cloud" else ""
-        password = env.get("ALICLOUD_CR_PASSWORD", "").strip() if provider == "alibaba-cloud" else ""
-        if username and password:
-            print(f"\n=== Logging in to {registry_host} ===")
-            subprocess.run(
-                ["docker", "login", registry_host, "-u", username, "--password-stdin"],
-                input=password,
-                text=True,
-                check=True,
-            )
+    username = env.get("ALICLOUD_CR_USERNAME", "").strip() if provider == "alibaba-cloud" else ""
+    password = env.get("ALICLOUD_CR_PASSWORD", "").strip() if provider == "alibaba-cloud" else ""
+    if username and password:
+        print(f"\n=== Logging in to {registry_host} ===")
+        subprocess.run(
+            ["docker", "login", registry_host, "-u", username, "--password", password],
+            check=True,
+        )
 
     image_map: Dict[str, str] = {}
     tar_map: Dict[str, str] = {}
 
-    for service, src_dir in IMAGE_SERVICES.items():
+    def _build_one(service: str, src_dir: str) -> tuple[str, str]:
         image_name = f"{registry}/xaisen-{service}:{tag}" if registry else f"xaisen-{service}:{tag}"
         build_context = REPO_ROOT / src_dir
         if not build_context.exists():
             raise SystemExit(f"Build context not found: {build_context}")
-
         print(f"\n=== Building {service} ===")
         print(f"  image: {image_name}")
         print(f"  platform: {platform}")
         print(f"  context: {build_context}")
-
         if push:
             subprocess.run(
                 ["docker", "buildx", "build", "--platform", platform, "-t", image_name, "--push", "."],
@@ -498,8 +500,13 @@ def cmd_build_images(args: argparse.Namespace) -> None:
             print(f"  saving: {tar_path}")
             subprocess.run(["docker", "save", "-o", str(tar_path), image_name], check=True)
             tar_map[service] = str(tar_path)
+        return service, image_name
 
-        image_map[service] = image_name
+    with ThreadPoolExecutor(max_workers=len(IMAGE_SERVICES)) as pool:
+        futures = {pool.submit(_build_one, svc, src): svc for svc, src in IMAGE_SERVICES.items()}
+        for future in as_completed(futures):
+            service, image_name = future.result()
+            image_map[service] = image_name
 
     runtime_env_path = REPO_ROOT / "secrets" / "runtime.env"
     env_updates: Dict[str, str] = {
@@ -538,7 +545,7 @@ def cmd_build_images(args: argparse.Namespace) -> None:
 def cmd_setup_registry(args: argparse.Namespace) -> None:
     provider = args.provider
     if provider not in PROVIDER_CR_REGISTRY_KEY:
-        raise SystemExit(f"setup-registry does not support provider '{provider}' yet")
+        raise SystemExit(f"registry init does not support provider '{provider}' yet")
 
     env = build_env(provider)
     tf_root = TERRAFORM_REGISTRY_DIR / provider
@@ -579,7 +586,7 @@ def cmd_setup_registry(args: argparse.Namespace) -> None:
         f"  ALICLOUD_CR_USERNAME=<your-ram-username>\n"
         f"  ALICLOUD_CR_PASSWORD=<acr-fixed-password>\n"
         f"\nThen push images:\n"
-        f"  python3 vidctl.py build-images --provider {provider} --push"
+        f"  python3 vidctl.py infra registry build --provider {provider}"
     )
 
 
@@ -626,3 +633,103 @@ def cmd_purge(args: argparse.Namespace) -> None:
         print("Cleaning Terraform local state...")
         purge_terraform_state(provider_terraform_root(provider))
         print(f"  {provider} purged")
+
+
+def cmd_registry_init(args: argparse.Namespace) -> None:
+    provider = args.provider
+    registry_key = PROVIDER_CR_REGISTRY_KEY.get(provider)
+    if not registry_key:
+        raise SystemExit(f"registry init does not support provider '{provider}' yet")
+
+    env = build_env(provider)
+    registry_url = env.get(registry_key, "").strip()
+    if registry_url:
+        print(f"Registry already configured for {provider}: {registry_url}")
+        return
+
+    cmd_setup_registry(args)
+
+
+def mirror_base_images(registry: str, tag: str, platform: str) -> Dict[str, str]:
+    mirrored: Dict[str, str] = {}
+    for service, (source_image, repo_name, env_key) in BASE_IMAGE_SERVICES.items():
+        target_image = f"{registry}/{repo_name}:{tag}"
+        print(f"\n=== Mirroring {service} base image ===")
+        print(f" source: {source_image}")
+        print(f" target: {target_image}")
+        print(f" platform: {platform}")
+        subprocess.run(
+            ["docker", "buildx", "imagetools", "create", "--platform", platform, "--tag", target_image, source_image],
+            check=True,
+        )
+        mirrored[env_key] = target_image
+    return mirrored
+
+
+def cmd_registry_build(args: argparse.Namespace) -> None:
+    env = build_env(args.provider)
+    registry_key = PROVIDER_CR_REGISTRY_KEY.get(args.provider)
+    if not registry_key:
+        raise SystemExit(f"registry build does not support provider '{args.provider}' yet")
+    registry = env.get(registry_key, "").strip().rstrip("/")
+    if not registry:
+        raise SystemExit(
+            f"{registry_key} is not set for {args.provider}. "
+            f"Run: python3 vidctl.py infra registry init --provider {args.provider}"
+        )
+
+    build_args = argparse.Namespace(
+        provider=args.provider,
+        registry=None,
+        tag=args.tag,
+        push=True,
+        platform=args.platform,
+    )
+    cmd_build_images(build_args)
+    env_updates = {key: "" for key in IMAGE_TAR_KEYS}
+    env_updates.update(mirror_base_images(registry, args.tag, args.platform))
+    _update_env_file(REPO_ROOT / "secrets" / "runtime.env", env_updates)
+
+
+def cmd_registry_purge(args: argparse.Namespace) -> None:
+    provider = args.provider
+    if provider not in PROVIDER_CR_REGISTRY_KEY:
+        raise SystemExit(f"registry purge does not support provider '{provider}' yet")
+
+    env = build_env(provider)
+    destroy_registry(provider, env)
+    _update_env_file(
+        REPO_ROOT / "secrets" / "cloud" / PROVIDER_ENV_FILES[provider],
+        {PROVIDER_CR_REGISTRY_KEY[provider]: ""},
+    )
+    print(f" registry purged for {provider}")
+
+
+def cmd_registry_list(args: argparse.Namespace) -> None:
+    provider = args.provider
+    if provider not in PROVIDER_CR_REGISTRY_KEY:
+        raise SystemExit(f"registry list does not support provider '{provider}' yet")
+
+    env = build_env(provider)
+    registry_key = PROVIDER_CR_REGISTRY_KEY[provider]
+    saved_registry = env.get(registry_key, "").strip()
+    tf_root = TERRAFORM_REGISTRY_DIR / provider
+    state_file = tf_root / "terraform.tfstate"
+
+    print(f"provider: {provider}")
+    print(f"{registry_key}: {saved_registry or '<unset>'}")
+
+    if not state_file.exists():
+        print("terraform: <no registry state>")
+        return
+
+    run_command(["terraform", "init", "-input=false"], cwd=tf_root, env=env)
+    result = subprocess.run(
+        ["terraform", "output", "-raw", "registry"],
+        cwd=str(tf_root),
+        env=dict(env),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    print(f"terraform registry: {result.stdout.strip()}")
