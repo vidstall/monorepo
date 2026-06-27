@@ -807,20 +807,22 @@ class ScenarioContext:
             time.sleep(seconds)
 
     def create_wallet(self, entity_id: str = "") -> str:
-        """Generate a new Ed25519 keypair, add to Sui keystore, return address."""
+        """Create a new Ed25519 address registered in the Sui client config, return address."""
         import json as _json
-        output = self.sui_cli(["keytool", "generate", "ed25519", "--json"], capture=True)
+        # sui client new-address registers the key in both the keystore and client.yaml,
+        # so sui client switch --address works immediately afterward.
+        output = self.sui_cli(["client", "new-address", "ed25519", "--json"], capture=True)
         if self.dry_run:
             return "0x" + "00" * 32
         try:
             data = _json.loads(output or "{}")
-            addr = data.get("suiAddress") or data.get("sui_address") or ""
+            addr = data.get("address") or data.get("suiAddress") or ""
             if addr:
                 self.log(f"wallet created: {addr}" + (f" ({entity_id})" if entity_id else ""))
                 return addr
         except Exception:
             pass
-        raise SystemExit("Could not parse address from sui keytool generate output")
+        raise SystemExit("Could not parse address from sui client new-address output")
 
     def fund_wallet(self, address: str, amount_mist: int) -> None:
         """Split coins from the active (deployer) address and transfer to target address."""
