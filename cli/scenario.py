@@ -828,7 +828,7 @@ class ScenarioContext:
             "client", "ptb",
             "--split-coins", "gas", f"[{amount_mist}]",
             "--assign", "fund_coin",
-            "--transfer-objects", "[fund_coin.0]", address,
+            "--transfer-objects", "[fund_coin.0]", f"@{address}",
             "--gas-budget", "10000000",
         ])
 
