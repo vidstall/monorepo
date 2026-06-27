@@ -80,19 +80,24 @@ def parse_publish_metadata(output: str) -> Dict[str, str]:
 
     for line in output.splitlines():
         stripped = line.strip()
-        if stripped == "Created Objects:":
+        if "Created Objects:" in stripped:
             in_created_objects = True
             in_published_objects = False
             in_gas_object = False
             current_object_id = None
             continue
-        if stripped == "Published Objects:":
+        if "Mutated Objects:" in stripped:
+            in_created_objects = False
+            in_published_objects = False
+            current_object_id = None
+            continue
+        if "Published Objects:" in stripped:
             in_created_objects = False
             in_published_objects = True
             in_gas_object = False
             current_object_id = None
             continue
-        if stripped == "Gas Object:":
+        if "Gas Object:" in stripped:
             in_created_objects = False
             in_published_objects = False
             in_gas_object = True
