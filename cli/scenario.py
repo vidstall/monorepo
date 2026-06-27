@@ -28,6 +28,11 @@ class Topology:
     deploy_contract: bool = True
     teardown: bool = True
     build_images: bool = False
+    registry_init: bool = False
+    registry_build: bool = False
+    registry_namespace: str = "xaisen"
+    registry_tag: str = "latest"
+    registry_platform: str = "linux/amd64"
     session_duration_secs: int = 5
     benchmark_targets: Dict[str, int] = field(default_factory=dict)
 
@@ -278,6 +283,20 @@ class ScenarioContext:
         self.log(f"add worker: {entity_id}" + (f" addr={address}" if address else ""))
         return worker
 
+    @staticmethod
+    def _ptb_bytes(value: str) -> str:
+        """Convert a string or 0x-prefixed hex to a PTB vector<u8> literal.
+
+        Uses vector[Nu8,...] notation to avoid re-tokenisation issues with
+        b"..." / x"..." when the Sui CLI joins argv before parsing.
+        """
+        if value.startswith("0x") or value.startswith("0X"):
+            hex_str = value[2:]
+            byte_ints = [int(hex_str[i:i+2], 16) for i in range(0, len(hex_str), 2)]
+        else:
+            byte_ints = list(value.encode("utf-8"))
+        return "vector[" + ",".join(f"{b}u8" for b in byte_ints) + "]"
+
     def register_worker(
         self,
         entity_id: str,
@@ -287,29 +306,41 @@ class ScenarioContext:
         stake: int = 1000,
     ) -> Optional[int]:
         worker = self.report.workers[entity_id]
+        pkg = self._contract_package_id()
+        registry = self._contract_registry_id()
 
         def _do() -> int:
+            import json as _json
             output = self.sui_cli([
-                "client", "call",
-                "--package", self._contract_package_id(),
-                "--module", "node_registry",
-                "--function", "register_worker",
-                "--type-args", "0x2::sui::SUI",
-                "--args",
-                self._contract_registry_id(),
-                f'"{metadata_uri}"',
-                f'"{metadata_hash}"',
-                str(price_per_rental),
-                str(stake),
-                "0x6",
+                "client", "ptb",
+                "--split-coins", "gas", f"[{stake}]",
+                "--assign", "stake_coin",
+                "--move-call",
+                f"{pkg}::node_registry::register_worker<0x2::sui::SUI>",
+                f"@{registry}",
+                self._ptb_bytes(metadata_uri),
+                self._ptb_bytes(metadata_hash),
+                f"{price_per_rental}u64",
+                "stake_coin.0",
+                "@0x6",
                 "--gas-budget", "100000000",
-            ], capture=True)
+                "--json",
+            ], capture=True, as_address=worker.address)
+            try:
+                data = _json.loads(output or "{}")
+                for event in data.get("events") or []:
+                    pj = event.get("parsedJson") or {}
+                    if "node_id" in pj:
+                        return int(pj["node_id"])
+            except Exception:
+                pass
             return 0
 
-        result = self.benchmark("register_worker", _do, entity_id=entity_id)
+        node_id = self.benchmark("register_worker", _do, entity_id=entity_id)
         worker.registered_at = time.time()
         worker.active = True
-        return result
+        worker.node_id = node_id or 0
+        return node_id
 
     def deactivate_worker(self, entity_id: str) -> None:
         worker = self.report.workers[entity_id]
@@ -327,7 +358,7 @@ class ScenarioContext:
                 "false",
                 "0x6",
                 "--gas-budget", "100000000",
-            ])
+            ], as_address=worker.address)
 
         self.benchmark("deactivate_worker", _do, entity_id=entity_id)
         worker.active = False
@@ -348,7 +379,7 @@ class ScenarioContext:
                 "true",
                 "0x6",
                 "--gas-budget", "100000000",
-            ])
+            ], as_address=worker.address)
 
         self.benchmark("activate_worker", _do, entity_id=entity_id)
         worker.active = True
@@ -367,7 +398,7 @@ class ScenarioContext:
                 self._contract_registry_id(),
                 str(worker.node_id or 0),
                 "--gas-budget", "100000000",
-            ])
+            ], as_address=worker.address)
 
         self.benchmark("unregister_worker", _do, entity_id=entity_id)
         worker.unregistered_at = time.time()
@@ -380,6 +411,8 @@ class ScenarioContext:
         rental_id: int,
         nominee_node_id: int,
     ) -> None:
+        worker = self.report.workers[entity_id]
+
         def _do() -> None:
             self.sui_cli([
                 "client", "call",
@@ -394,7 +427,7 @@ class ScenarioContext:
                 str(nominee_node_id),
                 "0x6",
                 "--gas-budget", "100000000",
-            ])
+            ], as_address=worker.address)
 
         self.benchmark("cast_room_vote", _do, entity_id=entity_id,
                         rental_id=rental_id, nominee_node_id=nominee_node_id)
@@ -405,6 +438,8 @@ class ScenarioContext:
         voter_node_id: int,
         proposal_id: int,
     ) -> None:
+        worker = self.report.workers[entity_id]
+
         def _do() -> None:
             self.sui_cli([
                 "client", "call",
@@ -418,7 +453,7 @@ class ScenarioContext:
                 str(proposal_id),
                 "0x6",
                 "--gas-budget", "100000000",
-            ])
+            ], as_address=worker.address)
 
         self.benchmark("cast_role_vote", _do, entity_id=entity_id, proposal_id=proposal_id)
 
@@ -430,20 +465,22 @@ class ScenarioContext:
         capacity: int,
         payment: int = 500,
     ) -> Optional[int]:
+        pkg = self._contract_package_id()
+        registry = self._contract_registry_id()
+
         def _do() -> int:
             self.sui_cli([
-                "client", "call",
-                "--package", self._contract_package_id(),
-                "--module", "node_registry",
-                "--function", "hire_worker",
-                "--type-args", "0x2::sui::SUI",
-                "--args",
-                self._contract_registry_id(),
-                str(worker_node_id),
-                f'"{room_name}"',
-                str(capacity),
-                str(payment),
-                "0x6",
+                "client", "ptb",
+                "--split-coins", "gas", f"[{payment}]",
+                "--assign", "payment_coin",
+                "--move-call",
+                f"{pkg}::node_registry::hire_worker<0x2::sui::SUI>",
+                f"@{registry}",
+                f"{worker_node_id}u64",
+                self._ptb_bytes(room_name),
+                f"{capacity}u64",
+                "payment_coin.0",
+                "@0x6",
                 "--gas-budget", "100000000",
             ])
             return 0
@@ -466,7 +503,7 @@ class ScenarioContext:
                 self._contract_registry_id(),
                 str(worker.node_id or 0),
                 "--gas-budget", "100000000",
-            ])
+            ], as_address=worker.address)
 
         self.benchmark("withdraw_worker_stake", _do, entity_id=entity_id)
         worker.unregistered_at = time.time()
@@ -494,7 +531,7 @@ class ScenarioContext:
                 f'"{metadata_hash}"',
                 "0x6",
                 "--gas-budget", "100000000",
-            ])
+            ], as_address=worker.address)
 
         self.benchmark("update_worker_metadata", _do, entity_id=entity_id)
 
@@ -513,7 +550,7 @@ class ScenarioContext:
                 str(worker.node_id or 0),
                 str(price_per_rental),
                 "--gas-budget", "100000000",
-            ])
+            ], as_address=worker.address)
 
         self.benchmark("update_worker_price", _do, entity_id=entity_id,
                         price_per_rental=price_per_rental)
@@ -551,21 +588,33 @@ class ScenarioContext:
         capacity: int,
         payment: int = 500,
     ) -> Optional[int]:
+        pkg = self._contract_package_id()
+        registry = self._contract_registry_id()
+
         def _do() -> int:
-            self.sui_cli([
-                "client", "call",
-                "--package", self._contract_package_id(),
-                "--module", "node_registry",
-                "--function", "order_room",
-                "--type-args", "0x2::sui::SUI",
-                "--args",
-                self._contract_registry_id(),
-                f'"{room_name}"',
-                str(capacity),
-                str(payment),
-                "0x6",
+            import json as _json
+            output = self.sui_cli([
+                "client", "ptb",
+                "--split-coins", "gas", f"[{payment}]",
+                "--assign", "payment_coin",
+                "--move-call",
+                f"{pkg}::node_registry::order_room<0x2::sui::SUI>",
+                f"@{registry}",
+                self._ptb_bytes(room_name),
+                f"{capacity}u64",
+                "payment_coin.0",
+                "@0x6",
                 "--gas-budget", "100000000",
-            ])
+                "--json",
+            ], capture=True)
+            try:
+                data = _json.loads(output or "{}")
+                for event in data.get("events") or []:
+                    pj = event.get("parsedJson") or {}
+                    if "rental_id" in pj:
+                        return int(pj["rental_id"])
+            except Exception:
+                pass
             return 0
 
         return self.benchmark("order_room", _do, entity_id=entity_id,
@@ -757,27 +806,85 @@ class ScenarioContext:
         if not self.dry_run:
             time.sleep(seconds)
 
-    def sui_cli(self, args: List[str], capture: bool = False) -> Optional[str]:
+    def create_wallet(self, entity_id: str = "") -> str:
+        """Generate a new Ed25519 keypair, add to Sui keystore, return address."""
+        import json as _json
+        output = self.sui_cli(["keytool", "generate", "ed25519", "--json"], capture=True)
+        if self.dry_run:
+            return "0x" + "00" * 32
+        try:
+            data = _json.loads(output or "{}")
+            addr = data.get("suiAddress") or data.get("sui_address") or ""
+            if addr:
+                self.log(f"wallet created: {addr}" + (f" ({entity_id})" if entity_id else ""))
+                return addr
+        except Exception:
+            pass
+        raise SystemExit("Could not parse address from sui keytool generate output")
+
+    def fund_wallet(self, address: str, amount_mist: int) -> None:
+        """Split coins from the active (deployer) address and transfer to target address."""
+        self.sui_cli([
+            "client", "ptb",
+            "--split-coins", "gas", f"[{amount_mist}]",
+            "--assign", "fund_coin",
+            "--transfer-objects", "[fund_coin.0]", address,
+            "--gas-budget", "10000000",
+        ])
+
+    def sui_cli(self, args: List[str], capture: bool = False, as_address: str = "") -> Optional[str]:
         import shlex
         import subprocess
+        import sys
 
         from cli.env import build_contract_env
 
         if not self._env:
             self._env = build_contract_env(self.topology.contract_network)
 
+        deployer = self._env.get("CONTRACT_DEPLOYER_ADDRESS", "")
+
+        if as_address and not self.dry_run:
+            self.log(f"$ sui client switch --address {as_address}")
+            subprocess.run(
+                ["sui", "client", "switch", "--address", as_address],
+                env=self._env,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
         cmd = ["sui"] + args
         self.log(f"$ {shlex.join(cmd)}")
         if self.dry_run:
             return None
-        result = subprocess.run(
-            cmd,
-            env=self._env,
-            capture_output=capture,
-            text=True,
-            check=True,
-        )
-        return result.stdout if capture else None
+
+        stdout: Optional[str] = None
+        try:
+            result = subprocess.run(
+                cmd,
+                env=self._env,
+                capture_output=capture,
+                text=True,
+                check=True,
+            )
+            stdout = result.stdout if capture else None
+        except subprocess.CalledProcessError as exc:
+            if exc.stdout:
+                print(exc.stdout, end="", file=sys.stderr)
+            if exc.stderr:
+                print(exc.stderr, end="", file=sys.stderr)
+            raise
+        finally:
+            if as_address and deployer and not self.dry_run:
+                subprocess.run(
+                    ["sui", "client", "switch", "--address", deployer],
+                    env=self._env,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+        return stdout
 
     def contract_env(self) -> Dict[str, str]:
         if not self._env:
@@ -1045,6 +1152,41 @@ def _terraform_apply_with_topology(topo: Topology, env: Any) -> None:
     run_command(["terraform", "apply", "-auto-approve", *vars], cwd=root, env=env)
 
 
+def _apply_registry_overrides(topo: Topology, args: argparse.Namespace) -> None:
+    if getattr(args, "skip_build", False):
+        topo.registry_init = False
+        topo.registry_build = False
+        return
+    registry_init = getattr(args, "registry_init", None)
+    registry_build = getattr(args, "registry_build", None)
+    if registry_init is not None:
+        topo.registry_init = registry_init
+    if registry_build is not None:
+        topo.registry_build = registry_build
+    if getattr(args, "registry_namespace", None):
+        topo.registry_namespace = args.registry_namespace
+    if getattr(args, "registry_tag", None):
+        topo.registry_tag = args.registry_tag
+    if getattr(args, "registry_platform", None):
+        topo.registry_platform = args.registry_platform
+
+
+def _setup_registry(topo: Topology) -> None:
+    from cli.infra import cmd_registry_build, cmd_registry_init
+
+    if topo.registry_init:
+        init_args = argparse.Namespace(provider=topo.provider, namespace=topo.registry_namespace)
+        cmd_registry_init(init_args)
+
+    if topo.registry_build:
+        build_args = argparse.Namespace(
+            provider=topo.provider,
+            tag=topo.registry_tag,
+            platform=topo.registry_platform,
+        )
+        cmd_registry_build(build_args)
+
+
 def _setup_and_push_images(topo: Topology, env: Any) -> None:
     from cli.infra import cmd_build_images
 
@@ -1069,6 +1211,7 @@ def _print_launch_banner(scenario: "Scenario", topo: Topology, dry_run: bool = F
     print(f"  nodes:       {topo.worker_nodes} workers / {topo.dist_nodes} dist{vc_nodes_str} / {topo.coordinator_nodes} coordinators")
     print(f"  network:     {topo.contract_network}")
     print(f"  contract:    {'deploy+init' if topo.deploy_contract else 'use existing'}")
+    print(f"  registry:    init={topo.registry_init} build={topo.registry_build} tag={topo.registry_tag}")
     print(f"  teardown:    {topo.teardown}")
     if topo.benchmark_targets:
         targets = "  ".join(f"{k}<{v}ms" for k, v in topo.benchmark_targets.items())
@@ -1091,12 +1234,13 @@ def cmd_launch(args: argparse.Namespace) -> None:
     topo = scenario.topology
     dry_run = getattr(args, "dry_run", False)
     no_teardown = getattr(args, "no_teardown", False)
+    _apply_registry_overrides(topo, args)
 
     _print_launch_banner(scenario, topo, dry_run)
 
     deployment = None
     if not dry_run:
-        from cli.contract import cmd_deploy_contract, cmd_init_contract
+        from cli.contract import cmd_deploy_contract, cmd_init_contract, cmd_update_contract
         from cli.discovery import discover, is_deployed, wait_for_routes
         from cli.env import build_env
         from cli.infra import (
@@ -1108,6 +1252,10 @@ def cmd_launch(args: argparse.Namespace) -> None:
         )
 
         env = build_env(topo.provider)
+        if topo.registry_init or topo.registry_build:
+            print("\nSetting up container registry...")
+            _setup_registry(topo)
+            env = build_env(topo.provider)
         if not topo.build_images:
             require_runtime_env(env)
 
@@ -1161,6 +1309,18 @@ def cmd_launch(args: argparse.Namespace) -> None:
                 raise SystemExit(f"Launch aborted and infrastructure purged. Original error: {exc}")
         else:
             print(f"Infrastructure already deployed for {topo.provider} — skipping provisioning.")
+            if getattr(args, "update_contract", False):
+                print("\nUpgrading on-chain contract...")
+                from cli.config import CONTRACT_PACKAGE_PATH
+                update_args = argparse.Namespace(
+                    network=topo.contract_network,
+                    package_path=CONTRACT_PACKAGE_PATH,
+                    gas_budget=1_000_000_000,
+                    gas_coins=[],
+                    skip_verify_compatibility=False,
+                )
+                cmd_update_contract(update_args)
+                env = build_env(topo.provider)
 
         deployment = discover(topo.provider)
         print(f"  routes:   {deployment.routes_url}")
