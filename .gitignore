@@ -75,3 +75,4 @@ logs/
 tmp/
 temp/
 .cache/
+*.key
