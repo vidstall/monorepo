@@ -16,7 +16,7 @@ TOPOLOGY = Topology(
     dist_nodes=1,
     vclient_nodes=0,
     coordinator_nodes=1,
-    contract_network="testnet",
+    contract_network="devnet",
     deploy_contract=True,
     teardown=True,
     registry_init=True,
@@ -28,14 +28,20 @@ TOPOLOGY = Topology(
 
 def run(ctx: ScenarioContext) -> None:
     ctx.step("Create per-worker wallets")
-    w1_addr = ctx.create_wallet("worker-1")
-    w2_addr = ctx.create_wallet("worker-2")
-    w3_addr = ctx.create_wallet("worker-3")
-    # Fund each wallet with 0.05 SUI for gas (actual PTB gas usage is 2-5M MIST per call)
-    ctx.fund_wallet(w1_addr, 50_000_000)
-    ctx.fund_wallet(w2_addr, 50_000_000)
-    ctx.fund_wallet(w3_addr, 50_000_000)
-    ctx.log(f"funded: {w1_addr[:12]}…, {w2_addr[:12]}…, {w3_addr[:12]}…")
+    w1_addr, w1_new = ctx.ensure_wallet("worker-1")
+    w2_addr, w2_new = ctx.ensure_wallet("worker-2")
+    w3_addr, w3_new = ctx.ensure_wallet("worker-3")
+    # Fund each wallet with 0.05 SUI for gas only on first creation
+    for addr, is_new, label in [
+        (w1_addr, w1_new, "worker-1"),
+        (w2_addr, w2_new, "worker-2"),
+        (w3_addr, w3_new, "worker-3"),
+    ]:
+        if is_new:
+            ctx.fund_wallet(addr, 50_000_000)
+            ctx.log(f"funded: {addr[:12]}… ({label})")
+        else:
+            ctx.log(f"skipped funding: {addr[:12]}… ({label}, existing wallet)")
 
     ctx.step("Workers come online")
     ctx.add_worker("worker-1", address=w1_addr)

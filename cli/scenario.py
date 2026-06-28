@@ -21,7 +21,7 @@ class Topology:
     dist_nodes: int = 1
     vclient_nodes: int = 0
     coordinator_nodes: int = 1
-    contract_network: str = "testnet"
+    contract_network: str = "devnet"
     provider: str = "alibaba-cloud"
     region: str = "cn-hangzhou"
     instance_type: Optional[str] = None
@@ -205,6 +205,9 @@ class _AsyncBridge:
         self._thread.join(timeout=5)
 
 
+_WALLET_MEMO_PATH = Path(__file__).resolve().parents[1] / "memo" / "wallets.json"
+
+
 class ScenarioContext:
     """Runtime context passed to scenario scripts."""
 
@@ -219,6 +222,24 @@ class ScenarioContext:
         self._track_stops: Dict[str, threading.Event] = {}
         self._track_threads: Dict[str, threading.Thread] = {}
         self._deployment: Any = None
+        self._wallet_memo: Optional[Dict[str, Any]] = None
+
+    def _load_wallet_memo(self) -> Dict[str, Any]:
+        if self._wallet_memo is None:
+            if _WALLET_MEMO_PATH.exists():
+                try:
+                    self._wallet_memo = json.loads(_WALLET_MEMO_PATH.read_text())
+                except Exception:
+                    self._wallet_memo = {}
+            else:
+                self._wallet_memo = {}
+        return self._wallet_memo
+
+    def _save_wallet_memo(self) -> None:
+        if self._wallet_memo is None:
+            return
+        _WALLET_MEMO_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _WALLET_MEMO_PATH.write_text(json.dumps(self._wallet_memo, indent=2))
 
     def set_deployment(self, info: Any) -> None:
         self._deployment = info
@@ -806,16 +827,49 @@ class ScenarioContext:
         if not self.dry_run:
             time.sleep(seconds)
 
+    def ensure_wallet(self, entity_id: str) -> tuple:
+        """Return (address, is_new) for entity_id, creating the wallet only on first use.
+
+        Persists addresses in memo/wallets.json keyed by scenario/network/entity_id so
+        wallets are isolated per network. Use is_new to gate fund_wallet calls.
+        """
+        if self.dry_run:
+            return ("0x" + "00" * 32, True)
+
+        scenario_key = f"{self.report.scenario_name}/{self.topology.contract_network}"
+        memo = self._load_wallet_memo()
+        existing = memo.get(scenario_key, {}).get(entity_id, "")
+        if existing:
+            self.log(f"wallet reused: {existing} ({entity_id})")
+            return (existing, False)
+
+        addr = self._create_new_wallet(entity_id)
+        memo.setdefault(scenario_key, {})[entity_id] = addr
+        self._save_wallet_memo()
+        return (addr, True)
+
     def create_wallet(self, entity_id: str = "") -> str:
-        """Create a new Ed25519 address registered in the Sui client config, return address."""
-        import json as _json
+        """Return a persisted Ed25519 address for entity_id, creating one only on first use.
+
+        Addresses are stored in memo/wallets.json keyed by scenario/network/entity_id so
+        wallets are isolated per network and subsequent runs skip unnecessary funding.
+        Use ensure_wallet() instead if you need to know whether the wallet is newly created.
+        """
+        if self.dry_run:
+            return "0x" + "00" * 32
+
+        if entity_id:
+            addr, _ = self.ensure_wallet(entity_id)
+            return addr
+
+        return self._create_new_wallet(entity_id)
+
+    def _create_new_wallet(self, entity_id: str = "") -> str:
         # sui client new-address registers the key in both the keystore and client.yaml,
         # so sui client switch --address works immediately afterward.
         output = self.sui_cli(["client", "new-address", "ed25519", "--json"], capture=True)
-        if self.dry_run:
-            return "0x" + "00" * 32
         try:
-            data = _json.loads(output or "{}")
+            data = json.loads(output or "{}")
             addr = data.get("address") or data.get("suiAddress") or ""
             if addr:
                 self.log(f"wallet created: {addr}" + (f" ({entity_id})" if entity_id else ""))
@@ -1013,7 +1067,7 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
     if getattr(args, "coordinator_nodes", None) is not None:
         topology.coordinator_nodes = args.coordinator_nodes
     topology.provider = provider
-    topology.contract_network = getattr(args, "contract_network", "testnet")
+    topology.contract_network = getattr(args, "contract_network", "devnet")
 
     print(f"scenario: {scenario.name}")
     print(f"  {scenario.description}")

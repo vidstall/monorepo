@@ -7,7 +7,7 @@ from typing import Dict
 from cli.config import CONTRACT_ENV_DIR, CONTRACT_ENV_FILE, PROVIDER_ENV_FILES, REPO_ROOT
 
 RUNTIME_ENV_FILE = REPO_ROOT / "secrets" / "runtime.env"
-DEFAULT_CONTRACT_NETWORK = "testnet"
+DEFAULT_CONTRACT_NETWORK = "devnet"
 
 
 def load_env_file(path: Path) -> Dict[str, str]:

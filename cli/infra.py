@@ -376,7 +376,7 @@ def cmd_deploy(args: argparse.Namespace) -> None:
         if getattr(args, "deploy_contract", False):
             from cli.contract import cmd_deploy_contract, cmd_init_contract
 
-            contract_network = getattr(args, "contract_network", "testnet")
+            contract_network = getattr(args, "contract_network", "devnet")
             contract_args = argparse.Namespace(
                 network=contract_network,
                 package_path=CONTRACT_PACKAGE_PATH,

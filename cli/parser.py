@@ -49,7 +49,7 @@ def _add_infra_group(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
         default=False,
         help="Publish and initialize the Sui contract before running Ansible",
     )
-    deploy.add_argument("--contract-network", default="testnet", choices=CONTRACT_NETWORK_CHOICES)
+    deploy.add_argument("--contract-network", default="devnet", choices=CONTRACT_NETWORK_CHOICES)
     add_infra_shape(deploy)
     deploy.set_defaults(func=cmd_deploy)
 
@@ -141,11 +141,11 @@ def _add_observe_group(subparsers: argparse._SubParsersAction[argparse.ArgumentP
     observe_sub.required = True
 
     workers = observe_sub.add_parser("workers", help="List registered workers from on-chain registry")
-    workers.add_argument("--network", default="testnet", choices=CONTRACT_NETWORK_CHOICES)
+    workers.add_argument("--network", default="devnet", choices=CONTRACT_NETWORK_CHOICES)
     workers.set_defaults(func=cmd_observe_workers)
 
     rooms = observe_sub.add_parser("rooms", help="Show active room rentals from on-chain registry")
-    rooms.add_argument("--network", default="testnet", choices=CONTRACT_NETWORK_CHOICES)
+    rooms.add_argument("--network", default="devnet", choices=CONTRACT_NETWORK_CHOICES)
     rooms.set_defaults(func=cmd_observe_rooms)
 
     for name, help_text in [
