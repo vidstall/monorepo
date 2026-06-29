@@ -31,17 +31,19 @@ def run(ctx: ScenarioContext) -> None:
     w1_addr, w1_new = ctx.ensure_wallet("worker-1")
     w2_addr, w2_new = ctx.ensure_wallet("worker-2")
     w3_addr, w3_new = ctx.ensure_wallet("worker-3")
-    # Fund each wallet with 0.05 SUI for gas only on first creation
+    # Register-worker PTBs use a 0.1 SUI gas budget, so reused wallets must be
+    # topped up after devnet wipes or prior runs.
     for addr, is_new, label in [
         (w1_addr, w1_new, "worker-1"),
         (w2_addr, w2_new, "worker-2"),
         (w3_addr, w3_new, "worker-3"),
     ]:
-        if is_new:
-            ctx.fund_wallet(addr, 50_000_000)
-            ctx.log(f"funded: {addr[:12]}… ({label})")
-        else:
-            ctx.log(f"skipped funding: {addr[:12]}… ({label}, existing wallet)")
+        ctx.ensure_wallet_funded(
+            addr,
+            min_balance_mist=150_000_000,
+            top_up_mist=200_000_000 if is_new else 150_000_000,
+            label=label,
+        )
 
     ctx.step("Workers come online")
     ctx.add_worker("worker-1", address=w1_addr)

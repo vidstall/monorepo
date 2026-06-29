@@ -2,6 +2,8 @@
 - name: Configure dePIN testbed nodes
   hosts: all
   become: true
+  gather_facts: false
+  strategy: free
   vars:
     # This value is expected to be injected later from the smart-contract folder.
     node_registry_contract_id: "{{ node_registry_contract_id | default(omit) }}"

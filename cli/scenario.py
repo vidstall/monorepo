@@ -888,6 +888,36 @@ class ScenarioContext:
             "--gas-budget", "10000000",
         ])
 
+    def wallet_balance(self, address: str) -> int:
+        """Return the total MIST balance for an address."""
+        if self.dry_run:
+            return 0
+        output = self.sui_cli(["client", "gas", "--json", address], capture=True)
+        try:
+            coins = json.loads(output or "[]")
+        except json.JSONDecodeError:
+            return 0
+        return sum(int(coin.get("mistBalance", 0)) for coin in coins)
+
+    def ensure_wallet_funded(
+        self,
+        address: str,
+        min_balance_mist: int,
+        top_up_mist: int,
+        label: str = "",
+    ) -> None:
+        """Top up an address when it cannot cover scenario PTB gas budgets."""
+        balance = self.wallet_balance(address)
+        if balance >= min_balance_mist:
+            suffix = f" ({label})" if label else ""
+            self.log(f"wallet funded: {address[:12]}... balance={balance} MIST{suffix}")
+            return
+
+        amount = max(top_up_mist, min_balance_mist - balance)
+        self.fund_wallet(address, amount)
+        suffix = f" ({label})" if label else ""
+        self.log(f"funded: {address[:12]}... +{amount} MIST{suffix}")
+
     def sui_cli(self, args: List[str], capture: bool = False, as_address: str = "") -> Optional[str]:
         import shlex
         import subprocess
