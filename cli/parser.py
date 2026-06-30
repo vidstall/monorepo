@@ -5,6 +5,8 @@ from pathlib import Path
 
 from cli.config import CONTRACT_NETWORK_CHOICES, CONTRACT_PACKAGE_PATH, PROVIDER_CHOICES
 from cli.contract import (
+    cmd_contract_status,
+    cmd_contract_wallet,
     cmd_deploy_contract,
     cmd_update_contract,
 )
@@ -96,6 +98,13 @@ def _add_contract_group(subparsers: argparse._SubParsersAction[argparse.Argument
     contract_sub = contract.add_subparsers(dest="subcommand")
     contract_sub.required = True
 
+    status = contract_sub.add_parser("status", help="Show deployed contract status")
+    status.add_argument("--network", choices=CONTRACT_NETWORK_CHOICES)
+    status.set_defaults(func=cmd_contract_status)
+
+    wallet = contract_sub.add_parser("wallet", help="Show local Sui wallets and balances")
+    wallet.add_argument("--network", choices=CONTRACT_NETWORK_CHOICES)
+    wallet.set_defaults(func=cmd_contract_wallet)
 
     deploy = contract_sub.add_parser("deploy", help="Publish the Move package and initialize the registry")
     deploy.add_argument("--network", required=True, choices=CONTRACT_NETWORK_CHOICES)

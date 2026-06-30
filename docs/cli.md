@@ -147,3 +147,25 @@ See [`scenario/README.md`](/scenario/README.md) for the scenario script format a
 | `contract deploy --network <n>` | First-time contract publish and registry init |
 | `contract update --network <n>` | Upgrade existing contract |
 | `run-scenario <script>` | Execute a test scenario |
+
+### `contract status`
+
+Show saved deployment metadata and check whether package/registry objects are reachable through the matching Sui RPC:
+
+```bash
+python3 vidctl.py contract status
+python3 vidctl.py contract status --network testnet
+```
+
+Without `--network`, status is shown for `devnet`, `testnet`, and `mainnet`.
+
+### `contract wallet`
+
+Show local Sui wallet aliases, the active address, and balances from the matching Sui RPC:
+
+```bash
+python3 vidctl.py contract wallet
+python3 vidctl.py contract wallet --network testnet
+```
+
+Without `--network`, balances are shown for `devnet`, `testnet`, and `mainnet`.
