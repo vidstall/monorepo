@@ -14,13 +14,10 @@ from cli.infra import (
     cmd_deploy,
     cmd_inventory,
     cmd_purge,
-    cmd_registry_build,
-    cmd_registry_init,
-    cmd_registry_list,
-    cmd_registry_purge,
 )
+from cli.registry import cmd_registry_init, cmd_registry_list, cmd_registry_purge, cmd_registry_build
 from cli.scenario import cmd_launch
-from cli.status import cmd_infra_status, cmd_status
+from cli.observe import cmd_infra_status, cmd_status
 
 
 def add_infra_shape(parser: argparse.ArgumentParser) -> None:

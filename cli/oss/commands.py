@@ -4,13 +4,13 @@ import argparse
 import mimetypes
 import os
 import subprocess
-import time
 from pathlib import Path
 from typing import Mapping
 
 from cli.config import PROVIDER_ENV_FILES, REPO_ROOT
 from cli.env import build_contract_env, build_env
-from cli.infra import _update_env_file
+from cli.infra.inventory import _update_env_file
+from cli.oss.cert import _bind_domain_https, _letsencrypt_https
 
 _OSS_ENDPOINT = "https://oss-{region}.aliyuncs.com"
 _OSS_PROVIDERS = {"alibaba-cloud"}
@@ -24,18 +24,6 @@ def _require_oss2():
         raise SystemExit("oss2 not installed. Run: pip install oss2")
 
 
-def _require_acme_deps():
-    try:
-        import acme  # noqa: F401
-        import josepy  # noqa: F401
-        from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: F401
-    except ImportError:
-        raise SystemExit(
-            "HTTPS cert dependencies not installed.\n"
-            "Run: pip install acme josepy cryptography"
-        )
-
-
 def _bucket_client(env: Mapping[str, str], bucket_name: str):
     oss2 = _require_oss2()
     region = env.get("ALICLOUD_REGION", "cn-hangzhou")
@@ -46,94 +34,6 @@ def _bucket_client(env: Mapping[str, str], bucket_name: str):
 
 def _cloud_env_path(provider: str) -> Path:
     return REPO_ROOT / "secrets" / "cloud" / PROVIDER_ENV_FILES[provider]
-
-
-def _letsencrypt_https(bucket, domain: str) -> tuple[str, str]:
-    """
-    Obtain a Let's Encrypt cert for `domain` via HTTP-01 challenge.
-    The challenge file is uploaded to the OSS bucket (which serves it via the CNAME).
-    Returns (fullchain_pem, private_key_pem).
-    """
-    _require_acme_deps()
-
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-    from cryptography.hazmat.backends import default_backend
-    from acme import client as acme_client_lib, challenges, messages, crypto_util
-    import josepy as jose
-
-    print(f"  generating account key ...")
-    account_key_rsa = rsa.generate_private_key(65537, 2048, default_backend())
-    account_key_pem = account_key_rsa.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.TraditionalOpenSSL,
-        serialization.NoEncryption(),
-    )
-    jwk = jose.JWKRSA(key=account_key_rsa)
-
-    print(f"  connecting to Let's Encrypt ...")
-    net = acme_client_lib.ClientNetwork(jwk, user_agent="vidctl/1.0")
-    directory = acme_client_lib.ClientV2.get_directory(
-        "https://acme-v02.api.letsencrypt.org/directory", net
-    )
-    acme = acme_client_lib.ClientV2(directory, net)
-    acme.new_account(
-        messages.NewRegistration.from_data(terms_of_service_agreed=True)
-    )
-
-    print(f"  generating domain key ...")
-    domain_key_rsa = rsa.generate_private_key(65537, 2048, default_backend())
-    domain_key_pem = domain_key_rsa.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.TraditionalOpenSSL,
-        serialization.NoEncryption(),
-    )
-
-    csr_pem = crypto_util.make_csr(domain_key_pem, [domain])
-    orderr = acme.new_order(csr_pem)
-
-    http_chall = None
-    for authz in orderr.authorizations:
-        for ch in authz.body.challenges:
-            if isinstance(ch.chall, challenges.HTTP01):
-                http_chall = ch
-                break
-        if http_chall:
-            break
-
-    if not http_chall:
-        raise SystemExit("No HTTP-01 challenge available from Let's Encrypt for this domain.")
-
-    chall_key = http_chall.chall.path.lstrip("/")  # .well-known/acme-challenge/TOKEN
-    chall_response = http_chall.response(jwk)
-    bucket.put_object(
-        chall_key,
-        chall_response.key_authorization.encode(),
-        headers={"Content-Type": "text/plain"},
-    )
-    print(f"  uploaded challenge: /{chall_key}")
-
-    acme.answer_challenge(http_chall, chall_response)
-    print(f"  waiting for Let's Encrypt to validate {domain} ...")
-    finalized = acme.poll_and_finalize(orderr)
-
-    try:
-        bucket.delete_object(chall_key)
-    except Exception:
-        pass
-
-    print(f"  certificate issued")
-    return finalized.fullchain_pem, domain_key_pem.decode()
-
-
-def _bind_domain_https(bucket, oss2, domain: str, cert_pem: str, key_pem: str) -> None:
-    cert_config = oss2.models.CertificateConfig(
-        certificate=cert_pem,
-        private_key=key_pem,
-        force=True,
-    )
-    request = oss2.models.PutBucketCnameRequest(domain, cert_config)
-    bucket.put_bucket_cname(request)
 
 
 def cmd_oss_init(args: argparse.Namespace) -> None:

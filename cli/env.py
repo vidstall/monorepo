@@ -6,6 +6,29 @@ from typing import Dict
 
 from cli.config import CONTRACT_ENV_DIR, CONTRACT_ENV_FILE, PROVIDER_ENV_FILES, REPO_ROOT
 
+
+def update_env_file(path: Path, updates: Dict[str, str]) -> None:
+    existing: Dict[str, str] = {}
+    if path.exists():
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
+            if "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            val = val.strip()
+            if val and val[0] in {'"', "'"} and val[-1] == val[0]:
+                val = val[1:-1]
+            existing[key] = val
+    existing.update(updates)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(f"{k}={v}" for k, v in existing.items()) + "\n", encoding="utf-8")
+    os.chmod(path, 0o600)
+
 RUNTIME_ENV_FILE = REPO_ROOT / "secrets" / "runtime.env"
 DEFAULT_CONTRACT_NETWORK = "devnet"
 
