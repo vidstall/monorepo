@@ -1,4 +1,4 @@
-import { getRoutesEndpoint } from "@/lib/client-utils";
+import { getRoutesEndpointAsync } from "@/lib/client-utils";
 
 export type ContractConfig = {
   network: string;
@@ -33,7 +33,8 @@ async function readError(response: Response): Promise<string> {
 }
 
 export async function fetchContractConfig(): Promise<ContractConfig> {
-  const response = await fetch(`${getRoutesEndpoint()}/contract/config`);
+  const routesEndpoint = await getRoutesEndpointAsync();
+  const response = await fetch(`${routesEndpoint}/contract/config`);
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
 }
@@ -42,8 +43,9 @@ export async function createContractTransaction(
   action: ContractTransactionAction,
   payload: Record<string, unknown>,
 ): Promise<ContractTransactionResponse> {
+  const routesEndpoint = await getRoutesEndpointAsync();
   const response = await fetch(
-    `${getRoutesEndpoint()}/contract/transactions/${action}`,
+    `${routesEndpoint}/contract/transactions/${action}`,
     {
       method: "POST",
       headers: {

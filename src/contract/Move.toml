@@ -6,4 +6,4 @@ license = "MIT"
 [dependencies]
 
 [environments]
-devnet = "80d3582e"
+devnet = "b696f95e"

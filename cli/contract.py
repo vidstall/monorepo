@@ -27,6 +27,70 @@ def _one_line(value: str) -> str:
     return " ".join(value.split())
 
 
+def _fetch_chain_id(network: str) -> str | None:
+    try:
+        data = _rpc_request(network, "sui_getChainIdentifier", [])
+        return data.get("result")
+    except Exception:
+        return None
+
+
+def _clear_published_toml_entry(package_path: Path, network: str) -> None:
+    published_toml = package_path / "Published.toml"
+    if not published_toml.exists():
+        return
+
+    target_section = f"[published.{network}]"
+    lines = published_toml.read_text(encoding="utf-8").splitlines(keepends=True)
+    out: list[str] = []
+    skip = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped == target_section:
+            skip = True
+            continue
+        if skip and stripped.startswith("["):
+            skip = False
+        if not skip:
+            out.append(line)
+
+    if len(out) != len(lines):
+        published_toml.write_text("".join(out), encoding="utf-8")
+        print(f"Cleared Published.toml [published.{network}] entry for re-publish.")
+
+
+def _sync_move_toml_chain_id(package_path: Path, network: str) -> None:
+    move_toml = package_path / "Move.toml"
+    if not move_toml.exists():
+        return
+
+    chain_id = _fetch_chain_id(network)
+    if not chain_id:
+        return
+
+    content = move_toml.read_text(encoding="utf-8")
+    pattern = re.compile(
+        rf'^({re.escape(network)}\s*=\s*")[0-9a-fA-F]+(")$',
+        re.MULTILINE,
+    )
+    match = pattern.search(content)
+    if match:
+        existing = match.group(0).split('"')[1]
+        if existing == chain_id:
+            return
+        updated = pattern.sub(rf'\g<1>{chain_id}\g<2>', content)
+        move_toml.write_text(updated, encoding="utf-8")
+        print(f"Updated Move.toml {network} chain ID: {existing} → {chain_id}")
+    else:
+        # Network not in [environments] yet — append it
+        if "[environments]" in content:
+            updated = content.rstrip() + f'\n{network} = "{chain_id}"\n'
+        else:
+            updated = content.rstrip() + f'\n\n[environments]\n{network} = "{chain_id}"\n'
+        move_toml.write_text(updated, encoding="utf-8")
+        print(f"Added Move.toml {network} chain ID: {chain_id}")
+
+
 def parse_simple_toml_value(value: str) -> str:
     value = value.strip()
     if value and value[0] in {'"', "'"} and value[-1] == value[0]:
@@ -485,18 +549,42 @@ def cmd_contract_wallet(args: argparse.Namespace) -> None:
         _print_wallet_status(network, active_address, addresses)
 
 
+def cmd_set_coordinator_endpoint(network: str, package_id: str, registry_id: str, endpoint: str) -> None:
+    env = build_contract_env(network)
+    endpoint_hex = "0x" + endpoint.encode().hex()
+    run_command(
+        [
+            "sui", "client", "call",
+            "--package", package_id,
+            "--module", "node_registry",
+            "--function", "set_coordinator_endpoint",
+            "--args", registry_id, endpoint_hex,
+            "--gas-budget", "100000000",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+    )
+    print(f"coordinator_endpoint set on-chain → {endpoint}")
+
+
 def cmd_deploy_contract(args: argparse.Namespace) -> None:
     if not args.package_path.exists():
         raise SystemExit(f"Missing contract package path: {args.package_path}")
 
     env = build_contract_env(args.network)
 
-    if env.get("CONTRACT_PACKAGE_ID"):
+    if env.get("CONTRACT_PACKAGE_ID") and not getattr(args, "force", False):
         print(f"Contract already published to {args.network} (package {env['CONTRACT_PACKAGE_ID']}). Skipping publish.")
         _init_contract(args)
         return
+    if env.get("CONTRACT_PACKAGE_ID") and getattr(args, "force", False):
+        print(f"--force: re-publishing contract on {args.network} (clearing existing package {env['CONTRACT_PACKAGE_ID']}).")
     print(f"Switching Sui CLI to {args.network}...")
     run_command(["sui", "client", "switch", "--env", args.network], cwd=REPO_ROOT, env=env)
+
+    _sync_move_toml_chain_id(args.package_path, args.network)
+    if getattr(args, "force", False):
+        _clear_published_toml_entry(args.package_path, args.network)
 
     print(f"Building Move package at {args.package_path} for {args.network}...")
     run_command(
@@ -610,9 +698,11 @@ def cmd_update_contract(args: argparse.Namespace) -> None:
 def _init_contract(args: argparse.Namespace) -> None:
     env = build_contract_env(args.network)
 
-    if env.get("CONTRACT_REGISTRY_OBJECT_ID"):
+    if env.get("CONTRACT_REGISTRY_OBJECT_ID") and not getattr(args, "force", False):
         print(f"Registry already initialized on {args.network} (object {env['CONTRACT_REGISTRY_OBJECT_ID']}). Skipping init.")
         return
+    if env.get("CONTRACT_REGISTRY_OBJECT_ID") and getattr(args, "force", False):
+        print(f"--force: re-initializing registry on {args.network} (replacing {env['CONTRACT_REGISTRY_OBJECT_ID']}).")
 
     metadata = merge_published_fallback(env, args.package_path, args.network)
     package_id = metadata.get("CONTRACT_PACKAGE_ID")

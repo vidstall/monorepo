@@ -62,6 +62,7 @@ public struct Registry<phantom T> has key {
     next_role_proposal_id: u64,
     role_proposals: Table<u64, RoleProposal>,
     role_map: Table<u64, u8>,
+    coordinator_endpoint: vector<u8>,
 }
 
 public struct WorkerRecord<phantom T> has store {
@@ -1033,6 +1034,18 @@ public fun role_proposal_exists<T>(registry: &Registry<T>, proposal_id: u64): bo
     table::contains(&registry.role_proposals, proposal_id)
 }
 
+public entry fun set_coordinator_endpoint<T>(
+    registry: &mut Registry<T>,
+    endpoint: vector<u8>,
+    _ctx: &mut TxContext,
+) {
+    registry.coordinator_endpoint = endpoint;
+}
+
+public fun coordinator_endpoint<T>(registry: &Registry<T>): vector<u8> {
+    registry.coordinator_endpoint
+}
+
 // ── Internal helpers ────────────────────────────────────────────────
 
 fun new_registry<T>(ctx: &mut TxContext): Registry<T> {
@@ -1049,6 +1062,7 @@ fun new_registry<T>(ctx: &mut TxContext): Registry<T> {
         next_role_proposal_id: 1,
         role_proposals: table::new(ctx),
         role_map: table::new(ctx),
+        coordinator_endpoint: vector[],
     }
 }
 
@@ -1111,6 +1125,7 @@ public fun destroy_registry_for_testing<T>(registry: Registry<T>) {
         next_role_proposal_id: _,
         role_proposals,
         role_map,
+        coordinator_endpoint: _,
     } = registry;
     id.delete();
     workers.destroy_empty();

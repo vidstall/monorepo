@@ -55,6 +55,14 @@ def _add_infra_group(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
         help="Publish and initialize the Sui contract before running Ansible",
     )
     deploy.add_argument("--contract-network", default="devnet", choices=CONTRACT_NETWORK_CHOICES)
+    deploy.add_argument(
+        "--client-oss",
+        action="store_true",
+        default=False,
+        help="Host frontend on object storage: init bucket, build static client, upload, skip client container on dist nodes",
+    )
+    deploy.add_argument("--oss-bucket", default=None, help="OSS bucket name (required with --client-oss)")
+    deploy.add_argument("--oss-domain", default=None, dest="oss_domain", help="Custom domain to bind to the OSS bucket with auto HTTPS (e.g. thesis.rotexai.com)")
     add_infra_shape(deploy)
     deploy.set_defaults(func=cmd_deploy)
 
@@ -111,6 +119,7 @@ def _add_contract_group(subparsers: argparse._SubParsersAction[argparse.Argument
     deploy.add_argument("--package-path", type=Path, default=CONTRACT_PACKAGE_PATH)
     deploy.add_argument("--gas-budget", type=int, default=500_000_000)
     deploy.add_argument("--gas-coin", dest="gas_coins", action="append", default=[], help="Explicit gas coin object ID; repeatable.")
+    deploy.add_argument("--force", action="store_true", default=False, help="Re-publish and re-initialize even if CONTRACT_PACKAGE_ID or CONTRACT_REGISTRY_OBJECT_ID are already set (use after a devnet reset).")
     deploy.set_defaults(func=cmd_deploy_contract)
 
     update = contract_sub.add_parser("update", help="Upgrade an existing published package")

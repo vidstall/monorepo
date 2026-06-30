@@ -1,38 +1,36 @@
+'use client';
+
 import * as React from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import { PageClientImpl } from './PageClientImpl';
 import { isVideoCodec } from '@/lib/types';
 
-export default async function Page({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ roomName: string }>;
-  searchParams: Promise<{
-    // FIXME: We should not allow values for regions if in playground mode.
-    region?: string;
-    hq?: string;
-    codec?: string;
-    singlePC?: string;
-    rentalId?: string;
-  }>;
-}) {
-  const _params = await params;
-  const _searchParams = await searchParams;
+function RoomPage() {
+  const params = useParams<{ roomName: string }>();
+  const searchParams = useSearchParams();
+
+  const codecParam = searchParams.get('codec') ?? undefined;
   const codec =
-    typeof _searchParams.codec === 'string' && isVideoCodec(_searchParams.codec)
-      ? _searchParams.codec
-      : 'vp9';
-  const hq = _searchParams.hq === 'true' ? true : false;
-  const singlePC = _searchParams.singlePC !== 'false';
+    typeof codecParam === 'string' && isVideoCodec(codecParam) ? codecParam : 'vp9';
+  const hq = searchParams.get('hq') === 'true';
+  const singlePC = searchParams.get('singlePC') !== 'false';
 
   return (
     <PageClientImpl
-      roomName={_params.roomName}
-      region={_searchParams.region}
-      rentalId={_searchParams.rentalId}
+      roomName={params.roomName}
+      region={searchParams.get('region') ?? undefined}
+      rentalId={searchParams.get('rentalId') ?? undefined}
       hq={hq}
       codec={codec}
       singlePeerConnection={singlePC}
     />
+  );
+}
+
+export default function Page() {
+  return (
+    <React.Suspense>
+      <RoomPage />
+    </React.Suspense>
   );
 }

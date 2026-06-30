@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { createContractTransaction, fetchContractConfig } from "@/lib/contract-api";
+import { createContractTransaction } from "@/lib/contract-api";
 import { dAppKit } from "@/lib/sui-dapp-kit";
 import styles from "../styles/Home.module.css";
 
@@ -14,13 +14,13 @@ const ContractPanel = dynamic(() => import("./ContractPanel"), { ssr: false });
 
 const showSettings = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU === "true";
 
-const CONTRACT_NETWORK = (process.env.NEXT_PUBLIC_CONTRACT_NETWORK ?? "testnet") as "testnet" | "devnet" | "mainnet";
-
 const GRPC_URLS = {
   devnet: "https://fullnode.devnet.sui.io:443",
   testnet: "https://fullnode.testnet.sui.io:443",
   mainnet: "https://fullnode.mainnet.sui.io:443",
 } as const;
+
+type ContractNetwork = keyof typeof GRPC_URLS;
 
 type RegistryStats = {
   nodeCount: bigint;
@@ -32,24 +32,20 @@ type RegistryStats = {
 };
 
 async function fetchRegistryStats(): Promise<RegistryStats> {
-  const config = await fetchContractConfig();
-  const network = (config.network ?? CONTRACT_NETWORK) as "testnet" | "devnet" | "mainnet";
-  const client = new SuiGrpcClient({
-    network,
-    baseUrl: GRPC_URLS[network],
-  });
-  const obj = await client.getObject({
-    objectId: config.registryObjectId,
-    include: { json: true },
-  });
-  const fields = obj.object.json as Record<string, string> | null;
+  const network = (process.env.NEXT_PUBLIC_SUI_NETWORK ?? "devnet") as ContractNetwork;
+  const registryObjectId = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID ?? "";
+  if (!registryObjectId) throw new Error("NEXT_PUBLIC_REGISTRY_OBJECT_ID not set");
+  if (!(network in GRPC_URLS)) throw new Error(`Unsupported contract network: ${network}`);
+  const client = new SuiGrpcClient({ network, baseUrl: GRPC_URLS[network] });
+  const obj = await client.getObject({ objectId: registryObjectId, include: { json: true } });
+  const fields = (obj.object as { json?: Record<string, string> } | null)?.json ?? null;
   if (!fields) throw new Error("Registry object not found on-chain");
   return {
     nodeCount: BigInt(fields.node_count ?? 0),
     activeWorkerCount: BigInt(fields.active_worker_count ?? 0),
     nextRentalId: BigInt(fields.next_rental_id ?? 0),
-    packageId: config.packageId,
-    registryObjectId: config.registryObjectId,
+    packageId: process.env.NEXT_PUBLIC_PACKAGE_ID ?? "",
+    registryObjectId,
     network,
   };
 }
@@ -92,8 +88,8 @@ function ContractStatusCard() {
 
           <div className={styles.statusRow}>
             <span className={styles.statusKey}>network</span>
-            <span className={styles.networkBadge} data-network={stats?.network ?? CONTRACT_NETWORK}>
-              {stats?.network ?? CONTRACT_NETWORK}
+            <span className={styles.networkBadge} data-network={stats?.network ?? "unknown"}>
+              {stats?.network ?? (loading ? "loading" : "unavailable")}
             </span>
           </div>
 

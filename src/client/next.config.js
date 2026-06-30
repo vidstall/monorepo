@@ -2,9 +2,11 @@
 const nextConfig = {
   reactStrictMode: false,
   productionBrowserSourceMaps: true,
-  output: 'standalone',
+  output: 'export',
+  trailingSlash: true,
   images: {
     formats: ['image/webp'],
+    unoptimized: true,
   },
   webpack: (config, { buildId, dev, isServer, defaultLoaders, nextRuntime, webpack }) => {
     // Important: return the modified config
@@ -15,23 +17,6 @@ const nextConfig = {
     });
 
     return config;
-  },
-  headers: async () => {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'Cross-Origin-Opener-Policy',
-            value: 'same-origin-allow-popups',
-          },
-          {
-            key: 'Cross-Origin-Embedder-Policy',
-            value: 'credentialless',
-          },
-        ],
-      },
-    ];
   },
 };
 

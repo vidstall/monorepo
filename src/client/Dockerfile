@@ -13,13 +13,7 @@ ARG NEXT_PUBLIC_ROUTES_URL=/api
 ENV NEXT_PUBLIC_ROUTES_URL=$NEXT_PUBLIC_ROUTES_URL
 RUN pnpm build
 
-FROM node:22-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-ENV HOSTNAME=0.0.0.0
-ENV PORT=3000
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/.next/standalone ./
+FROM caddy:2-alpine AS runner
+COPY --from=builder /app/out /srv
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["caddy", "file-server", "--root", "/srv", "--listen", ":3000"]

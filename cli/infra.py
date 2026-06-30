@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Mapping
 
 from cli.config import ANSIBLE_PLAYBOOK, CONTRACT_PACKAGE_PATH, IMAGE_SERVICES, PROVIDER_CHOICES, PROVIDER_CR_REGISTRY_KEY, PROVIDER_ENV_FILES, REPO_ROOT, SSH_CONFIG_DIR, TERRAFORM_ENV_DIR, TERRAFORM_REGISTRY_DIR
-from cli.env import build_env
+from cli.env import build_contract_env, build_env
 from cli.process import run_command
 
 SSH_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -299,6 +299,7 @@ def ansible_extra_vars(
     outputs: Mapping[str, object],
     env: Mapping[str, str],
     node_registry_contract_id: str | None = None,
+    client_oss: bool = False,
 ) -> Dict[str, object]:
     require_runtime_env(env)
     inventory_data = terraform_value(outputs, "inventory")
@@ -320,6 +321,7 @@ def ansible_extra_vars(
         values["coordinator_private_ip"] = ""
         values["redis_address"] = ""
     values["dist_url"] = f"http://{dist['public_ip']}" if dist else ""
+    values["client_oss"] = client_oss
     return values
 
 
@@ -329,11 +331,12 @@ def render_ansible_vars(
     env: Mapping[str, str],
     node_registry_contract_id: str | None = None,
     output_dir: Path = SSH_CONFIG_DIR,
+    client_oss: bool = False,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     vars_path = output_dir / f"{provider}-vars.json"
     vars_path.write_text(
-        json.dumps(ansible_extra_vars(outputs, env, node_registry_contract_id), indent=2, sort_keys=True) + "\n",
+        json.dumps(ansible_extra_vars(outputs, env, node_registry_contract_id, client_oss=client_oss), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     os.chmod(vars_path, 0o600)
@@ -386,10 +389,31 @@ def cmd_deploy(args: argparse.Namespace) -> None:
             cmd_deploy_contract(contract_args)
             env = build_env(args.provider)
 
+        if getattr(args, "client_oss", False) and getattr(args, "oss_bucket", None):
+            from cli.oss import cmd_oss_init, cmd_oss_deploy
+            cmd_oss_init(args)
+            cmd_oss_deploy(args)
+            env = build_env(args.provider)
+
         outputs = terraform_output(args.provider, env)
         inventory_path = render_inventory(args.provider, outputs)
-        vars_path = render_ansible_vars(args.provider, outputs, env, args.node_registry_contract_id)
+        vars_path = render_ansible_vars(
+            args.provider, outputs, env, args.node_registry_contract_id,
+            client_oss=getattr(args, "client_oss", False),
+        )
         ansible_playbook(inventory_path, vars_path, env)
+
+        contract_network = getattr(args, "contract_network", "devnet")
+        contract_env = build_contract_env(contract_network)
+        pkg_id = contract_env.get("CONTRACT_PACKAGE_ID", "").strip()
+        reg_id = contract_env.get("CONTRACT_REGISTRY_OBJECT_ID", "").strip()
+        if pkg_id and reg_id:
+            inv_data = terraform_value(outputs, "inventory")
+            dist_hosts = normalize_role_hosts(inv_data, "dist")
+            if dist_hosts:
+                dist_ip = dist_hosts[0]["ansible_host"]
+                from cli.contract import cmd_set_coordinator_endpoint
+                cmd_set_coordinator_endpoint(contract_network, pkg_id, reg_id, f"http://{dist_ip}/api")
     except Exception as exc:
         print(f"\n[atomic] step failed — purging infrastructure to avoid partial state...")
         try:
@@ -627,6 +651,13 @@ def cmd_purge(args: argparse.Namespace) -> None:
             destroy_registry(provider, env)
         except subprocess.CalledProcessError:
             print(f"  registry destroy failed for {provider}, cleaning up anyway")
+        print("Destroying OSS bucket (if configured)...")
+        try:
+            from cli.oss import cmd_oss_purge
+            oss_args = argparse.Namespace(provider=provider, oss_bucket=None)
+            cmd_oss_purge(oss_args)
+        except Exception as oss_exc:
+            print(f"  OSS purge skipped: {oss_exc}")
         print("Cleaning artifacts...")
         cleanup_provider_artifacts(provider)
         print("Cleaning Terraform local state...")
