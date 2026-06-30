@@ -1326,7 +1326,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
 
     deployment = None
     if not dry_run:
-        from cli.contract import cmd_deploy_contract, cmd_init_contract, cmd_update_contract
+        from cli.contract import cmd_deploy_contract, cmd_update_contract
         from cli.discovery import discover, is_deployed, wait_for_routes
         from cli.env import build_env
         from cli.infra import (
@@ -1375,11 +1375,10 @@ def cmd_launch(args: argparse.Namespace) -> None:
                         network=topo.contract_network,
                         package_path=CONTRACT_PACKAGE_PATH,
                         gas_budget=1_000_000_000,
-                        gas_coins=[],
-                    )
-                    cmd_deploy_contract(contract_args)
-                    cmd_init_contract(contract_args)
-                    env = build_env(topo.provider)
+                    gas_coins=[],
+                )
+                cmd_deploy_contract(contract_args)
+                env = build_env(topo.provider)
 
                 outputs = terraform_output(topo.provider, env)
                 inventory_path = render_inventory(topo.provider, outputs)

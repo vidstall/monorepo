@@ -4,7 +4,10 @@ import argparse
 from pathlib import Path
 
 from cli.config import CONTRACT_NETWORK_CHOICES, CONTRACT_PACKAGE_PATH, PROVIDER_CHOICES
-from cli.contract import cmd_deploy_contract, cmd_init_contract, cmd_update_contract
+from cli.contract import (
+    cmd_deploy_contract,
+    cmd_update_contract,
+)
 from cli.infra import (
     cmd_deploy,
     cmd_inventory,
@@ -93,19 +96,13 @@ def _add_contract_group(subparsers: argparse._SubParsersAction[argparse.Argument
     contract_sub = contract.add_subparsers(dest="subcommand")
     contract_sub.required = True
 
-    deploy = contract_sub.add_parser("deploy", help="Publish the Move package to the Sui network")
+
+    deploy = contract_sub.add_parser("deploy", help="Publish the Move package and initialize the registry")
     deploy.add_argument("--network", required=True, choices=CONTRACT_NETWORK_CHOICES)
     deploy.add_argument("--package-path", type=Path, default=CONTRACT_PACKAGE_PATH)
     deploy.add_argument("--gas-budget", type=int, default=500_000_000)
     deploy.add_argument("--gas-coin", dest="gas_coins", action="append", default=[], help="Explicit gas coin object ID; repeatable.")
     deploy.set_defaults(func=cmd_deploy_contract)
-
-    init = contract_sub.add_parser("init", help="Initialize registry object for a published package")
-    init.add_argument("--network", required=True, choices=CONTRACT_NETWORK_CHOICES)
-    init.add_argument("--package-path", type=Path, default=CONTRACT_PACKAGE_PATH)
-    init.add_argument("--gas-budget", type=int, default=100_000_000)
-    init.add_argument("--gas-coin", dest="gas_coins", action="append", default=[], help="Explicit gas coin object ID; repeatable.")
-    init.set_defaults(func=cmd_init_contract)
 
     update = contract_sub.add_parser("update", help="Upgrade an existing published package")
     update.add_argument("--network", required=True, choices=CONTRACT_NETWORK_CHOICES)

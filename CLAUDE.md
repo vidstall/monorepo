@@ -18,7 +18,7 @@ The codebase has two layers:
 - `src/client/` — Browser frontend (Next.js on port 3000, pnpm). LiveKit React components, Sui dApp wallet integration (`@mysten/dapp-kit-react`), Krisp noise filter.
 
 **Operations layer**:
-- `cli/` — Python CLI modules backing `vidctl.py`. Subcommands: deploy, destroy, inventory, deploy-contract, init-contract, update-contract, run-scenario.
+- `cli/` — Python CLI modules backing `vidctl.py`. Subcommands: deploy, destroy, inventory, contract deploy, contract update, contract status, contract wallet, run-scenario.
 - `IaC/terraform/` — Provider environments (aws, digital-ocean, hetzner, alibaba-cloud) with shared `modules/node_pool`.
 - `IaC/ansible/` — Post-provision configuration. Roles: worker, client, coordinator. Single playbook `playbooks/site.yml`.
 - `scenario/` — Executable test scenarios with per-entity benchmarking. Each script defines `NAME`, `DESCRIPTION`, `TOPOLOGY`, and a `run(ctx: ScenarioContext)` function.
@@ -30,9 +30,8 @@ The codebase has two layers:
 python3 vidctl.py deploy --provider aws --worker-nodes 1 --coordinator-nodes 1
 python3 vidctl.py destroy --provider aws
 python3 vidctl.py inventory --provider aws
-python3 vidctl.py deploy-contract --network testnet
-python3 vidctl.py update-contract --network testnet
-python3 vidctl.py init-contract --network testnet
+python3 vidctl.py contract deploy --network testnet
+python3 vidctl.py contract update --network testnet
 
 # Deploy infra + contract together
 python3 vidctl.py deploy --provider alibaba-cloud --worker-nodes 3 --coordinator-nodes 1 \
@@ -93,7 +92,7 @@ cd IaC/terraform/environments/<provider> && terraform init && terraform plan
 
 - The deployment pipeline is: Terraform provisions → generates SSH material/inventory → Ansible installs Docker and runs role containers.
 - `vidctl.py` is the single entrypoint that sequences Terraform and Ansible steps.
-- Contract lifecycle: `deploy-contract` (first publish) → `init-contract` (create shared Registry object) → `update-contract` (upgrades). Metadata is persisted in `secrets/contract/<network>.env`.
+- Contract lifecycle: `contract deploy` (publish package and create shared Registry object) → `contract update` (upgrades). Metadata is persisted in `secrets/contract/<network>.env`.
 - Each runtime service has its own Dockerfile for containerized deployment.
 - The `routes` service reads contract env files to expose public contract config and build wallet-signed Sui transaction bytes for the client.
 - Scenario scripts in `scenario/` use the `ScenarioContext` API from `cli/scenario.py` for worker/client lifecycle operations and per-entity benchmarking. See `scenario/README.md` for the full API.

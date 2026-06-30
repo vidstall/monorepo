@@ -169,9 +169,8 @@ Destroys all Terraform-managed resources and cleans up local artifacts.
 
 | Command | Purpose |
 |---|---|
-| `deploy-contract --network testnet` | First-time publish of Move package |
-| `update-contract --network testnet` | Upgrade existing package |
-| `init-contract --network testnet` | Create shared Registry object |
+| `contract deploy --network testnet` | First-time publish of Move package and Registry init |
+| `contract update --network testnet` | Upgrade existing package |
 
 ### Credentials
 

@@ -374,7 +374,7 @@ def cmd_deploy(args: argparse.Namespace) -> None:
 
     try:
         if getattr(args, "deploy_contract", False):
-            from cli.contract import cmd_deploy_contract, cmd_init_contract
+            from cli.contract import cmd_deploy_contract
 
             contract_network = getattr(args, "contract_network", "devnet")
             contract_args = argparse.Namespace(
@@ -384,7 +384,6 @@ def cmd_deploy(args: argparse.Namespace) -> None:
                 gas_coins=[],
             )
             cmd_deploy_contract(contract_args)
-            cmd_init_contract(contract_args)
             env = build_env(args.provider)
 
         outputs = terraform_output(args.provider, env)

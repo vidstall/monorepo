@@ -49,7 +49,7 @@ Optional variables with defaults:
 
 ### Contract metadata
 
-Contract deployment metadata is auto-generated in `secrets/contract/<network>.env` by `deploy-contract` and `init-contract`. The routes service reads this file to expose public contract config and build wallet-signed Sui transaction bytes.
+Contract deployment metadata is auto-generated in `secrets/contract/<network>.env` by `contract deploy`. The routes service reads this file to expose public contract config and build wallet-signed Sui transaction bytes.
 
 ## Commands
 
@@ -90,35 +90,27 @@ Render the transient Ansible inventory from Terraform output without running Ans
 python3 vidctl.py inventory --provider alibaba-cloud
 ```
 
-### `deploy-contract`
+### `contract deploy`
 
-Publish `src/contract` to a new Sui package on `devnet`, `testnet`, or `mainnet`:
+Publish `src/contract` to a new Sui package and create the shared `Registry<0x2::sui::SUI>` object on `devnet`, `testnet`, or `mainnet`:
 
 ```bash
-python3 vidctl.py deploy-contract --network testnet
+python3 vidctl.py contract deploy --network testnet
 ```
 
-Use this for first-time deployment only. On success, writes package, upgrade cap, gas object, deployer, and publish digest metadata into `secrets/contract/<network>.env`.
+On success, writes package, registry object, upgrade cap, gas object, deployer, and publish digest metadata into `secrets/contract/<network>.env`.
 
-### `update-contract`
+If the package already exists in the env file, `contract deploy` skips publishing and still ensures the registry is initialized.
+
+### `contract update`
 
 Upgrade an existing published package using the stored `CONTRACT_UPGRADE_CAP_ID`:
 
 ```bash
-python3 vidctl.py update-contract --network testnet
+python3 vidctl.py contract update --network testnet
 ```
 
-Use `--skip-verify-compatibility` when upgrading with struct layout changes (e.g., after adding voting fields).
-
-### `init-contract`
-
-Create the shared `Registry<0x2::sui::SUI>` object for a published package:
-
-```bash
-python3 vidctl.py init-contract --network testnet
-```
-
-Run this after first-time `deploy-contract`.
+Use `--skip-verify-compatibility` when upgrading with struct layout changes.
 
 ### `run-scenario`
 
@@ -152,7 +144,6 @@ See [`scenario/README.md`](/scenario/README.md) for the scenario script format a
 | `deploy --provider <p> --deploy-contract` | Provision infra, deploy contract, configure nodes |
 | `destroy --provider <p>` | Tear down infra |
 | `inventory --provider <p>` | Render Ansible inventory only |
-| `deploy-contract --network <n>` | First-time contract publish |
-| `update-contract --network <n>` | Upgrade existing contract |
-| `init-contract --network <n>` | Create shared Registry object |
+| `contract deploy --network <n>` | First-time contract publish and registry init |
+| `contract update --network <n>` | Upgrade existing contract |
 | `run-scenario <script>` | Execute a test scenario |
