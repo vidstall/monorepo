@@ -203,6 +203,46 @@
   background: rgba(62, 207, 142, 0.12);
 }
 
+/* ── Worker list card ── */
+
+.workerRows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.workerRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.workerRole {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--xai-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--xai-border);
+  border-radius: 3px;
+  padding: 0.15rem 0.4rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.workerUrl {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  color: var(--xai-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
 /* skeleton pulse */
 .skeleton {
   height: 0.7rem;

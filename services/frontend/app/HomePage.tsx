@@ -8,6 +8,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { createContractTransaction } from "@/lib/contract-api";
 import { dAppKit } from "@/lib/sui-dapp-kit";
+import { fetchAllWorkers, selectOnChainRoute, SelectedRoute, WorkerRecord } from "@/lib/route-discovery";
 import styles from "../styles/Home.module.css";
 
 const ContractPanel = dynamic(() => import("./ContractPanel"), { ssr: false });
@@ -122,6 +123,103 @@ function ContractStatusCard() {
               </div>
             </>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CurrentRouteCard() {
+  const [route, setRoute] = useState<SelectedRoute | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    selectOnChainRoute()
+      .then((r) => { setRoute(r); setLoading(false); })
+      .catch((e) => { setError(e instanceof Error ? e.message : "RPC error"); setLoading(false); });
+  }, []);
+
+  return (
+    <div className={styles.card}>
+      <p className={styles.cardLabel}>current route</p>
+
+      {loading ? (
+        <div className={styles.statusRows}>
+          {[60, 75].map((w, i) => (
+            <div key={i} className={styles.skeleton} style={{ width: `${w}%` }} />
+          ))}
+        </div>
+      ) : error ? (
+        <div className={styles.statusRow}>
+          <span className={styles.statusKey}>error</span>
+          <span className={styles.statusVal} style={{ color: "var(--xai-error)", fontSize: "0.65rem" }}>
+            {error}
+          </span>
+        </div>
+      ) : !route ? (
+        <p className={styles.description}>no reachable router right now</p>
+      ) : (
+        <div className={styles.statusRows}>
+          <div className={styles.statusRow}>
+            <span className={styles.statusKey}>node</span>
+            <span className={styles.statusVal}>#{route.nodeId}</span>
+          </div>
+          <div className={styles.statusRow}>
+            <span className={styles.statusKey}>endpoint</span>
+            <span className={styles.statusVal}>{route.endpoint}</span>
+          </div>
+          <div className={styles.statusRow}>
+            <span className={styles.statusKey}>latency</span>
+            <span className={styles.statusVal}>{route.latencyMs} ms</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WorkerListCard() {
+  const [workers, setWorkers] = useState<WorkerRecord[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAllWorkers()
+      .then((w) => { setWorkers(w); setLoading(false); })
+      .catch((e) => { setError(e instanceof Error ? e.message : "RPC error"); setLoading(false); });
+  }, []);
+
+  return (
+    <div className={styles.card}>
+      <p className={styles.cardLabel}>workers</p>
+
+      {loading ? (
+        <div className={styles.statusRows}>
+          {[70, 55, 60].map((w, i) => (
+            <div key={i} className={styles.skeleton} style={{ width: `${w}%` }} />
+          ))}
+        </div>
+      ) : error ? (
+        <div className={styles.statusRow}>
+          <span className={styles.statusKey}>error</span>
+          <span className={styles.statusVal} style={{ color: "var(--xai-error)", fontSize: "0.65rem" }}>
+            {error}
+          </span>
+        </div>
+      ) : workers!.length === 0 ? (
+        <p className={styles.description}>no workers registered yet</p>
+      ) : (
+        <div className={styles.workerRows}>
+          {workers!.map((w) => (
+            <div key={w.nodeId} className={styles.workerRow}>
+              <span className={styles.statusDot} data-live={String(w.active)} />
+              <span className={styles.workerRole}>{w.roleLabel}</span>
+              <span className={styles.workerUrl} title={w.endpoint}>
+                {w.endpoint || "—"}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -254,6 +352,8 @@ function HomeInner() {
       <div className={styles.layout}>
         <div className={styles.leftCol}>
           <ContractStatusCard />
+          <CurrentRouteCard />
+          <WorkerListCard />
         </div>
 
         <div className={styles.rightCol}>

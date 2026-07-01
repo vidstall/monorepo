@@ -2,7 +2,15 @@ import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { bcs } from "@mysten/sui/bcs";
 
+const ROLE_SFU = 0;
+const ROLE_COORDINATOR = 1;
 const ROLE_ROUTER = 2;
+
+const ROLE_LABELS: Record<number, string> = {
+  [ROLE_SFU]: "SFU",
+  [ROLE_COORDINATOR]: "COORDINATOR",
+  [ROLE_ROUTER]: "ROUTER",
+};
 const STALE_THRESHOLD_MS = 15 * 60 * 1000;
 const HEALTH_PROBE_TIMEOUT_MS = 1500;
 const CANDIDATES_CACHE_TTL_MS = 60 * 1000;
@@ -124,7 +132,16 @@ async function fetchExistingWithRole(config: ChainConfig, nextNodeId: number): P
   return candidates;
 }
 
-async function fetchRouterDetails(config: ChainConfig, nodeIds: number[]): Promise<RouteCandidate[]> {
+export type WorkerRecord = {
+  nodeId: string;
+  role: number;
+  roleLabel: string;
+  active: boolean;
+  endpoint: string;
+  updatedAtMs: number;
+};
+
+async function fetchWorkerRecords(config: ChainConfig, nodeIds: number[]): Promise<WorkerRecord[]> {
   if (nodeIds.length === 0) return [];
   const results = await devInspect(config, (tx) => {
     for (const nodeId of nodeIds) {
@@ -155,26 +172,39 @@ async function fetchRouterDetails(config: ChainConfig, nodeIds: number[]): Promi
   // batch; treat that as "no fresh data available" rather than surfacing an error to the caller.
   if (!results) return [];
 
-  const now = Date.now();
-  const candidates: RouteCandidate[] = [];
-  nodeIds.forEach((nodeId, index) => {
+  return nodeIds.map((nodeId, index) => {
     const base = index * 4;
     const role = parseU8(results[base]);
     const active = parseBool(results[base + 1]);
     const endpoint = parseUtf8Vector(results[base + 2]);
     const updatedAtMs = Number(parseU64(results[base + 3]));
-    if (role !== ROLE_ROUTER || !active) return;
-    if (now - updatedAtMs > STALE_THRESHOLD_MS) return;
-    candidates.push({ nodeId: String(nodeId), endpoint, updatedAtMs });
+    return {
+      nodeId: String(nodeId),
+      role,
+      roleLabel: ROLE_LABELS[role] ?? `ROLE_${role}`,
+      active,
+      endpoint,
+      updatedAtMs,
+    };
   });
-  return candidates;
 }
 
 export async function fetchActiveRouters(): Promise<RouteCandidate[]> {
   const config = loadChainConfig();
   const nextNodeId = await fetchNextNodeId(config);
   const candidateIds = await fetchExistingWithRole(config, nextNodeId);
-  return fetchRouterDetails(config, candidateIds);
+  const records = await fetchWorkerRecords(config, candidateIds);
+  const now = Date.now();
+  return records
+    .filter((r) => r.role === ROLE_ROUTER && r.active && now - r.updatedAtMs <= STALE_THRESHOLD_MS)
+    .map((r) => ({ nodeId: r.nodeId, endpoint: r.endpoint, updatedAtMs: r.updatedAtMs }));
+}
+
+export async function fetchAllWorkers(): Promise<WorkerRecord[]> {
+  const config = loadChainConfig();
+  const nextNodeId = await fetchNextNodeId(config);
+  const candidateIds = await fetchExistingWithRole(config, nextNodeId);
+  return fetchWorkerRecords(config, candidateIds);
 }
 
 export async function probeLatency(
@@ -195,7 +225,7 @@ export async function probeLatency(
 
 async function pickBestRoute(
   candidates: RouteCandidate[],
-): Promise<RouteCandidate | null> {
+): Promise<{ candidate: RouteCandidate; latencyMs: number } | null> {
   const probes = await Promise.all(
     candidates.map(async (candidate) => ({
       candidate,
@@ -205,7 +235,7 @@ async function pickBestRoute(
   const reachable = probes.filter((p): p is { candidate: RouteCandidate; latencyMs: number } => p.latencyMs !== null);
   if (reachable.length === 0) return null;
   reachable.sort((a, b) => a.latencyMs - b.latencyMs);
-  return reachable[0].candidate;
+  return reachable[0];
 }
 
 let _candidatesCache: { candidates: RouteCandidate[]; fetchedAtMs: number } | null = null;
@@ -240,5 +270,24 @@ export async function getWorkingRoute(exclude: Set<string> = new Set()): Promise
   const candidates = onChainCandidates.filter((c) => !exclude.has(c.endpoint));
   const best = await pickBestRoute(candidates);
   if (!best) throw new Error("No reachable routes are currently registered on-chain");
-  return best.endpoint;
+  return best.candidate.endpoint;
+}
+
+export type SelectedRoute = { nodeId: string; endpoint: string; latencyMs: number };
+
+/**
+ * Always reflects genuine on-chain latency-based selection, bypassing the
+ * NEXT_PUBLIC_ROUTES_URL/localhost dev fallback that getWorkingRoute uses for
+ * the real room-joining path. For display purposes only.
+ */
+export async function selectOnChainRoute(): Promise<SelectedRoute | null> {
+  let onChainCandidates: RouteCandidate[] = [];
+  try {
+    onChainCandidates = await cachedCandidates();
+  } catch {
+    onChainCandidates = [];
+  }
+  const best = await pickBestRoute(onChainCandidates);
+  if (!best) return null;
+  return { nodeId: best.candidate.nodeId, endpoint: best.candidate.endpoint, latencyMs: Math.round(best.latencyMs) };
 }
