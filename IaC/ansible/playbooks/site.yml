@@ -4,3 +4,4 @@
   become: true
   roles:
     - common
+    - docker_service

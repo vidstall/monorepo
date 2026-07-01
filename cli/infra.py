@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -31,6 +32,16 @@ OBJECT_STORAGE_SERVICE = "frontend"
 SERVICE_BACKENDS = {service: "vm" for service in DOCKER_SERVICES}
 SERVICE_BACKENDS[OBJECT_STORAGE_SERVICE] = "object_storage"
 REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "CONTRACT_REGISTRY_OBJECT_ID")
+SERVICE_PORTS = {"routes": 3001, "coordinator": 6379, "media": 7880}
+VM_INSTANCE_SIZES = {
+    "aws": "t3.micro",
+    "gcp": "e2-micro",
+    "azure": "Standard_B1s",
+    "alibaba": "ecs.t6-c1m1.large",
+    "digitalocean": "s-1vcpu-1gb",
+    "tencent": "S5.SMALL1",
+}
+SSH_KEY_ROOT = ROOT / "runtime" / "ssh_key"
 
 
 def pulumi_stack(default: str | None = None) -> str:
@@ -124,9 +135,33 @@ def ping() -> int:
 
 
 def configure() -> int:
-    code = ansible_playbook("site.yml")
+    code = ansible_playbook("site.yml", extra_vars=docker_deploy_extra_vars())
     record_history("infra configure", env=active_stack(), result_for_code=code)
     return code
+
+
+def docker_deploy_extra_vars() -> dict[str, Any]:
+    from . import registry
+
+    try:
+        state = registry.read_runtime_registry()
+    except ValueError as exc:
+        print(f"Skipping docker image deployment: {exc}", file=sys.stderr)
+        return {}
+
+    extra_vars: dict[str, Any] = {
+        "xaisen_images": state.images,
+        "xaisen_tags": state.deployed,
+        "xaisen_registry_host": state.host,
+    }
+    try:
+        config = registry.provider_config(state.provider, require_credentials=True)
+    except ValueError as exc:
+        print(f"Skipping registry login: {exc}", file=sys.stderr)
+        return extra_vars
+    extra_vars["xaisen_registry_username"] = config.username
+    extra_vars["xaisen_registry_password"] = config.password
+    return extra_vars
 
 
 def deploy(yes: bool) -> int:
@@ -172,6 +207,26 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
                 print(message, file=sys.stderr)
                 record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
                 return 1
+        if backend == "vm":
+            if provider == "cloudflare":
+                message = "cloudflare has no compute/VM product; choose another --provider for vm-backed services."
+                print(message, file=sys.stderr)
+                record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+                return 1
+            if provider == "tencent":
+                message = (
+                    "tencent VM provisioning is not yet supported (no working Pulumi Python SDK path was "
+                    "found for Tencent compute/VPC resources); choose another --provider for now."
+                )
+                print(message, file=sys.stderr)
+                record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+                return 1
+            missing_provider_keys = missing_vm_provider_keys(provider)
+            if missing_provider_keys:
+                message = vm_provider_error(provider, missing_provider_keys)
+                print(message, file=sys.stderr)
+                record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+                return 1
 
     if action == "kill" and not yes:
         message = "Refusing to delete infrastructure without --yes."
@@ -193,6 +248,8 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
     instance["contract_env"] = relative_contract_env(env_name)
     if backend == "object_storage":
         set_frontend_storage_defaults(instance, env_name)
+    elif backend == "vm" and action in {"start", "restart"}:
+        set_vm_defaults(instance)
     write_topology(topology)
 
     code = 0
@@ -219,6 +276,8 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
                     and item.get("env", env_name) == env_name
                 )
             ]
+            if backend == "vm":
+                shutil.rmtree(SSH_KEY_ROOT / name, ignore_errors=True)
         else:
             instance["last_status"] = next_state
             instance["last_error"] = ""
@@ -246,12 +305,15 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
     return code
 
 
-def ansible_playbook(playbook: str) -> int:
+def ansible_playbook(playbook: str, extra_vars: dict[str, Any] | None = None) -> int:
     executable = venv_bin("ansible-playbook")
     if not executable.exists():
         print("Ansible is missing. Run: ./vidctl bootstrap", file=sys.stderr)
         return 1
-    return run([executable, f"playbooks/{playbook}"], cwd=ANSIBLE_DIR)
+    args = [executable, f"playbooks/{playbook}"]
+    if extra_vars:
+        args += ["--extra-vars", json.dumps(extra_vars)]
+    return run(args, cwd=ANSIBLE_DIR)
 
 
 def select_or_create_stack(stack: str) -> int:
@@ -429,6 +491,62 @@ def object_storage_provider_error(provider: str, missing_keys: list[str]) -> str
         + ", ".join(missing_keys)
         + f". Add them to {secret_file} or export them before running ./vidctl infra."
     )
+
+
+def missing_vm_provider_keys(provider: str) -> list[str]:
+    env = command_env()
+    required = {
+        "aws": ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"),
+        "gcp": ("GCP_PROJECT", "GCP_ZONE"),
+        "azure": ("ARM_CLIENT_ID", "ARM_CLIENT_SECRET", "ARM_SUBSCRIPTION_ID", "ARM_TENANT_ID"),
+        "alibaba": ("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABA_CLOUD_ACCESS_KEY_SECRET", "ALIBABA_CLOUD_REGION"),
+        "digitalocean": ("DIGITALOCEAN_TOKEN",),
+        "tencent": ("TENCENTCLOUD_SECRET_ID", "TENCENTCLOUD_SECRET_KEY", "TENCENTCLOUD_REGION"),
+    }.get(provider, ())
+    return [key for key in required if not env.get(key)]
+
+
+def vm_provider_error(provider: str, missing_keys: list[str]) -> str:
+    secret_file = f"secrets/cloud/{provider}.env"
+    if provider == "digitalocean":
+        secret_file = "secrets/cloud/digital-ocean.env"
+    return (
+        f"{provider} VM provisioning is missing required credentials: "
+        + ", ".join(missing_keys)
+        + f". Add them to {secret_file} or export them before running ./vidctl infra."
+    )
+
+
+def ensure_ssh_keypair(instance: dict[str, Any]) -> str:
+    name = str(instance["name"])
+    key_dir = SSH_KEY_ROOT / name
+    private_key = key_dir / "id_ed25519"
+    if not private_key.exists():
+        key_dir.mkdir(parents=True, exist_ok=True)
+        run(
+            [
+                "ssh-keygen",
+                "-t",
+                "ed25519",
+                "-N",
+                "",
+                "-f",
+                str(private_key),
+                "-C",
+                f"xaisen-{name}",
+            ]
+        )
+        private_key.chmod(0o600)
+        (key_dir / "id_ed25519.pub").chmod(0o644)
+    return f"runtime/ssh_key/{name}"
+
+
+def set_vm_defaults(instance: dict[str, Any]) -> None:
+    service = str(instance.get("service", ""))
+    provider = str(instance.get("provider", ""))
+    instance.setdefault("port", SERVICE_PORTS.get(service, 0))
+    instance.setdefault("size", VM_INSTANCE_SIZES.get(provider, ""))
+    instance["ssh_key_dir"] = ensure_ssh_keypair(instance)
 
 
 def build_frontend_static(env_name: str) -> int:

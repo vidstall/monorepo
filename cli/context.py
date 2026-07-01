@@ -133,7 +133,12 @@ def ensure_venv() -> None:
 
 def bootstrap() -> int:
     ensure_venv()
-    return run([venv_bin("python"), "-m", "pip", "install", "-r", IAC_DIR / "requirements.txt"])
+    code = run([venv_bin("python"), "-m", "pip", "install", "-r", IAC_DIR / "requirements.txt"])
+    if code != 0:
+        return code
+    return run(
+        [venv_bin("ansible-galaxy"), "collection", "install", "-r", ANSIBLE_DIR / "requirements.yml"]
+    )
 
 
 def git_short_sha() -> str:

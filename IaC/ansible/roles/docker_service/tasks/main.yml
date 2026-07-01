@@ -1,0 +1,73 @@
+---
+- name: Skip docker deployment for hosts with no xaisen_service
+  ansible.builtin.meta: end_host
+  when: xaisen_service is not defined or xaisen_service | length == 0
+
+- name: Install Docker
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+    update_cache: true
+
+- name: Ensure Docker service is running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Add xaisen user to the docker group
+  ansible.builtin.user:
+    name: "{{ xaisen_user }}"
+    groups: docker
+    append: true
+
+- name: Log in to the container registry
+  community.docker.docker_login:
+    registry_url: "{{ xaisen_registry_host }}"
+    username: "{{ xaisen_registry_username }}"
+    password: "{{ xaisen_registry_password }}"
+  no_log: true
+  when: xaisen_registry_host is defined
+
+- name: Ensure persistent state directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}"
+    state: directory
+    owner: "{{ xaisen_user }}"
+    group: "{{ xaisen_user }}"
+    mode: "0750"
+
+- name: Check for a per-service secrets file locally
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service }}.env"
+  delegate_to: localhost
+  become: false
+  register: xaisen_service_secrets_file
+
+- name: Copy per-service secrets file to host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service }}.env"
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/service.env"
+    owner: "{{ xaisen_user }}"
+    group: "{{ xaisen_user }}"
+    mode: "0640"
+  when: xaisen_service_secrets_file.stat.exists | default(false)
+
+- name: Run the service container
+  community.docker.docker_container:
+    name: "xaisen-{{ xaisen_service }}"
+    image: "{{ xaisen_images[xaisen_service] }}:{{ xaisen_tags[xaisen_service] }}"
+    restart_policy: unless-stopped
+    state: "{{ 'started' if xaisen_desired_state == 'running' else 'stopped' }}"
+    ports: "{{ [xaisen_port ~ ':' ~ xaisen_port] if (xaisen_port | default(0) | int > 0) else [] }}"
+    env_file: "{{ (xaisen_services_root ~ '/runtime/' ~ xaisen_service ~ '/service.env') if (xaisen_service_secrets_file.stat.exists | default(false)) else omit }}"
+    volumes:
+      - "{{ xaisen_services_root }}/runtime/contract:{{ xaisen_services_root }}/runtime/contract:ro"
+      - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}:{{ xaisen_services_root }}/runtime/{{ xaisen_service }}"
+    env:
+      CONTRACT_ENV_PATH: "{{ xaisen_services_root }}/runtime/contract/{{ xaisen_env }}.env"
+      ROUTES_OPERATOR_KEY_PATH: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/{{ inventory_hostname }}.json"
+      ROUTES_INSTANCE_NAME: "{{ inventory_hostname }}"
+  when:
+    - xaisen_images is defined and xaisen_service in xaisen_images
+    - xaisen_tags is defined and xaisen_service in xaisen_tags

@@ -41,6 +41,8 @@ class TopologyInstance(TypedDict, total=False):
     contract_env: str
     artifact_dir: str
     region: str
+    ssh_key_dir: str
+    size: str
 
 
 def load_topology() -> dict[str, Any]:
@@ -77,6 +79,10 @@ def should_include_ansible_host(instance: TopologyInstance) -> bool:
         return False
     if instance.get("desired_state") in {"deleted", "stopped"}:
         return False
+    if instance.get("backend") == "vm":
+        # Real address comes from vm_resources (a freshly-created compute resource output),
+        # not from this static topology.toml-sourced dict.
+        return True
     return bool(instance.get("address"))
 
 
@@ -371,10 +377,402 @@ def create_metadata_only_site(instance: TopologyInstance, bucket_name: str, desi
     return len(artifact_files(instance)) if desired_state in {"running", "stopped"} else 0
 
 
+# ── VM provisioning (routes/media/coordinator/vclient) ──────────────────────
+
+
+def vm_instances() -> list[TopologyInstance]:
+    return [
+        instance
+        for instance in topology_instances
+        if instance.get("backend") == "vm" and instance.get("service") != OBJECT_STORAGE_SERVICE
+    ]
+
+
+def read_ssh_public_key(instance: TopologyInstance) -> str:
+    key_dir = instance.get("ssh_key_dir")
+    if not key_dir:
+        raise ValueError(
+            f"Instance {instance.get('name')} has no ssh_key_dir; the CLI should generate one before pulumi up."
+        )
+    path = ROOT / key_dir / "id_ed25519.pub"
+    return path.read_text(encoding="utf-8").strip()
+
+
+def provider_zone(instance: TopologyInstance | None = None) -> str:
+    if instance and instance.get("zone"):
+        return str(instance["zone"])
+    return os.getenv("GCP_ZONE", "us-central1-a")
+
+
+def create_vm_instance(instance: TopologyInstance) -> dict[str, Any]:
+    provider = str(instance.get("provider", ""))
+    desired_state = str(instance.get("desired_state", ""))
+    if desired_state == "deleted":
+        return {"provider": provider, "desired_state": desired_state, "address": None, "user": None}
+
+    public_key = read_ssh_public_key(instance)
+    if provider == "digitalocean":
+        result = create_digitalocean_vm(instance, public_key)
+    elif provider == "aws":
+        result = create_aws_vm(instance, public_key)
+    elif provider == "gcp":
+        result = create_gcp_vm(instance, public_key)
+    elif provider == "azure":
+        result = create_azure_vm(instance, public_key)
+    elif provider == "alibaba":
+        result = create_alibaba_vm(instance, public_key)
+    elif provider == "tencent":
+        raise ValueError(
+            "tencent VM provisioning is not yet supported (no working Pulumi Python SDK path was "
+            "found for Tencent compute/VPC resources) - choose another --provider for now."
+        )
+    else:
+        raise ValueError(f"No VM provisioning adapter for provider: {provider}")
+    result["provider"] = provider
+    result["desired_state"] = desired_state
+    return result
+
+
+def create_digitalocean_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
+    import pulumi_digitalocean as digitalocean
+
+    name = instance["name"]
+    port = int(instance.get("port") or 0)
+
+    key = digitalocean.SshKey(f"{name}-vm-key", name=f"xaisen-{name}", public_key=public_key)
+
+    inbound_rules = [
+        digitalocean.FirewallInboundRuleArgs(
+            protocol="tcp", port_range="22", source_addresses=["0.0.0.0/0", "::/0"]
+        ),
+    ]
+    if port:
+        inbound_rules.append(
+            digitalocean.FirewallInboundRuleArgs(
+                protocol="tcp", port_range=str(port), source_addresses=["0.0.0.0/0", "::/0"]
+            )
+        )
+    outbound_rules = [
+        digitalocean.FirewallOutboundRuleArgs(protocol="tcp", destination_addresses=["0.0.0.0/0", "::/0"], port_range="1-65535"),
+        digitalocean.FirewallOutboundRuleArgs(protocol="udp", destination_addresses=["0.0.0.0/0", "::/0"], port_range="1-65535"),
+        digitalocean.FirewallOutboundRuleArgs(protocol="icmp", destination_addresses=["0.0.0.0/0", "::/0"]),
+    ]
+
+    droplet = digitalocean.Droplet(
+        f"{name}-vm",
+        name=f"xaisen-{name}",
+        image="ubuntu-22-04-x64",
+        region=provider_region("digitalocean", instance),
+        size=instance.get("size") or "s-1vcpu-1gb",
+        ssh_keys=[key.fingerprint],
+    )
+    digitalocean.Firewall(
+        f"{name}-vm-fw",
+        name=f"xaisen-{name}",
+        droplet_ids=[droplet.id.apply(lambda i: int(i))],
+        inbound_rules=inbound_rules,
+        outbound_rules=outbound_rules,
+    )
+
+    return {"address": droplet.ipv4_address, "user": "root"}
+
+
+def create_aws_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
+    import pulumi_aws as aws
+
+    name = instance["name"]
+    port = int(instance.get("port") or 0)
+    region = provider_region("aws", instance)
+
+    ami = aws.ec2.get_ami(
+        most_recent=True,
+        owners=["099720109477"],
+        filters=[
+            aws.ec2.GetAmiFilterArgs(name="name", values=["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]),
+        ],
+        region=region,
+    )
+
+    key = aws.ec2.KeyPair(f"{name}-vm-key", key_name=f"xaisen-{name}", public_key=public_key, region=region)
+
+    ingress = [
+        aws.ec2.SecurityGroupIngressArgs(protocol="tcp", from_port=22, to_port=22, cidr_blocks=["0.0.0.0/0"]),
+    ]
+    if port:
+        ingress.append(
+            aws.ec2.SecurityGroupIngressArgs(protocol="tcp", from_port=port, to_port=port, cidr_blocks=["0.0.0.0/0"])
+        )
+    sg = aws.ec2.SecurityGroup(
+        f"{name}-vm-sg",
+        region=region,
+        ingress=ingress,
+        egress=[aws.ec2.SecurityGroupEgressArgs(protocol="-1", from_port=0, to_port=0, cidr_blocks=["0.0.0.0/0"])],
+    )
+
+    vm = aws.ec2.Instance(
+        f"{name}-vm",
+        ami=ami.id,
+        instance_type=instance.get("size") or "t3.micro",
+        key_name=key.key_name,
+        vpc_security_group_ids=[sg.id],
+        associate_public_ip_address=True,
+        region=region,
+        tags={"Name": f"xaisen-{name}"},
+    )
+
+    return {"address": vm.public_ip, "user": "ubuntu"}
+
+
+def create_gcp_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
+    import pulumi_gcp as gcp
+
+    name = instance["name"]
+    port = int(instance.get("port") or 0)
+    zone = provider_zone(instance)
+    tag = f"xaisen-{name}"
+
+    allows = [gcp.compute.FirewallAllowArgs(protocol="tcp", ports=["22"])]
+    if port:
+        allows.append(gcp.compute.FirewallAllowArgs(protocol="tcp", ports=[str(port)]))
+    gcp.compute.Firewall(
+        f"{name}-vm-fw",
+        network="default",
+        allows=allows,
+        source_ranges=["0.0.0.0/0"],
+        target_tags=[tag],
+    )
+
+    vm = gcp.compute.Instance(
+        f"{name}-vm",
+        name=tag,
+        machine_type=instance.get("size") or "e2-micro",
+        zone=zone,
+        tags=[tag],
+        boot_disk=gcp.compute.InstanceBootDiskArgs(
+            initialize_params=gcp.compute.InstanceBootDiskInitializeParamsArgs(
+                image="ubuntu-os-cloud/ubuntu-2204-lts",
+            ),
+        ),
+        network_interfaces=[
+            gcp.compute.InstanceNetworkInterfaceArgs(
+                network="default",
+                access_configs=[gcp.compute.InstanceNetworkInterfaceAccessConfigArgs()],
+            ),
+        ],
+        metadata={"ssh-keys": f"ubuntu:{public_key}"},
+    )
+
+    address = vm.network_interfaces[0].access_configs[0].nat_ip
+    return {"address": address, "user": "ubuntu"}
+
+
+_azure_network: dict[str, Any] = {}
+
+
+def azure_shared_network(location: str):
+    if _azure_network:
+        return _azure_network["resource_group"], _azure_network["subnet"]
+
+    from pulumi_azure_native import network, resources
+
+    resource_group = resources.ResourceGroup("xaisen-rg", location=location)
+    vnet = network.VirtualNetwork(
+        "xaisen-vnet",
+        resource_group_name=resource_group.name,
+        location=location,
+        address_space=network.AddressSpaceArgs(address_prefixes=["10.10.0.0/16"]),
+    )
+    subnet = network.Subnet(
+        "xaisen-subnet",
+        resource_group_name=resource_group.name,
+        virtual_network_name=vnet.name,
+        address_prefix="10.10.1.0/24",
+    )
+    _azure_network["resource_group"] = resource_group
+    _azure_network["subnet"] = subnet
+    return resource_group, subnet
+
+
+def create_azure_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
+    from pulumi_azure_native import compute, network
+
+    name = instance["name"]
+    port = int(instance.get("port") or 0)
+    location = provider_region("azure", instance)
+    resource_group, subnet = azure_shared_network(location)
+
+    security_rules = [
+        network.SecurityRuleArgs(
+            name="allow-ssh",
+            priority=100,
+            direction="Inbound",
+            access="Allow",
+            protocol="Tcp",
+            source_port_range="*",
+            destination_port_range="22",
+            source_address_prefix="*",
+            destination_address_prefix="*",
+        ),
+    ]
+    if port:
+        security_rules.append(
+            network.SecurityRuleArgs(
+                name="allow-service-port",
+                priority=110,
+                direction="Inbound",
+                access="Allow",
+                protocol="Tcp",
+                source_port_range="*",
+                destination_port_range=str(port),
+                source_address_prefix="*",
+                destination_address_prefix="*",
+            )
+        )
+    nsg = network.NetworkSecurityGroup(
+        f"{name}-vm-nsg",
+        resource_group_name=resource_group.name,
+        location=location,
+        security_rules=security_rules,
+    )
+
+    public_ip = network.PublicIPAddress(
+        f"{name}-vm-ip",
+        resource_group_name=resource_group.name,
+        location=location,
+        public_ip_allocation_method=network.IPAllocationMethod.DYNAMIC,
+        sku=network.PublicIPAddressSkuArgs(name=network.PublicIPAddressSkuName.BASIC),
+    )
+
+    nic = network.NetworkInterface(
+        f"{name}-vm-nic",
+        resource_group_name=resource_group.name,
+        location=location,
+        network_security_group=network.NetworkSecurityGroupArgs(id=nsg.id),
+        ip_configurations=[
+            network.NetworkInterfaceIPConfigurationArgs(
+                name="ipconfig1",
+                subnet=network.SubnetArgs(id=subnet.id),
+                public_ip_address=network.PublicIPAddressArgs(id=public_ip.id),
+                private_ip_allocation_method=network.IPAllocationMethod.DYNAMIC,
+            ),
+        ],
+    )
+
+    compute.VirtualMachine(
+        f"{name}-vm",
+        resource_group_name=resource_group.name,
+        location=location,
+        hardware_profile=compute.HardwareProfileArgs(vm_size=instance.get("size") or "Standard_B1s"),
+        os_profile=compute.OSProfileArgs(
+            computer_name=name,
+            admin_username="azureuser",
+            linux_configuration=compute.LinuxConfigurationArgs(
+                disable_password_authentication=True,
+                ssh=compute.SshConfigurationArgs(
+                    public_keys=[
+                        compute.SshPublicKeyArgs(
+                            path="/home/azureuser/.ssh/authorized_keys",
+                            key_data=public_key,
+                        ),
+                    ],
+                ),
+            ),
+        ),
+        storage_profile=compute.StorageProfileArgs(
+            image_reference=compute.ImageReferenceArgs(
+                publisher="Canonical",
+                offer="0001-com-ubuntu-server-jammy",
+                sku="22_04-lts-gen2",
+                version="latest",
+            ),
+        ),
+        network_profile=compute.NetworkProfileArgs(
+            network_interfaces=[compute.NetworkInterfaceReferenceArgs(id=nic.id, primary=True)],
+        ),
+    )
+
+    return {"address": public_ip.ip_address, "user": "azureuser"}
+
+
+def create_alibaba_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
+    import pulumi_alicloud as alicloud
+
+    name = instance["name"]
+    port = int(instance.get("port") or 0)
+    region = provider_region("alibaba", instance)
+    zone = str(instance.get("zone") or f"{region}a")
+
+    provider = alicloud.Provider(
+        f"{name}-vm-provider",
+        access_key=require_env("ALIBABA_CLOUD_ACCESS_KEY_ID"),
+        secret_key=require_env("ALIBABA_CLOUD_ACCESS_KEY_SECRET"),
+        region=region,
+    )
+    opts = pulumi.ResourceOptions(provider=provider)
+
+    vpc = alicloud.vpc.Network(f"{name}-vm-vpc", cidr_block="172.16.0.0/16", vpc_name=f"xaisen-{name}", opts=opts)
+    vswitch = alicloud.vpc.Switch(
+        f"{name}-vm-vswitch",
+        vpc_id=vpc.id,
+        cidr_block="172.16.0.0/24",
+        zone_id=zone,
+        opts=opts,
+    )
+
+    key = alicloud.ecs.KeyPair(f"{name}-vm-key", key_pair_name=f"xaisen-{name}", public_key=public_key, opts=opts)
+
+    sg = alicloud.ecs.SecurityGroup(f"{name}-vm-sg", vpc_id=vpc.id, opts=opts)
+    alicloud.ecs.SecurityGroupRule(
+        f"{name}-vm-sg-ssh",
+        type="ingress",
+        ip_protocol="tcp",
+        port_range="22/22",
+        cidr_ip="0.0.0.0/0",
+        security_group_id=sg.id,
+        opts=opts,
+    )
+    if port:
+        alicloud.ecs.SecurityGroupRule(
+            f"{name}-vm-sg-port",
+            type="ingress",
+            ip_protocol="tcp",
+            port_range=f"{port}/{port}",
+            cidr_ip="0.0.0.0/0",
+            security_group_id=sg.id,
+            opts=opts,
+        )
+
+    images = alicloud.ecs.get_images(
+        name_regex="^ubuntu_22_04_x64.*",
+        most_recent=True,
+        owners="system",
+        opts=pulumi.InvokeOptions(provider=provider),
+    )
+
+    vm = alicloud.ecs.Instance(
+        f"{name}-vm",
+        instance_name=f"xaisen-{name}",
+        instance_type=instance.get("size") or "ecs.t6-c1m1.large",
+        availability_zone=zone,
+        image_id=images.images[0].id,
+        vswitch_id=vswitch.id,
+        security_groups=[sg.id],
+        key_name=key.key_pair_name,
+        internet_max_bandwidth_out=5,
+        opts=opts,
+    )
+
+    return {"address": vm.public_ip, "user": "root"}
+
+
 config = pulumi.Config("xaisen")
 hosts = config.get_object("hosts") or []
 topology = load_topology()
 topology_instances = topology.get("instances", [])
+
+vm_resources: dict[str, dict[str, Any]] = {
+    str(instance.get("name")): create_vm_instance(instance) for instance in vm_instances()
+}
 
 inventory_hosts: dict[str, Any] = {}
 for host in hosts:
@@ -389,7 +787,26 @@ for instance in topology_instances:
     host_name = instance.get("name")
     if not host_name:
         continue
-    inventory_hosts[host_name] = topology_host_entry(instance)
+    if instance.get("backend") == "vm":
+        resource = vm_resources.get(host_name)
+        if resource is None or resource.get("address") is None:
+            continue
+        ssh_key_path = str(ROOT / instance.get("ssh_key_dir", "") / "id_ed25519")
+        inventory_hosts[host_name] = pulumi.Output.all(resource["address"]).apply(
+            lambda vals, inst=instance, user=resource["user"], key_path=ssh_key_path: {
+                "ansible_host": vals[0],
+                "ansible_user": user,
+                "ansible_ssh_private_key_file": key_path,
+                "xaisen_service": inst.get("service", ""),
+                "xaisen_provider": inst.get("provider", ""),
+                "xaisen_env": inst.get("env", topology.get("active_env", "devnet")),
+                "xaisen_contract_env": inst.get("contract_env", topology.get("contract_env", "")),
+                "xaisen_desired_state": inst.get("desired_state", ""),
+                "xaisen_port": inst.get("port", 0),
+            }
+        )
+    else:
+        inventory_hosts[host_name] = topology_host_entry(instance)
 
 inventory = {
     "all": {
