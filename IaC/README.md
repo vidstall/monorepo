@@ -47,7 +47,7 @@ Secret values are never printed by `doctor`.
 ```
 
 Use `./vidctl contract publish --yes --gas-budget <MIST>` only when you intend to publish on-chain.
-On a successful publish or a sync of an already-published package, `vidctl` writes `secrets/contract/<env>.env` for the selected network.
+On a successful publish or a sync of an already-published package, `vidctl` writes `runtime/contract/<env>.env` for the selected network.
 
 ## Registry
 

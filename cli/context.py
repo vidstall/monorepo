@@ -18,7 +18,7 @@ RUNTIME_DIR = ROOT / "runtime"
 RUNTIME_REGISTRY_TOML = RUNTIME_DIR / "registry.toml"
 SECRETS_DIR = ROOT / "secrets" / "cloud"
 REGISTRY_SECRETS_DIR = ROOT / "secrets" / "registry"
-CONTRACT_SECRETS_DIR = ROOT / "secrets" / "contract"
+CONTRACT_RUNTIME_DIR = RUNTIME_DIR / "contract"
 PULUMI_STATE_DIR = ROOT / "secrets" / "pulumi-state"
 PULUMI_PASSPHRASE_FILE = ROOT / "secrets" / "pulumi-passphrase"
 GENERATED_INVENTORY = ANSIBLE_DIR / "inventory" / "hosts.generated.yml"
@@ -138,7 +138,7 @@ def git_short_sha() -> str:
 
 
 def contract_env_path(network: str) -> Path:
-    return CONTRACT_SECRETS_DIR / f"{network}.env"
+    return CONTRACT_RUNTIME_DIR / f"{network}.env"
 
 
 def write_kv_env_file(path: Path, values: dict[str, str]) -> None:
