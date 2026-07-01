@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 
-from .context import ROOT, command_env, mitogen_strategy_path, venv_bin
+from .context import REGISTRY_SECRETS_DIR, ROOT, command_env, mitogen_strategy_path, venv_bin
 def run() -> int:
     env = command_env()
     checks = {
@@ -16,9 +16,7 @@ def run() -> int:
         "alibaba_access_key": bool(env.get("ALIBABA_CLOUD_ACCESS_KEY_ID")),
         "alibaba_secret_key": bool(env.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET")),
         "alibaba_region": bool(env.get("ALIBABA_CLOUD_REGION")),
-        "alibaba_registry": bool(env.get("ALICLOUD_CR_REGISTRY")),
-        "alibaba_registry_username": bool(env.get("ALICLOUD_CR_USERNAME")),
-        "alibaba_registry_password": bool(env.get("ALICLOUD_CR_PASSWORD")),
+        "registry_provider_files": REGISTRY_SECRETS_DIR.exists() and any(REGISTRY_SECRETS_DIR.glob("*.env")),
         "mitogen_strategy_plugins": bool(mitogen_strategy_path()),
     }
 

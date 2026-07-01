@@ -56,24 +56,34 @@ def add_contract_parser(subparsers: argparse._SubParsersAction[argparse.Argument
 
 
 def add_contract_env(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--env", default="devnet", help="Sui Move build environment. Default: devnet.")
+    parser.add_argument(
+        "--env",
+        choices=["devnet", "testnet", "mainnet"],
+        default="devnet",
+        help="Sui Move build environment. Default: devnet.",
+    )
 
 
 def add_registry_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser("registry", help="Manage Docker images and registry publishing.")
     actions = parser.add_subparsers(dest="action", required=True)
 
-    login = actions.add_parser("login", help="Log in to Alibaba Container Registry.")
-    login.set_defaults(handler=lambda _args: registry.login())
+    login = actions.add_parser("login", help="Log in to a Docker registry provider.")
+    add_registry_provider(login)
+    login.set_defaults(handler=lambda args: registry.login(args.provider))
 
     for action, help_text, handler in (
         ("build", "Build Docker image(s).", registry.build),
         ("push", "Push Docker image(s).", registry.push),
-        ("publish", "Log in, build, and push Docker image(s).", registry.publish),
     ):
         item = actions.add_parser(action, help=help_text)
         add_registry_selection(item)
         item.set_defaults(handler=lambda args, selected_handler=handler: selected_handler(args.service, args.all, args.tag))
+
+    publish = actions.add_parser("publish", help="Log in, build, and push Docker image(s).")
+    add_registry_selection(publish)
+    add_registry_provider(publish)
+    publish.set_defaults(handler=lambda args: registry.publish(args.service, args.all, args.tag, args.provider))
 
 
 def add_registry_selection(parser: argparse.ArgumentParser) -> None:
@@ -81,6 +91,14 @@ def add_registry_selection(parser: argparse.ArgumentParser) -> None:
     service_group.add_argument("--service", choices=sorted(DOCKER_SERVICES), help="Service image to manage.")
     service_group.add_argument("--all", action="store_true", help="Manage every service image.")
     parser.add_argument("--tag", help="Image tag. Default: current git short SHA, or dev outside git history.")
+
+
+def add_registry_provider(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--provider",
+        default=registry.DEFAULT_PROVIDER,
+        help="Registry provider env-file basename under secrets/registry. Default: alibaba.",
+    )
 
 
 def add_infra_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

@@ -18,7 +18,8 @@ The current Pulumi project is scaffold-only. It loads cloud credentials, exports
 Credential files are read automatically; do not manually export them.
 
 - `secrets/cloud/digital-ocean.env`: expects `DIGITALOCEAN_TOKEN`.
-- `secrets/cloud/alibaba-cloud.env`: supports `ALICLOUD_*` cloud variables and `ALICLOUD_CR_*` registry variables.
+- `secrets/cloud/alibaba-cloud.env`: supports `ALICLOUD_*` cloud variables.
+- `secrets/registry/<provider>.env`: stores registry image prefix and Docker login credentials.
 
 Secret values are never printed by `doctor`.
 
@@ -46,14 +47,23 @@ Secret values are never printed by `doctor`.
 ```
 
 Use `./vidctl contract publish --yes --gas-budget <MIST>` only when you intend to publish on-chain.
+On a successful publish or a sync of an already-published package, `vidctl` writes `secrets/contract/<env>.env` for the selected network.
 
 ## Registry
 
 ```bash
-./vidctl registry login
+./vidctl registry login --provider alibaba
 ./vidctl registry build --service frontend
 ./vidctl registry push --service frontend
-./vidctl registry publish --all
+./vidctl registry publish --provider alibaba --all
 ```
 
-Registry commands use `ALICLOUD_CR_REGISTRY`, `ALICLOUD_CR_USERNAME`, and `ALICLOUD_CR_PASSWORD`. `ALICLOUD_CR_REGISTRY` is treated as the full image prefix, for example `registry.cn-hangzhou.aliyuncs.com/xaisen`.
+Provider-aware registry commands load `secrets/registry/<provider>.env`, for example `secrets/registry/dockerhub.env` or `secrets/registry/selfhost.env`. Each file uses generic keys:
+
+```bash
+export REGISTRY_PREFIX="registry.example.com/xaisen"
+export REGISTRY_USERNAME="username"
+export REGISTRY_PASSWORD="password"
+```
+
+`REGISTRY_PREFIX` is the full image prefix, for example `registry.cn-hangzhou.aliyuncs.com/xaisen`, `registry.digitalocean.com/xaisen`, or `docker.io/xaisen`. For backward compatibility, the default `alibaba` provider falls back to `ALICLOUD_CR_REGISTRY`, `ALICLOUD_CR_USERNAME`, and `ALICLOUD_CR_PASSWORD` when `secrets/registry/alibaba.env` is absent.
