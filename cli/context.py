@@ -15,6 +15,8 @@ PULUMI_DIR = IAC_DIR / "pulumi"
 ANSIBLE_DIR = IAC_DIR / "ansible"
 CONTRACT_DIR = ROOT / "services" / "contract"
 SECRETS_DIR = ROOT / "secrets" / "cloud"
+REGISTRY_SECRETS_DIR = ROOT / "secrets" / "registry"
+CONTRACT_SECRETS_DIR = ROOT / "secrets" / "contract"
 PULUMI_STATE_DIR = ROOT / "secrets" / "pulumi-state"
 PULUMI_PASSPHRASE_FILE = ROOT / "secrets" / "pulumi-passphrase"
 GENERATED_INVENTORY = ANSIBLE_DIR / "inventory" / "hosts.generated.yml"
@@ -131,3 +133,13 @@ def git_short_sha() -> str:
     )
     tag = result.stdout.strip()
     return tag if result.returncode == 0 and tag else "dev"
+
+
+def contract_env_path(network: str) -> Path:
+    return CONTRACT_SECRETS_DIR / f"{network}.env"
+
+
+def write_kv_env_file(path: Path, values: dict[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [f"{key}={value}" for key, value in values.items() if value]
+    path.write_text("\n".join(lines) + "\n")

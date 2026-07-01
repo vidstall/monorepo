@@ -74,7 +74,7 @@ export function loadContractConfig(): ContractConfig {
   }
   if (!registryObjectId) {
     throw new Error(
-      `Missing CONTRACT_REGISTRY_OBJECT_ID for ${network}; run vidctl.py init-contract`,
+      `Missing CONTRACT_REGISTRY_OBJECT_ID for ${network}; run ./vidctl contract publish --env ${network} --yes`,
     );
   }
 
