@@ -328,6 +328,7 @@ def create_alibaba_site(instance: TopologyInstance, bucket_name: str, desired_st
             key=key,
             source=str(path),
             content_type=mime,
+            acl="public-read" if public else "private",
             opts=pulumi.ResourceOptions(provider=provider, depends_on=[bucket_acl]),
         )
 

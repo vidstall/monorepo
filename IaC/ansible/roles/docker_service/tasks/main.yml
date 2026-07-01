@@ -98,6 +98,7 @@
       - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}:{{ xaisen_services_root }}/runtime/{{ xaisen_service }}"
     env:
       CONTRACT_ENV_PATH: "{{ xaisen_services_root }}/runtime/contract/{{ xaisen_env }}.env"
+      CONTRACT_NETWORK: "{{ xaisen_env }}"
       ROUTES_OPERATOR_KEY_PATH: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/{{ inventory_hostname }}.json"
       ROUTES_INSTANCE_NAME: "{{ inventory_hostname }}"
       ROUTES_PUBLIC_URL: "{{ xaisen_routes_public_url if xaisen_service == 'routes' else omit }}"
