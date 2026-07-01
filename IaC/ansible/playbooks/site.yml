@@ -1,0 +1,6 @@
+---
+- name: Configure Xaisen hosts
+  hosts: xaisen
+  become: true
+  roles:
+    - common

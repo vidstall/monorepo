@@ -1,0 +1,6 @@
+name: xaisen-iac
+runtime:
+  name: python
+  options:
+    virtualenv: ../.venv
+description: Xaisen infrastructure state and Ansible inventory exports.

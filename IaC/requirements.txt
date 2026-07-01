@@ -1,0 +1,7 @@
+pulumi>=3.248.0,<4.0.0
+pulumi-digitalocean>=4.0.0,<5.0.0
+pulumi-alicloud>=3.0.0,<4.0.0
+ansible-core>=2.16,<2.19
+mitogen>=0.3.23,<0.4.0
+python-dotenv>=1.0.0,<2.0.0
+PyYAML>=6.0.0,<7.0.0

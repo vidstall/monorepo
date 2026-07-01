@@ -1,0 +1,14 @@
+---
+- name: Ensure Xaisen service user exists
+  ansible.builtin.user:
+    name: "{{ xaisen_user }}"
+    system: true
+    create_home: true
+
+- name: Ensure Xaisen service directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}"
+    state: directory
+    owner: "{{ xaisen_user }}"
+    group: "{{ xaisen_user }}"
+    mode: "0755"

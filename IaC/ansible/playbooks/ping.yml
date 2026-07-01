@@ -1,0 +1,7 @@
+---
+- name: Check Xaisen host connectivity
+  hosts: xaisen
+  gather_facts: false
+  tasks:
+    - name: Ping host
+      ansible.builtin.ping:

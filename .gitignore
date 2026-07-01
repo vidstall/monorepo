@@ -145,6 +145,11 @@ override.tf.json
 # Pulumi
 ################################################################################
 .pulumi/
+IaC/.venv/
+IaC/ansible/tmp/
+IaC/ansible/inventory/hosts.generated.yml
+secrets/pulumi-state/
+secrets/pulumi-passphrase
 
 ################################################################################
 # Ansible
