@@ -2,14 +2,7 @@ import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { bcs } from "@mysten/sui/bcs";
 import { loadContractConfig } from "@/lib/contract-config";
-
-const JSON_RPC_URLS = {
-  devnet: "https://fullnode.devnet.sui.io:443",
-  testnet: "https://fullnode.testnet.sui.io:443",
-  mainnet: "https://fullnode.mainnet.sui.io:443",
-} as const;
-
-const SUI_COIN_TYPE = "0x2::sui::SUI";
+import { JSON_RPC_URLS, SUI_COIN_TYPE } from "@/lib/contract-move-shared";
 
 export async function queryRentalCapacity(
   rentalId: number,

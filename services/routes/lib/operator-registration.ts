@@ -1,0 +1,203 @@
+import { createHash } from "crypto";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import type { SuiTransactionBlockResponse } from "@mysten/sui/jsonRpc";
+import { Transaction } from "@mysten/sui/transactions";
+import { loadContractConfig } from "@/lib/contract-config";
+import {
+  JSON_RPC_URLS,
+  SUI_CLOCK_OBJECT_ID,
+  SUI_COIN_TYPE,
+  moveTarget,
+} from "@/lib/contract-move-shared";
+import { getPersistedNodeId, loadOperatorKeypair, persistNodeId } from "@/lib/operator-keypair";
+
+const ROLE_ROUTER = 2;
+
+function client(): SuiJsonRpcClient {
+  const config = loadContractConfig();
+  return new SuiJsonRpcClient({
+    network: config.network as never,
+    url: JSON_RPC_URLS[config.network],
+  });
+}
+
+function metadataBytes(url: string): number[] {
+  return Array.from(new TextEncoder().encode(url));
+}
+
+function metadataHash(url: string): number[] {
+  return Array.from(createHash("sha256").update(url).digest());
+}
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required for routes self-registration`);
+  return value;
+}
+
+function assertSuccess(result: SuiTransactionBlockResponse): void {
+  if (result.effects && result.effects.status.status !== "success") {
+    throw new Error(`Transaction failed: ${result.effects.status.error ?? "unknown error"}`);
+  }
+}
+
+async function registerWorker(): Promise<string> {
+  const config = loadContractConfig();
+  const keypair = loadOperatorKeypair();
+  const publicUrl = requireEnv("ROUTES_PUBLIC_URL");
+  const priceMist = BigInt(process.env.ROUTES_PRICE_PER_RENTAL_MIST ?? "1");
+  const stakeMist = BigInt(process.env.ROUTES_STAKE_MIST ?? "1000");
+  const c = client();
+
+  const tx = new Transaction();
+  tx.setSender(keypair.toSuiAddress());
+  tx.moveCall({
+    target: moveTarget("register_worker"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      tx.object(config.registryObjectId),
+      tx.pure.vector("u8", metadataBytes(publicUrl)),
+      tx.pure.vector("u8", metadataHash(publicUrl)),
+      tx.pure.u64(priceMist),
+      tx.coin({ balance: stakeMist }),
+      tx.object(SUI_CLOCK_OBJECT_ID),
+    ],
+  });
+
+  const result = await c.signAndExecuteTransaction({
+    transaction: tx,
+    signer: keypair,
+    options: { showEvents: true, showEffects: true },
+  });
+
+  assertSuccess(result);
+
+  const event = result.events?.find((e) => e.type.endsWith("::node_registry::WorkerRegistered"));
+  const nodeId = (event?.parsedJson as Record<string, unknown> | undefined)?.node_id;
+  if (nodeId === undefined || nodeId === null) {
+    throw new Error("register_worker succeeded but node_id could not be parsed from events");
+  }
+  return String(nodeId);
+}
+
+async function proposeSelfAsRouter(nodeId: string): Promise<void> {
+  const config = loadContractConfig();
+  const keypair = loadOperatorKeypair();
+  const c = client();
+
+  const tx = new Transaction();
+  tx.setSender(keypair.toSuiAddress());
+  tx.moveCall({
+    target: moveTarget("propose_role"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      tx.object(config.registryObjectId),
+      tx.pure.u64(BigInt(nodeId)),
+      tx.pure.u64(BigInt(nodeId)),
+      tx.pure.u8(ROLE_ROUTER),
+      tx.object(SUI_CLOCK_OBJECT_ID),
+    ],
+  });
+
+  const result = await c.signAndExecuteTransaction({
+    transaction: tx,
+    signer: keypair,
+    options: { showEffects: true },
+  });
+  assertSuccess(result);
+}
+
+async function setActive(nodeId: string, active: boolean): Promise<void> {
+  const config = loadContractConfig();
+  const keypair = loadOperatorKeypair();
+  const c = client();
+
+  const tx = new Transaction();
+  tx.setSender(keypair.toSuiAddress());
+  tx.moveCall({
+    target: moveTarget("set_worker_active"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      tx.object(config.registryObjectId),
+      tx.pure.u64(BigInt(nodeId)),
+      tx.pure.bool(active),
+      tx.object(SUI_CLOCK_OBJECT_ID),
+    ],
+  });
+
+  const result = await c.signAndExecuteTransaction({
+    transaction: tx,
+    signer: keypair,
+    options: { showEffects: true },
+  });
+  assertSuccess(result);
+}
+
+async function heartbeat(nodeId: string): Promise<void> {
+  const config = loadContractConfig();
+  const keypair = loadOperatorKeypair();
+  const c = client();
+
+  const tx = new Transaction();
+  tx.setSender(keypair.toSuiAddress());
+  tx.moveCall({
+    target: moveTarget("heartbeat_worker"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      tx.object(config.registryObjectId),
+      tx.pure.u64(BigInt(nodeId)),
+      tx.object(SUI_CLOCK_OBJECT_ID),
+    ],
+  });
+
+  const result = await c.signAndExecuteTransaction({
+    transaction: tx,
+    signer: keypair,
+    options: { showEffects: true },
+  });
+  assertSuccess(result);
+}
+
+let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let _nodeId: string | null = null;
+
+export async function bootstrapOperator(): Promise<void> {
+  try {
+    const keypair = loadOperatorKeypair();
+    console.log(`[routes] operator address: ${keypair.toSuiAddress()}`);
+
+    let nodeId = getPersistedNodeId();
+    if (!nodeId) {
+      console.log("[routes] no persisted node_id; registering as a new worker...");
+      nodeId = await registerWorker();
+      persistNodeId(nodeId);
+      console.log(`[routes] registered as node_id=${nodeId}; self-nominating for ROLE_ROUTER`);
+      await proposeSelfAsRouter(nodeId);
+    } else {
+      console.log(`[routes] found persisted node_id=${nodeId}; marking active`);
+      await setActive(nodeId, true);
+    }
+
+    _nodeId = nodeId;
+    const intervalMs = Number(process.env.ROUTES_HEARTBEAT_INTERVAL_MS ?? 5 * 60 * 1000);
+    _heartbeatTimer = setInterval(() => {
+      if (!_nodeId) return;
+      heartbeat(_nodeId).catch((err) => console.error("[routes] heartbeat failed", err));
+    }, intervalMs);
+
+    const shutdown = () => {
+      if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+      if (_nodeId) {
+        setActive(_nodeId, false)
+          .catch((err) => console.error("[routes] failed to mark inactive on shutdown", err))
+          .finally(() => process.exit(0));
+      } else {
+        process.exit(0);
+      }
+    };
+    process.once("SIGTERM", shutdown);
+    process.once("SIGINT", shutdown);
+  } catch (error) {
+    console.error("[routes] operator bootstrap failed; continuing without on-chain registration", error);
+  }
+}
