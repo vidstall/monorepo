@@ -87,8 +87,8 @@ resource "aws_security_group" "ssh" {
   tags = local.common_tags
 }
 
-resource "aws_instance" "worker" {
-  count                       = var.worker_count
+resource "aws_instance" "media" {
+  count                       = var.media_count
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.aws_instance_type
   key_name                    = aws_key_pair.testbed.key_name
@@ -98,13 +98,13 @@ resource "aws_instance" "worker" {
   user_data                   = local.cloud_init
 
   tags = merge(local.common_tags, {
-    Name = "${var.testbed_name}-worker-${count.index + 1}"
-    role = "worker"
+    Name = "${var.testbed_name}-media-${count.index + 1}"
+    role = "media"
   })
 }
 
-resource "aws_instance" "dist" {
-  count                       = var.dist_count
+resource "aws_instance" "routes" {
+  count                       = var.routes_count
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.aws_instance_type
   key_name                    = aws_key_pair.testbed.key_name
@@ -114,8 +114,8 @@ resource "aws_instance" "dist" {
   user_data                   = local.cloud_init
 
   tags = merge(local.common_tags, {
-    Name = "${var.testbed_name}-dist-${count.index + 1}"
-    role = "dist"
+    Name = "${var.testbed_name}-routes-${count.index + 1}"
+    role = "routes"
   })
 }
 

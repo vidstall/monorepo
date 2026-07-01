@@ -1,6 +1,6 @@
 ---
-# Role-level variables for dist (frontend) nodes.
-role_name: dist
+# Role-level variables for routes (API/frontend) nodes.
+role_name: routes
 client_container_name: xaisen-client
 routes_container_name: xaisen-routes
 proxy_container_name: xaisen-proxy

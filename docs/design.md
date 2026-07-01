@@ -134,7 +134,7 @@ The IaC layer provisions a testbed on Alibaba Cloud for validating the full syst
 ### Testbed Shape
 
 ```
-vidctl.py deploy --provider alibaba-cloud --worker-nodes 3 --coordinator-nodes 1
+vidctl.py deploy --provider alibaba-cloud --media-nodes 3 --coordinator-nodes 1
 ```
 
 This provisions:
@@ -185,7 +185,7 @@ Destroys all Terraform-managed resources and cleans up local artifacts.
 |---|---|
 | `XAISEN_CLIENT_IMAGE` | Docker image for client frontend |
 | `XAISEN_ROUTES_IMAGE` | Docker image for routes API |
-| `XAISEN_WORKER_IMAGE` | Docker image for LiveKit SFU |
+| `XAISEN_MEDIA_IMAGE` | Docker image for LiveKit SFU |
 | `LIVEKIT_API_KEY` | LiveKit API key |
 | `LIVEKIT_API_SECRET` | LiveKit API secret |
 

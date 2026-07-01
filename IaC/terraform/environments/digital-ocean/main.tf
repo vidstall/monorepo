@@ -35,28 +35,28 @@ resource "digitalocean_vpc" "main" {
   region = var.digitalocean_region
 }
 
-resource "digitalocean_droplet" "worker" {
-  count     = var.worker_count
-  name      = "${var.testbed_name}-worker-${count.index + 1}"
+resource "digitalocean_droplet" "media" {
+  count     = var.media_count
+  name      = "${var.testbed_name}-media-${count.index + 1}"
   image     = var.digitalocean_image
   region    = var.digitalocean_region
   size      = var.digitalocean_size
   vpc_uuid  = digitalocean_vpc.main.id
   ssh_keys  = [digitalocean_ssh_key.testbed.id]
   user_data = local.cloud_init
-  tags      = concat(local.common_tags, ["role:worker"])
+  tags      = concat(local.common_tags, ["role:media"])
 }
 
-resource "digitalocean_droplet" "dist" {
-  count     = var.dist_count
-  name      = "${var.testbed_name}-dist-${count.index + 1}"
+resource "digitalocean_droplet" "routes" {
+  count     = var.routes_count
+  name      = "${var.testbed_name}-routes-${count.index + 1}"
   image     = var.digitalocean_image
   region    = var.digitalocean_region
   size      = var.digitalocean_size
   vpc_uuid  = digitalocean_vpc.main.id
   ssh_keys  = [digitalocean_ssh_key.testbed.id]
   user_data = local.cloud_init
-  tags      = concat(local.common_tags, ["role:dist"])
+  tags      = concat(local.common_tags, ["role:routes"])
 }
 
 resource "digitalocean_droplet" "vclient" {
@@ -86,8 +86,8 @@ resource "digitalocean_droplet" "coordinator" {
 resource "digitalocean_firewall" "testbed" {
   name = "${var.testbed_name}-fw"
   droplet_ids = concat(
-    digitalocean_droplet.worker[*].id,
-    digitalocean_droplet.dist[*].id,
+    digitalocean_droplet.media[*].id,
+    digitalocean_droplet.routes[*].id,
     digitalocean_droplet.vclient[*].id,
     digitalocean_droplet.coordinator[*].id,
   )

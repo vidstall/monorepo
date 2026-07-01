@@ -24,7 +24,7 @@ The orchestration flow is:
 
 ```bash
 python3 vidctl.py deploy --provider alibaba-cloud \
-  --worker-nodes 3 --coordinator-nodes 1 \
+  --media-nodes 3 --coordinator-nodes 1 \
   --deploy-contract --contract-network testnet
 ```
 

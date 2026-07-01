@@ -114,13 +114,13 @@ def cmd_build_images(args: argparse.Namespace) -> None:
 
     runtime_env_path = REPO_ROOT / "secrets" / "runtime.env"
     env_updates: Dict[str, str] = {
-        "XAISEN_WORKER_IMAGE": image_map["worker"],
+        "XAISEN_MEDIA_IMAGE": image_map["media"],
         "XAISEN_ROUTES_IMAGE": image_map["routes"],
         "XAISEN_CLIENT_IMAGE": image_map["client"],
         "XAISEN_VCLIENT_IMAGE": image_map["vclient"],
     }
     if tar_map:
-        env_updates["XAISEN_WORKER_IMAGE_TAR"] = tar_map.get("worker", "")
+        env_updates["XAISEN_MEDIA_IMAGE_TAR"] = tar_map.get("media", "")
         env_updates["XAISEN_ROUTES_IMAGE_TAR"] = tar_map.get("routes", "")
         env_updates["XAISEN_CLIENT_IMAGE_TAR"] = tar_map.get("client", "")
         env_updates["XAISEN_VCLIENT_IMAGE_TAR"] = tar_map.get("vclient", "")

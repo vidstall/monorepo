@@ -1,0 +1,5 @@
+---
+# Role-level variables for media (LiveKit SFU) nodes.
+role_name: media
+media_container_name: xaisen-livekit-media
+media_config_path: /etc/xaisen/livekit.yaml

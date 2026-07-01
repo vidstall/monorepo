@@ -9,15 +9,15 @@ variable "node_registry_contract_id" {
   default     = null
 }
 
-variable "worker_count" {
+variable "media_count" {
   type        = number
-  description = "Number of worker nodes."
+  description = "Number of media (LiveKit SFU) nodes."
   default     = 1
 }
 
-variable "dist_count" {
+variable "routes_count" {
   type        = number
-  description = "Number of dist (frontend) nodes."
+  description = "Number of routes (API/frontend) nodes."
   default     = 1
 }
 

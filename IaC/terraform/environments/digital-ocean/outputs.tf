@@ -16,16 +16,16 @@ output "private_key_pem" {
 
 output "inventory" {
   value = {
-    worker = [
-      for instance in digitalocean_droplet.worker : {
+    media = [
+      for instance in digitalocean_droplet.media : {
         name       = instance.name
         host       = instance.ipv4_address
         private_ip = instance.ipv4_address_private
         user       = var.ssh_username
       }
     ]
-    dist = [
-      for instance in digitalocean_droplet.dist : {
+    routes = [
+      for instance in digitalocean_droplet.routes : {
         name       = instance.name
         host       = instance.ipv4_address
         private_ip = instance.ipv4_address_private

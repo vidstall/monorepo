@@ -33,7 +33,7 @@ ALIBABA_CLOUD_REGION="ap-southeast-1"
 Store runtime config in `secrets/runtime.env`:
 
 ```env
-XAISEN_WORKER_IMAGE=ghcr.io/your-org/xaisen-worker:latest
+XAISEN_MEDIA_IMAGE=ghcr.io/your-org/xaisen-worker:latest
 XAISEN_ROUTES_IMAGE=ghcr.io/your-org/xaisen-routes:latest
 XAISEN_CLIENT_IMAGE=ghcr.io/your-org/xaisen-client:latest
 LIVEKIT_API_KEY=your-api-key
@@ -58,14 +58,14 @@ Contract deployment metadata is auto-generated in `secrets/contract/<network>.en
 Provision infrastructure and configure nodes with Docker containers:
 
 ```bash
-python3 vidctl.py deploy --provider alibaba-cloud --worker-nodes 3 --coordinator-nodes 1
+python3 vidctl.py deploy --provider alibaba-cloud --media-nodes 3 --coordinator-nodes 1
 ```
 
 With integrated contract deployment (first-time setup):
 
 ```bash
 python3 vidctl.py deploy --provider alibaba-cloud \
-  --worker-nodes 3 --coordinator-nodes 1 \
+  --media-nodes 3 --coordinator-nodes 1 \
   --deploy-contract --contract-network testnet
 ```
 

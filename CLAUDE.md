@@ -27,14 +27,14 @@ The codebase has two layers:
 
 ### CLI (vidctl.py)
 ```bash
-python3 vidctl.py deploy --provider aws --worker-nodes 1 --coordinator-nodes 1
+python3 vidctl.py deploy --provider aws --media-nodes 1 --coordinator-nodes 1
 python3 vidctl.py destroy --provider aws
 python3 vidctl.py inventory --provider aws
 python3 vidctl.py contract deploy --network testnet
 python3 vidctl.py contract update --network testnet
 
 # Deploy infra + contract together
-python3 vidctl.py deploy --provider alibaba-cloud --worker-nodes 3 --coordinator-nodes 1 \
+python3 vidctl.py deploy --provider alibaba-cloud --media-nodes 3 --coordinator-nodes 1 \
   --deploy-contract --contract-network testnet
 
 # Run scenarios

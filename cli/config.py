@@ -9,7 +9,7 @@ TERRAFORM_ENV_DIR = REPO_ROOT / "IaC" / "terraform" / "environments"
 ANSIBLE_PLAYBOOK = REPO_ROOT / "IaC" / "ansible" / "playbooks" / "site.yml"
 
 PROVIDER_CHOICES = ("aws", "digital-ocean", "hetzner", "alibaba-cloud")
-ROLE_CHOICES = ("worker", "dist", "vclient", "coordinator")
+ROLE_CHOICES = ("media", "routes", "vclient", "coordinator")
 PROVIDER_ENV_FILES = {
     "aws": "aws.env",
     "digital-ocean": "digital-ocean.env",
@@ -24,7 +24,7 @@ PROVIDER_CR_REGISTRY_KEY: dict[str, str] = {
 }
 
 IMAGE_SERVICES = {
-    "worker": "src/livekit",
+    "media": "src/livekit",
     "routes": "src/routes",
     "client": "src/client",
     "vclient": "src/vclient",

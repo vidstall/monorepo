@@ -12,7 +12,7 @@ def print_report(report: BenchmarkReport) -> None:
     print(f"BENCHMARK REPORT: {report.scenario_name}")
     topo = report.topology
     vc_str = f" / {topo.vclient_nodes}vc" if topo.vclient_nodes else ""
-    print(f"topology: {topo.worker_nodes}w / {topo.dist_nodes}d{vc_str} / {topo.coordinator_nodes}coord")
+    print(f"topology: {topo.media_nodes}m / {topo.routes_nodes}r{vc_str} / {topo.coordinator_nodes}coord")
     print(f"network: {report.topology.contract_network}")
     print(f"total duration: {report.total_duration_ms:.0f}ms")
     print("-" * 60)
@@ -50,8 +50,8 @@ def _write_report(report: BenchmarkReport, output_path: Optional[str]) -> None:
                 "provider": report.topology.provider,
                 "region": report.topology.region,
                 "instance_type": report.topology.instance_type,
-                "worker_nodes": report.topology.worker_nodes,
-                "dist_nodes": report.topology.dist_nodes,
+                "media_nodes": report.topology.media_nodes,
+                "routes_nodes": report.topology.routes_nodes,
                 "vclient_nodes": report.topology.vclient_nodes,
                 "coordinator_nodes": report.topology.coordinator_nodes,
                 "contract_network": report.topology.contract_network,

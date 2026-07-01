@@ -23,8 +23,8 @@ from cli.observe import cmd_infra_status, cmd_status
 def add_infra_shape(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--testbed-name", default="depin-testbed")
     parser.add_argument("--node-registry-contract-id", default=None)
-    parser.add_argument("--worker-nodes", "--livekit-nodes", dest="worker_nodes", type=int, default=1)
-    parser.add_argument("--dist-nodes", dest="dist_nodes", type=int, default=1)
+    parser.add_argument("--media-nodes", "--livekit-nodes", dest="media_nodes", type=int, default=1)
+    parser.add_argument("--routes-nodes", dest="routes_nodes", type=int, default=1)
     parser.add_argument("--vclient-nodes", dest="vclient_nodes", type=int, default=0)
     parser.add_argument("--coordinator-nodes", type=int, default=1)
 
@@ -56,7 +56,7 @@ def _add_infra_group(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
         "--client-oss",
         action="store_true",
         default=False,
-        help="Host frontend on object storage: init bucket, build static client, upload, skip client container on dist nodes",
+        help="Host frontend on object storage: init bucket, build static client, upload, skip client container on routes nodes",
     )
     deploy.add_argument("--oss-bucket", default=None, help="OSS bucket name (required with --client-oss)")
     deploy.add_argument("--oss-domain", default=None, dest="oss_domain", help="Custom domain to bind to the OSS bucket with auto HTTPS (e.g. thesis.rotexai.com)")

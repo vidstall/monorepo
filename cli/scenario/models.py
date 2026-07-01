@@ -6,8 +6,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 @dataclass
 class Topology:
-    worker_nodes: int = 1
-    dist_nodes: int = 1
+    media_nodes: int = 1
+    routes_nodes: int = 1
     vclient_nodes: int = 0
     coordinator_nodes: int = 1
     contract_network: str = "devnet"

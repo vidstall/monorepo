@@ -18,7 +18,7 @@ from cli.env import RUNTIME_ENV_FILE, load_env_file
 _W = 16  # label column width
 
 IMAGE_KEYS = {
-    "worker": "XAISEN_WORKER_IMAGE",
+    "media": "XAISEN_MEDIA_IMAGE",
     "routes": "XAISEN_ROUTES_IMAGE",
     "client": "XAISEN_CLIENT_IMAGE",
 }
@@ -94,7 +94,7 @@ def _tfstate_node_counts(provider: str) -> Optional[Dict[str, int]]:
         if not isinstance(inv_val, dict):
             return None
         counts = {}
-        for role in ("worker", "dist", "vclient", "coordinator"):
+        for role in ("media", "routes", "vclient", "coordinator"):
             nodes = inv_val.get(role, [])
             if isinstance(nodes, list) and nodes:
                 counts[role] = len(nodes)

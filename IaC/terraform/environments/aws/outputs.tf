@@ -16,15 +16,15 @@ output "private_key_pem" {
 
 output "inventory" {
   value = {
-    worker = [
-      for instance in aws_instance.worker : {
+    media = [
+      for instance in aws_instance.media : {
         name = instance.tags.Name
         host = instance.public_ip
         user = var.ssh_username
       }
     ]
-    dist = [
-      for instance in aws_instance.dist : {
+    routes = [
+      for instance in aws_instance.routes : {
         name = instance.tags.Name
         host = instance.public_ip
         user = var.ssh_username

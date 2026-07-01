@@ -30,26 +30,26 @@ resource "hcloud_ssh_key" "testbed" {
   public_key = tls_private_key.ssh.public_key_openssh
 }
 
-resource "hcloud_server" "worker" {
-  count       = var.worker_count
-  name        = "${var.testbed_name}-worker-${count.index + 1}"
+resource "hcloud_server" "media" {
+  count       = var.media_count
+  name        = "${var.testbed_name}-media-${count.index + 1}"
   image       = var.hcloud_image
   location    = var.hcloud_location
   server_type = var.hcloud_server_type
   ssh_keys    = [hcloud_ssh_key.testbed.id]
   user_data   = local.cloud_init
-  labels      = merge(local.common_labels, { role = "worker" })
+  labels      = merge(local.common_labels, { role = "media" })
 }
 
-resource "hcloud_server" "dist" {
-  count       = var.dist_count
-  name        = "${var.testbed_name}-dist-${count.index + 1}"
+resource "hcloud_server" "routes" {
+  count       = var.routes_count
+  name        = "${var.testbed_name}-routes-${count.index + 1}"
   image       = var.hcloud_image
   location    = var.hcloud_location
   server_type = var.hcloud_server_type
   ssh_keys    = [hcloud_ssh_key.testbed.id]
   user_data   = local.cloud_init
-  labels      = merge(local.common_labels, { role = "dist" })
+  labels      = merge(local.common_labels, { role = "routes" })
 }
 
 resource "hcloud_server" "vclient" {

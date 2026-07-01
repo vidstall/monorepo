@@ -66,6 +66,7 @@ override.tf.json
 # Artifacts and build outputs
 artifacts/
 memo/wallets.json
+cli/memo/
 *.iso
 obj/
 target/

@@ -39,8 +39,8 @@ def _terraform_apply_with_topology(topo: Topology, env: Any) -> None:
     vars = [
         "-input=false",
         "-var=testbed_name=depin-testbed",
-        f"-var=worker_count={topo.worker_nodes}",
-        f"-var=dist_count={topo.dist_nodes}",
+        f"-var=media_count={topo.media_nodes}",
+        f"-var=routes_count={topo.routes_nodes}",
         f"-var=vclient_count={topo.vclient_nodes}",
         f"-var=coordinator_count={topo.coordinator_nodes}",
     ]
@@ -108,7 +108,7 @@ def _print_launch_banner(scenario: Scenario, topo: Topology, dry_run: bool = Fal
     if topo.instance_type:
         print(f"  instance:    {topo.instance_type}")
     vc_nodes_str = f" / {topo.vclient_nodes} vclient" if topo.vclient_nodes else ""
-    print(f"  nodes:       {topo.worker_nodes} workers / {topo.dist_nodes} dist{vc_nodes_str} / {topo.coordinator_nodes} coordinators")
+    print(f"  nodes:       {topo.media_nodes} media / {topo.routes_nodes} routes{vc_nodes_str} / {topo.coordinator_nodes} coordinators")
     print(f"  network:     {topo.contract_network}")
     print(f"  contract:    {'deploy+init' if topo.deploy_contract else 'use existing'}")
     print(f"  registry:    init={topo.registry_init} build={topo.registry_build} tag={topo.registry_tag}")
@@ -134,10 +134,10 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
     teardown = getattr(args, "teardown", False)
 
     topology = scenario.topology
-    if getattr(args, "worker_nodes", None) is not None:
-        topology.worker_nodes = args.worker_nodes
-    if getattr(args, "dist_nodes", None) is not None:
-        topology.dist_nodes = args.dist_nodes
+    if getattr(args, "media_nodes", None) is not None:
+        topology.media_nodes = args.media_nodes
+    if getattr(args, "routes_nodes", None) is not None:
+        topology.routes_nodes = args.routes_nodes
     if getattr(args, "coordinator_nodes", None) is not None:
         topology.coordinator_nodes = args.coordinator_nodes
     topology.provider = provider
@@ -145,7 +145,7 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
 
     print(f"scenario: {scenario.name}")
     print(f"  {scenario.description}")
-    print(f"  topology: {topology.worker_nodes} workers, {topology.dist_nodes} dist, {topology.coordinator_nodes} coordinators")
+    print(f"  topology: {topology.media_nodes} media, {topology.routes_nodes} routes, {topology.coordinator_nodes} coordinators")
     print(f"  network: {topology.contract_network}")
     print(f"  provider: {topology.provider}")
     if dry_run:
@@ -165,8 +165,8 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
                 contract_network=topology.contract_network,
                 testbed_name=getattr(args, "testbed_name", "depin-testbed"),
                 node_registry_contract_id=getattr(args, "node_registry_contract_id", None),
-                worker_nodes=topology.worker_nodes,
-                dist_nodes=topology.dist_nodes,
+                media_nodes=topology.media_nodes,
+                routes_nodes=topology.routes_nodes,
                 vclient_nodes=topology.vclient_nodes,
                 coordinator_nodes=topology.coordinator_nodes,
             )
@@ -207,8 +207,8 @@ def cmd_run_scenario(args: argparse.Namespace) -> None:
             provider=provider,
             testbed_name=getattr(args, "testbed_name", "depin-testbed"),
             node_registry_contract_id=getattr(args, "node_registry_contract_id", None),
-            worker_nodes=topology.worker_nodes,
-            dist_nodes=topology.dist_nodes,
+            media_nodes=topology.media_nodes,
+            routes_nodes=topology.routes_nodes,
             vclient_nodes=topology.vclient_nodes,
             coordinator_nodes=topology.coordinator_nodes,
             auto_approve=True,

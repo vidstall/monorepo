@@ -9,10 +9,10 @@
     node_registry_contract_id: "{{ node_registry_contract_id | default(omit) }}"
   roles:
     - role: docker
-    - role: worker
-      when: "'worker' in group_names"
-    - role: dist
-      when: "'dist' in group_names"
+    - role: media
+      when: "'media' in group_names"
+    - role: routes
+      when: "'routes' in group_names"
     - role: vclient
       when: "'vclient' in group_names"
     - role: coordinator

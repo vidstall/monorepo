@@ -1,5 +1,0 @@
----
-# Role-level variables for worker nodes.
-role_name: worker
-worker_container_name: xaisen-livekit-worker
-worker_config_path: /etc/xaisen/livekit.yaml

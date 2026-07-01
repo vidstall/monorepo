@@ -16,15 +16,15 @@ output "private_key_pem" {
 
 output "inventory" {
   value = {
-    worker = [
-      for instance in hcloud_server.worker : {
+    media = [
+      for instance in hcloud_server.media : {
         name = instance.name
         host = instance.ipv4_address
         user = var.ssh_username
       }
     ]
-    dist = [
-      for instance in hcloud_server.dist : {
+    routes = [
+      for instance in hcloud_server.routes : {
         name = instance.name
         host = instance.ipv4_address
         user = var.ssh_username

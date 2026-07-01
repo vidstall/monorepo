@@ -17,8 +17,8 @@ class DeploymentInfo:
     livekit_url: str
     livekit_api_key: str
     livekit_api_secret: str
-    worker_ips: List[str] = field(default_factory=list)
-    dist_ips: List[str] = field(default_factory=list)
+    media_ips: List[str] = field(default_factory=list)
+    routes_ips: List[str] = field(default_factory=list)
     coordinator_ips: List[str] = field(default_factory=list)
     provider: str = "alibaba-cloud"
 
@@ -59,17 +59,17 @@ def discover(provider: str) -> DeploymentInfo:
     inventory = yaml.safe_load(inv_path.read_text(encoding="utf-8"))
     vars_data = json.loads(vars_path.read_text(encoding="utf-8"))
 
-    worker_ips = _parse_inventory_ips(inventory, "worker")
-    dist_ips = _parse_inventory_ips(inventory, "dist")
+    media_ips = _parse_inventory_ips(inventory, "media")
+    routes_ips = _parse_inventory_ips(inventory, "routes")
     coordinator_ips = _parse_inventory_ips(inventory, "coordinator")
 
-    if not dist_ips:
-        raise SystemExit("No dist nodes found in inventory.")
-    if not worker_ips:
-        raise SystemExit("No worker nodes found in inventory.")
+    if not routes_ips:
+        raise SystemExit("No routes nodes found in inventory.")
+    if not media_ips:
+        raise SystemExit("No media nodes found in inventory.")
 
-    routes_url = f"http://{dist_ips[0]}"
-    livekit_url = vars_data.get("LIVEKIT_URL", f"ws://{worker_ips[0]}:7880")
+    routes_url = f"http://{routes_ips[0]}"
+    livekit_url = vars_data.get("LIVEKIT_URL", f"ws://{media_ips[0]}:7880")
     livekit_api_key = vars_data.get("LIVEKIT_API_KEY", "")
     livekit_api_secret = vars_data.get("LIVEKIT_API_SECRET", "")
 
@@ -78,8 +78,8 @@ def discover(provider: str) -> DeploymentInfo:
         livekit_url=livekit_url,
         livekit_api_key=livekit_api_key,
         livekit_api_secret=livekit_api_secret,
-        worker_ips=worker_ips,
-        dist_ips=dist_ips,
+        media_ips=media_ips,
+        routes_ips=routes_ips,
         coordinator_ips=coordinator_ips,
         provider=provider,
     )

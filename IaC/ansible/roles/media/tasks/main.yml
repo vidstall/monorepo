@@ -1,0 +1,62 @@
+---
+- name: Create Xaisen configuration directory
+  ansible.builtin.file:
+    path: /etc/xaisen
+    state: directory
+    mode: "0755"
+
+- name: Write LiveKit media configuration
+  ansible.builtin.copy:
+    dest: "{{ media_config_path }}"
+    mode: "0600"
+    content: |
+      port: 7880
+      bind_addresses:
+        - "0.0.0.0"
+      rtc:
+        tcp_port: 7881
+        udp_port: 7882
+        node_ip: "{{ public_ip }}"
+      redis:
+        address: "{{ redis_address }}"
+      keys:
+        "{{ LIVEKIT_API_KEY }}": "{{ LIVEKIT_API_SECRET }}"
+  no_log: true
+
+- name: Transfer LiveKit media image tar
+  ansible.builtin.copy:
+    src: "{{ XAISEN_MEDIA_IMAGE_TAR }}"
+    dest: /tmp/xaisen-media.tar
+    mode: '0644'
+  when: XAISEN_MEDIA_IMAGE_TAR | default('') != ''
+
+- name: Load LiveKit media image from tar
+  ansible.builtin.command:
+    cmd: docker load -i /tmp/xaisen-media.tar
+  when: XAISEN_MEDIA_IMAGE_TAR | default('') != ''
+
+- name: Pull LiveKit media image
+  ansible.builtin.command:
+    cmd: "docker pull {{ XAISEN_MEDIA_IMAGE }}"
+  changed_when: "'Downloaded newer image' in media_pull.stdout"
+  register: media_pull
+  when: XAISEN_MEDIA_IMAGE_TAR | default('') == ''
+
+- name: Remove existing LiveKit media container
+  ansible.builtin.command:
+    cmd: "docker rm -f {{ media_container_name }}"
+  failed_when: false
+  changed_when: media_remove.rc == 0
+  register: media_remove
+
+- name: Run LiveKit media container
+  ansible.builtin.command:
+    cmd: >-
+      docker run -d
+      --name {{ media_container_name }}
+      --restart unless-stopped
+      --network host
+      -v {{ media_config_path }}:/etc/livekit.yaml:ro
+      {{ XAISEN_MEDIA_IMAGE }}
+      --config /etc/livekit.yaml
+  no_log: true

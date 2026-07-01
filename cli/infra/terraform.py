@@ -16,8 +16,8 @@ def provider_terraform_root(provider: str) -> Path:
 
 def terraform_args(
     testbed_name: str,
-    worker_nodes: int,
-    dist_nodes: int,
+    media_nodes: int,
+    routes_nodes: int,
     vclient_nodes: int,
     coordinator_nodes: int,
     node_registry_contract_id: str | None,
@@ -25,8 +25,8 @@ def terraform_args(
     args = [
         "-input=false",
         f"-var=testbed_name={testbed_name}",
-        f"-var=worker_count={worker_nodes}",
-        f"-var=dist_count={dist_nodes}",
+        f"-var=media_count={media_nodes}",
+        f"-var=routes_count={routes_nodes}",
         f"-var=vclient_count={vclient_nodes}",
         f"-var=coordinator_count={coordinator_nodes}",
     ]
@@ -49,8 +49,8 @@ def terraform_apply(provider: str, args: argparse.Namespace, env: Mapping[str, s
             "-auto-approve",
             *terraform_args(
                 testbed_name=args.testbed_name,
-                worker_nodes=args.worker_nodes,
-                dist_nodes=args.dist_nodes,
+                media_nodes=args.media_nodes,
+                routes_nodes=args.routes_nodes,
                 vclient_nodes=getattr(args, "vclient_nodes", 0),
                 coordinator_nodes=args.coordinator_nodes,
                 node_registry_contract_id=args.node_registry_contract_id,
@@ -71,8 +71,8 @@ def terraform_destroy(provider: str, args: argparse.Namespace, env: Mapping[str,
             "-auto-approve",
             *terraform_args(
                 testbed_name=args.testbed_name,
-                worker_nodes=args.worker_nodes,
-                dist_nodes=args.dist_nodes,
+                media_nodes=args.media_nodes,
+                routes_nodes=args.routes_nodes,
                 vclient_nodes=getattr(args, "vclient_nodes", 0),
                 coordinator_nodes=args.coordinator_nodes,
                 node_registry_contract_id=args.node_registry_contract_id,

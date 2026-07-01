@@ -44,7 +44,7 @@ def _list_scenarios() -> None:
                 teardown_flag = "teardown" if t.teardown else "persistent"
                 vc_part = f"/{t.vclient_nodes}vc" if t.vclient_nodes else ""
                 topo_str = (
-                    f"{t.provider} | {t.worker_nodes}w/{t.dist_nodes}d{vc_part}/{t.coordinator_nodes}coord"
+                    f"{t.provider} | {t.media_nodes}m/{t.routes_nodes}r{vc_part}/{t.coordinator_nodes}coord"
                     f" | {t.contract_network} | {teardown_flag}"
                 )
                 print(f"    {path.name:<32} {s.name:<25} {topo_str}")
@@ -93,8 +93,8 @@ def cmd_launch(args: argparse.Namespace) -> None:
             provider=topo.provider,
             auto_approve=True,
             testbed_name="depin-testbed",
-            worker_nodes=topo.worker_nodes,
-            dist_nodes=topo.dist_nodes,
+            media_nodes=topo.media_nodes,
+            routes_nodes=topo.routes_nodes,
             vclient_nodes=topo.vclient_nodes,
             coordinator_nodes=topo.coordinator_nodes,
             node_registry_contract_id=None,
@@ -193,8 +193,8 @@ def cmd_launch(args: argparse.Namespace) -> None:
             provider=topo.provider,
             auto_approve=True,
             testbed_name="depin-testbed",
-            worker_nodes=topo.worker_nodes,
-            dist_nodes=topo.dist_nodes,
+            media_nodes=topo.media_nodes,
+            routes_nodes=topo.routes_nodes,
             vclient_nodes=topo.vclient_nodes,
             coordinator_nodes=topo.coordinator_nodes,
             node_registry_contract_id=None,

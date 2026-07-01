@@ -29,9 +29,9 @@ class _AsyncBridge:
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
 
-    def run(self, coro: Any) -> Any:
+    def run(self, coro: Any, timeout: int = 60) -> Any:
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result(timeout=30)
+        return future.result(timeout=timeout)
 
     def shutdown(self) -> None:
         self._loop.call_soon_threadsafe(self._loop.stop)

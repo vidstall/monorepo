@@ -13,7 +13,7 @@ from cli.infra.terraform import terraform_value
 REQUIRED_RUNTIME_VARS = (
     "XAISEN_CLIENT_IMAGE",
     "XAISEN_ROUTES_IMAGE",
-    "XAISEN_WORKER_IMAGE",
+    "XAISEN_MEDIA_IMAGE",
     "LIVEKIT_API_KEY",
     "LIVEKIT_API_SECRET",
 )
@@ -34,7 +34,7 @@ ROUTES_CONTRACT_ENV_KEYS = (
 )
 
 IMAGE_TAR_KEYS = (
-    "XAISEN_WORKER_IMAGE_TAR",
+    "XAISEN_MEDIA_IMAGE_TAR",
     "XAISEN_ROUTES_IMAGE_TAR",
     "XAISEN_CLIENT_IMAGE_TAR",
     "XAISEN_VCLIENT_IMAGE_TAR",
@@ -93,7 +93,7 @@ def normalize_role_hosts(inventory_data: object, role: str) -> List[Dict[str, st
 def inventory_from_outputs(outputs: Mapping[str, object], key_path: Path) -> Dict[str, object]:
     inventory_data = terraform_value(outputs, "inventory")
     children: Dict[str, object] = {}
-    for role in ("worker", "dist", "vclient", "coordinator"):
+    for role in ("media", "routes", "vclient", "coordinator"):
         role_hosts = normalize_role_hosts(inventory_data, role)
         children[role] = {
             "hosts": {
@@ -197,24 +197,24 @@ def ansible_extra_vars(
 ) -> Dict[str, object]:
     require_runtime_env(env)
     inventory_data = terraform_value(outputs, "inventory")
-    worker = first_host(inventory_data, "worker")
+    media = first_host(inventory_data, "media")
     coordinator = first_host(inventory_data, "coordinator")
-    dist = first_host(inventory_data, "dist")
+    routes = first_host(inventory_data, "routes")
 
     values: Dict[str, object] = runtime_env(env)
     if node_registry_contract_id:
         values["node_registry_contract_id"] = node_registry_contract_id
     if not values.get("LIVEKIT_URL"):
-        if not worker:
-            raise SystemExit("Cannot derive LIVEKIT_URL because Terraform output has no worker hosts")
-        values["LIVEKIT_URL"] = f"ws://{worker['public_ip']}:7880"
+        if not media:
+            raise SystemExit("Cannot derive LIVEKIT_URL because Terraform output has no media hosts")
+        values["LIVEKIT_URL"] = f"ws://{media['public_ip']}:7880"
     if coordinator:
         values["coordinator_private_ip"] = coordinator["private_ip"] or coordinator["public_ip"]
         values["redis_address"] = f"{values['coordinator_private_ip']}:6379"
     else:
         values["coordinator_private_ip"] = ""
         values["redis_address"] = ""
-    values["dist_url"] = f"http://{dist['public_ip']}" if dist else ""
+    values["routes_url"] = f"http://{routes['public_ip']}" if routes else ""
     values["client_oss"] = client_oss
     return values
 

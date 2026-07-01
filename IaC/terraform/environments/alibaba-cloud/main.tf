@@ -143,41 +143,41 @@ resource "alicloud_security_group_rule" "egress_all" {
   cidr_ip           = "0.0.0.0/0"
 }
 
-resource "alicloud_instance" "worker" {
-  count = var.worker_count
+resource "alicloud_instance" "media" {
+  count = var.media_count
 
   availability_zone          = local.effective_zone
   security_groups            = [alicloud_security_group.testbed.id]
   instance_type              = local.effective_instance_type
   image_id                   = local.effective_image
   system_disk_category       = "cloud_efficiency"
-  instance_name              = "${var.testbed_name}-worker-${count.index + 1}"
+  instance_name              = "${var.testbed_name}-media-${count.index + 1}"
   vswitch_id                 = alicloud_vswitch.main.id
   internet_max_bandwidth_out = 100
   user_data                  = local.user_data
   spot_strategy              = var.alicloud_spot_strategy
 
   tags = merge(local.common_tags, {
-    Role = "worker"
+    Role = "media"
   })
 }
 
-resource "alicloud_instance" "dist" {
-  count = var.dist_count
+resource "alicloud_instance" "routes" {
+  count = var.routes_count
 
   availability_zone          = local.effective_zone
   security_groups            = [alicloud_security_group.testbed.id]
   instance_type              = local.effective_instance_type
   image_id                   = local.effective_image
   system_disk_category       = "cloud_efficiency"
-  instance_name              = "${var.testbed_name}-dist-${count.index + 1}"
+  instance_name              = "${var.testbed_name}-routes-${count.index + 1}"
   vswitch_id                 = alicloud_vswitch.main.id
   internet_max_bandwidth_out = 100
   user_data                  = local.user_data
   spot_strategy              = var.alicloud_spot_strategy
 
   tags = merge(local.common_tags, {
-    Role = "dist"
+    Role = "routes"
   })
 }
 

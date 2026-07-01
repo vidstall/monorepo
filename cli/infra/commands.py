@@ -83,11 +83,11 @@ def cmd_deploy(args: argparse.Namespace) -> None:
         reg_id = contract_env.get("CONTRACT_REGISTRY_OBJECT_ID", "").strip()
         if pkg_id and reg_id:
             inv_data = terraform_value(outputs, "inventory")
-            dist_hosts = normalize_role_hosts(inv_data, "dist")
-            if dist_hosts:
-                dist_ip = dist_hosts[0]["ansible_host"]
+            routes_hosts = normalize_role_hosts(inv_data, "routes")
+            if routes_hosts:
+                routes_ip = routes_hosts[0]["ansible_host"]
                 from cli.contract import cmd_set_coordinator_endpoint
-                cmd_set_coordinator_endpoint(contract_network, pkg_id, reg_id, f"http://{dist_ip}/api")
+                cmd_set_coordinator_endpoint(contract_network, pkg_id, reg_id, f"http://{routes_ip}/api")
     except Exception as exc:
         print(f"\n[atomic] step failed — purging infrastructure to avoid partial state...")
         try:

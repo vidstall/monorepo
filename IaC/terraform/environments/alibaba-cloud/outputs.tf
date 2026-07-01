@@ -16,22 +16,22 @@ output "private_key_pem" {
 
 output "inventory" {
   value = {
-    worker = [
-      for instance in alicloud_instance.worker : {
+    media = [
+      for instance in alicloud_instance.media : {
         name       = instance.instance_name
         public_ip  = try(instance.public_ip, instance.public_ip_address, "")
         private_ip = try(instance.private_ip, instance.private_ip_address, "")
         ssh_user   = var.ssh_username
-        role       = "worker"
+        role       = "media"
       }
     ]
-    dist = [
-      for instance in alicloud_instance.dist : {
+    routes = [
+      for instance in alicloud_instance.routes : {
         name       = instance.instance_name
         public_ip  = try(instance.public_ip, instance.public_ip_address, "")
         private_ip = try(instance.private_ip, instance.private_ip_address, "")
         ssh_user   = var.ssh_username
-        role       = "dist"
+        role       = "routes"
       }
     ]
     vclient = [
