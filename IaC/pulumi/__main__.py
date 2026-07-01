@@ -700,7 +700,7 @@ def create_alibaba_vm(instance: TopologyInstance, public_key: str) -> dict[str, 
     name = instance["name"]
     port = int(instance.get("port") or 0)
     region = provider_region("alibaba", instance)
-    zone = str(instance.get("zone") or f"{region}a")
+    size = str(instance.get("size") or "ecs.t6-c1m1.large")
 
     provider = alicloud.Provider(
         f"{name}-vm-provider",
@@ -709,6 +709,16 @@ def create_alibaba_vm(instance: TopologyInstance, public_key: str) -> dict[str, 
         region=region,
     )
     opts = pulumi.ResourceOptions(provider=provider)
+
+    available_zones = alicloud.get_zones(
+        available_instance_type=size,
+        available_resource_creation="Instance",
+        network_type="Vpc",
+        opts=pulumi.InvokeOptions(provider=provider),
+    )
+    if not available_zones.ids:
+        raise ValueError(f"No Alibaba ECS zone in {region} currently supports instance type {size}")
+    zone = str(instance.get("zone") or available_zones.ids[0])
 
     vpc = alicloud.vpc.Network(f"{name}-vm-vpc", cidr_block="172.16.0.0/16", vpc_name=f"xaisen-{name}", opts=opts)
     vswitch = alicloud.vpc.Switch(
@@ -752,13 +762,15 @@ def create_alibaba_vm(instance: TopologyInstance, public_key: str) -> dict[str, 
     vm = alicloud.ecs.Instance(
         f"{name}-vm",
         instance_name=f"xaisen-{name}",
-        instance_type=instance.get("size") or "ecs.t6-c1m1.large",
+        instance_type=size,
         availability_zone=zone,
         image_id=images.images[0].id,
         vswitch_id=vswitch.id,
         security_groups=[sg.id],
         key_name=key.key_pair_name,
         internet_max_bandwidth_out=5,
+        status="Stopped" if instance.get("desired_state") == "stopped" else "Running",
+        stopped_mode="KeepCharging",
         opts=opts,
     )
 
