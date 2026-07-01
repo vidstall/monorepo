@@ -20,6 +20,11 @@ DEPLOYED_TAGS_YAML = ANSIBLE_DIR / "vars" / "deployed_tags.generated.yml"
 
 DEFAULT_PROVIDER = "alibaba"
 
+# The Xaisen fleet (ECS/EC2/Droplet/etc.) is x86_64; build for that explicitly
+# so images built on arm64 dev machines (e.g. Apple Silicon) still run on the
+# deployed hosts instead of crash-looping with "exec format error".
+TARGET_PLATFORM = "linux/amd64"
+
 
 @dataclass(frozen=True)
 class RegistryConfig:
@@ -239,7 +244,9 @@ def each_service(action: str, service: str | None, all_services: bool, tag: str 
 
 def run_docker_action(action: str, image: str, context: Path) -> int:
     if action == "build":
-        return run(["docker", "build", "-t", image, context])
+        return run(
+            ["docker", "buildx", "build", "--platform", TARGET_PLATFORM, "--load", "-t", image, context]
+        )
     if action == "push":
         return run(["docker", "push", image])
     print(f"Unknown registry action: {action}", file=sys.stderr)
