@@ -109,6 +109,7 @@
   community.docker.docker_container:
     name: xaisen-routes-proxy
     image: "{{ xaisen_registry_host }}/xaisen/caddy:2-alpine"
+    pull: always
     restart_policy: unless-stopped
     state: "{{ 'started' if xaisen_desired_state == 'running' else 'stopped' }}"
     restart: "{{ (xaisen_container_state | default('started')) == 'restarted' }}"
