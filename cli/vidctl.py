@@ -28,7 +28,6 @@ def build_parser() -> argparse.ArgumentParser:
     add_contract_parser(subparsers)
     add_registry_parser(subparsers)
     add_infra_parser(subparsers)
-    add_lifecycle_parsers(subparsers)
     return parser
 
 
@@ -142,13 +141,15 @@ def add_infra_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     deploy.add_argument("--yes", action="store_true", help="Confirm infrastructure deployment.")
     deploy.set_defaults(handler=lambda args: infra.deploy(args.yes))
 
+    add_lifecycle_parsers(actions)
+
 
 def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     for action, help_text in (
-        ("start", "Start a topology VM instance through Pulumi."),
-        ("pause", "Stop a topology VM instance through Pulumi."),
-        ("restart", "Restart a topology VM instance through Pulumi."),
-        ("kill", "Delete a topology VM instance through Pulumi."),
+        ("start", "Start a topology service through Pulumi."),
+        ("pause", "Stop a topology service through Pulumi."),
+        ("restart", "Restart a topology service through Pulumi."),
+        ("kill", "Delete a topology service through Pulumi."),
     ):
         parser = subparsers.add_parser(action, help=help_text)
         parser.add_argument("--name", required=True, help="Topology instance name to control.")

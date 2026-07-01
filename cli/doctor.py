@@ -20,6 +20,8 @@ def run() -> int:
         "alibaba_secret_key": bool(env.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET")),
         "alibaba_region": bool(env.get("ALIBABA_CLOUD_REGION")),
         "tencent_credentials": bool(env.get("TENCENTCLOUD_SECRET_ID") and env.get("TENCENTCLOUD_SECRET_KEY")),
+        "cloudflare_credentials": bool(env.get("CLOUDFLARE_API_TOKEN") and env.get("CLOUDFLARE_ACCOUNT_ID")),
+        "cloudflare_r2_credentials": bool(env.get("CLOUDFLARE_R2_ACCESS_KEY_ID") and env.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY")),
         "registry_provider_files": REGISTRY_SECRETS_DIR.exists() and any(REGISTRY_SECRETS_DIR.glob("*.env")),
         "mitogen_strategy_plugins": bool(mitogen_strategy_path()),
     }

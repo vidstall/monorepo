@@ -74,13 +74,19 @@ def command_env() -> dict[str, str]:
     env.update(read_env_file(SECRETS_DIR / "gcp.env"))
     env.update(read_env_file(SECRETS_DIR / "azure.env"))
     env.update(read_env_file(SECRETS_DIR / "digital-ocean.env"))
-    env.update(read_env_file(SECRETS_DIR / "alibaba-cloud.env"))
+    env.update(read_env_file(SECRETS_DIR / "alibaba.env"))
     env.update(read_env_file(SECRETS_DIR / "tencent.env"))
+    env.update(read_env_file(SECRETS_DIR / "cloudflare.env"))
 
     mappings = {
         "ALICLOUD_ACCESS_KEY": "ALIBABA_CLOUD_ACCESS_KEY_ID",
         "ALICLOUD_SECRET_KEY": "ALIBABA_CLOUD_ACCESS_KEY_SECRET",
         "ALICLOUD_REGION": "ALIBABA_CLOUD_REGION",
+        "ACCOUNT_ID": "CLOUDFLARE_ACCOUNT_ID",
+        "API_TOKEN": "CLOUDFLARE_API_TOKEN",
+        "ACCESS_KEY_ID": "CLOUDFLARE_R2_ACCESS_KEY_ID",
+        "SECRET_ACCESS_KEY": "CLOUDFLARE_R2_SECRET_ACCESS_KEY",
+        "S3_API_ENDPOINT": "CLOUDFLARE_R2_ENDPOINT",
     }
     for old_key, new_key in mappings.items():
         if old_key in env and new_key not in env:
