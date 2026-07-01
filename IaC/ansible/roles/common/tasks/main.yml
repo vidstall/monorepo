@@ -12,3 +12,21 @@
     owner: "{{ xaisen_user }}"
     group: "{{ xaisen_user }}"
     mode: "0755"
+
+- name: Ensure Xaisen runtime contract directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/contract"
+    state: directory
+    owner: "{{ xaisen_user }}"
+    group: "{{ xaisen_user }}"
+    mode: "0750"
+  when: xaisen_contract_env is defined and xaisen_contract_env | length > 0
+
+- name: Copy Sui contract environment to host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../{{ xaisen_contract_env }}"
+    dest: "{{ xaisen_services_root }}/runtime/contract/{{ xaisen_env }}.env"
+    owner: "{{ xaisen_user }}"
+    group: "{{ xaisen_user }}"
+    mode: "0640"
+  when: xaisen_contract_env is defined and xaisen_contract_env | length > 0

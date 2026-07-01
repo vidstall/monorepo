@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_contract_parser(subparsers)
     add_registry_parser(subparsers)
     add_infra_parser(subparsers)
+    add_lifecycle_parsers(subparsers)
     return parser
 
 
@@ -114,11 +115,12 @@ def add_registry_provider(parser: argparse.ArgumentParser) -> None:
 
 
 def add_infra_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    parser = subparsers.add_parser("infra", help="Manage Pulumi infrastructure and Ansible host configuration.")
+    parser = subparsers.add_parser("infra", help="Manage Pulumi infrastructure, topology, and Ansible host configuration.")
     actions = parser.add_subparsers(dest="action", required=True)
 
-    init = actions.add_parser("init", help="Ensure the local Pulumi stack exists.")
-    init.set_defaults(handler=lambda _args: infra.init())
+    init = actions.add_parser("init", help="Create or update runtime topology and ensure the Pulumi stack exists.")
+    add_contract_env(init)
+    init.set_defaults(handler=lambda args: infra.init(args.env))
 
     preview = actions.add_parser("preview", help="Preview infrastructure changes.")
     preview.set_defaults(handler=lambda _args: infra.preview())
@@ -139,3 +141,27 @@ def add_infra_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     deploy = actions.add_parser("deploy", help="Apply infrastructure and configure hosts.")
     deploy.add_argument("--yes", action="store_true", help="Confirm infrastructure deployment.")
     deploy.set_defaults(handler=lambda args: infra.deploy(args.yes))
+
+
+def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    for action, help_text in (
+        ("start", "Start a topology VM instance through Pulumi."),
+        ("pause", "Stop a topology VM instance through Pulumi."),
+        ("restart", "Restart a topology VM instance through Pulumi."),
+        ("kill", "Delete a topology VM instance through Pulumi."),
+    ):
+        parser = subparsers.add_parser(action, help=help_text)
+        parser.add_argument("--name", required=True, help="Topology instance name to control.")
+        parser.add_argument("--service", required=True, choices=sorted(DOCKER_SERVICES), help="Service type hosted by the instance.")
+        parser.add_argument("--provider", required=True, choices=sorted(infra.PROVIDERS), help="Cloud provider for the topology instance.")
+        if action == "kill":
+            parser.add_argument("--yes", action="store_true", help="Confirm destructive instance deletion.")
+        parser.set_defaults(
+            handler=lambda args, selected_action=action: infra.control(
+                selected_action,
+                args.name,
+                args.service,
+                args.provider,
+                getattr(args, "yes", False),
+            )
+        )

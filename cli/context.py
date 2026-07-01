@@ -16,6 +16,8 @@ ANSIBLE_DIR = IAC_DIR / "ansible"
 CONTRACT_DIR = ROOT / "services" / "contract"
 RUNTIME_DIR = ROOT / "runtime"
 RUNTIME_REGISTRY_TOML = RUNTIME_DIR / "registry.toml"
+RUNTIME_TOPOLOGY_TOML = RUNTIME_DIR / "topology.toml"
+RUNTIME_HISTORY_TOML = RUNTIME_DIR / "history.toml"
 SECRETS_DIR = ROOT / "secrets" / "cloud"
 REGISTRY_SECRETS_DIR = ROOT / "secrets" / "registry"
 CONTRACT_RUNTIME_DIR = RUNTIME_DIR / "contract"
@@ -68,8 +70,12 @@ def mitogen_strategy_path() -> Path | None:
 
 def command_env() -> dict[str, str]:
     env = os.environ.copy()
+    env.update(read_env_file(SECRETS_DIR / "aws.env"))
+    env.update(read_env_file(SECRETS_DIR / "gcp.env"))
+    env.update(read_env_file(SECRETS_DIR / "azure.env"))
     env.update(read_env_file(SECRETS_DIR / "digital-ocean.env"))
     env.update(read_env_file(SECRETS_DIR / "alibaba-cloud.env"))
+    env.update(read_env_file(SECRETS_DIR / "tencent.env"))
 
     mappings = {
         "ALICLOUD_ACCESS_KEY": "ALIBABA_CLOUD_ACCESS_KEY_ID",
@@ -88,7 +94,7 @@ def command_env() -> dict[str, str]:
 
     env.setdefault("PULUMI_BACKEND_URL", f"file://{PULUMI_STATE_DIR}")
     env.setdefault("PULUMI_CONFIG_PASSPHRASE_FILE", str(PULUMI_PASSPHRASE_FILE))
-    env.setdefault("PULUMI_STACK", "dev")
+    env.setdefault("PULUMI_STACK", "devnet")
     env.setdefault("ANSIBLE_CONFIG", str(ANSIBLE_DIR / "ansible.cfg"))
     env.setdefault("ANSIBLE_LOCAL_TEMP", str(ANSIBLE_DIR / "tmp"))
 

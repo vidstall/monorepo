@@ -12,10 +12,14 @@ def run() -> int:
         "docker_cli": shutil.which("docker") is not None,
         "docker_daemon": docker_daemon_ok(),
         "venv_python": venv_bin("python").exists(),
+        "aws_credentials": bool(env.get("AWS_ACCESS_KEY_ID") or env.get("AWS_PROFILE")),
+        "gcp_credentials": bool(env.get("GOOGLE_CREDENTIALS") or env.get("GOOGLE_APPLICATION_CREDENTIALS")),
+        "azure_credentials": bool(env.get("ARM_CLIENT_ID") or env.get("AZURE_CLIENT_ID")),
         "digitalocean_token": bool(env.get("DIGITALOCEAN_TOKEN")),
         "alibaba_access_key": bool(env.get("ALIBABA_CLOUD_ACCESS_KEY_ID")),
         "alibaba_secret_key": bool(env.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET")),
         "alibaba_region": bool(env.get("ALIBABA_CLOUD_REGION")),
+        "tencent_credentials": bool(env.get("TENCENTCLOUD_SECRET_ID") and env.get("TENCENTCLOUD_SECRET_KEY")),
         "registry_provider_files": REGISTRY_SECRETS_DIR.exists() and any(REGISTRY_SECRETS_DIR.glob("*.env")),
         "mitogen_strategy_plugins": bool(mitogen_strategy_path()),
     }
@@ -24,7 +28,11 @@ def run() -> int:
         print(f"{name}: {'ok' if ok else 'missing'}")
 
     if venv_bin("python").exists():
-        imports = "import ansible, ansible_mitogen, pulumi, pulumi_alicloud, pulumi_digitalocean, yaml"
+        imports = (
+            "import ansible, ansible_mitogen, pulumi, pulumi_alicloud, "
+            "pulumi_aws, pulumi_azure_native, pulumi_digitalocean, pulumi_gcp, "
+            "pulumi_tencentcloud, yaml"
+        )
         checks["python_dependencies"] = subprocess.call([str(venv_bin("python")), "-c", imports], cwd=ROOT, env=env) == 0
     else:
         checks["python_dependencies"] = False

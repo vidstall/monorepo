@@ -26,14 +26,24 @@ Secret values are never printed by `doctor`.
 ## Infrastructure
 
 ```bash
-./vidctl infra init
+./vidctl infra init --env devnet
 ./vidctl infra preview
 ./vidctl infra apply --yes
 ./vidctl infra inventory
 ./vidctl infra ping
 ./vidctl infra configure
 ./vidctl infra deploy --yes
+./vidctl start --name <instance> --service routes --provider digitalocean
+./vidctl pause --name <instance> --service routes --provider digitalocean
+./vidctl restart --name <instance> --service routes --provider digitalocean
+./vidctl kill --name <instance> --service routes --provider digitalocean --yes
 ```
+
+`infra init --env <network>` creates or updates `runtime/topology.toml`, points it at
+`runtime/contract/<network>.env`, and selects or creates the matching Pulumi stack.
+Top-level lifecycle commands update that topology, run Pulumi from `IaC/pulumi`, and
+append an audit event to `runtime/history.toml`. Cloud control must be implemented
+through Pulumi providers in `IaC/pulumi`; `vidctl` does not call cloud CLIs directly.
 
 `infra inventory` writes `IaC/ansible/inventory/hosts.generated.yml` from the Pulumi `ansibleInventory` output.
 
