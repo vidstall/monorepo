@@ -15,12 +15,6 @@
     state: started
     enabled: true
 
-- name: Add xaisen user to the docker group
-  ansible.builtin.user:
-    name: "{{ xaisen_user }}"
-    groups: docker
-    append: true
-
 - name: Log in to the container registry
   community.docker.docker_login:
     registry_url: "{{ xaisen_registry_host }}"
@@ -33,8 +27,8 @@
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}"
     state: directory
-    owner: "{{ xaisen_user }}"
-    group: "{{ xaisen_user }}"
+    owner: root
+    group: root
     mode: "0750"
 
 - name: Check for a per-service secrets file locally
@@ -48,8 +42,8 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service }}.env"
     dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/service.env"
-    owner: "{{ xaisen_user }}"
-    group: "{{ xaisen_user }}"
+    owner: root
+    group: root
     mode: "0640"
   when: xaisen_service_secrets_file.stat.exists | default(false)
 
@@ -58,7 +52,7 @@
     name: "xaisen-{{ xaisen_service }}"
     image: "{{ xaisen_images[xaisen_service] }}:{{ xaisen_tags[xaisen_service] }}"
     restart_policy: unless-stopped
-    state: "{{ 'started' if xaisen_desired_state == 'running' else 'stopped' }}"
+    state: "{{ xaisen_container_state | default('started') if xaisen_desired_state == 'running' else 'stopped' }}"
     ports: "{{ [xaisen_port ~ ':' ~ xaisen_port] if (xaisen_port | default(0) | int > 0) else [] }}"
     env_file: "{{ (xaisen_services_root ~ '/runtime/' ~ xaisen_service ~ '/service.env') if (xaisen_service_secrets_file.stat.exists | default(false)) else omit }}"
     volumes:

@@ -1,7 +1,19 @@
 ---
 - name: Configure Xaisen hosts
   hosts: xaisen
+  gather_facts: false
   become: true
+  strategy: linear
+  pre_tasks:
+    - name: Wait for the host to accept SSH connections
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        sleep: 5
+        connect_timeout: 10
+        timeout: 300
+
+    - name: Gather host facts after SSH is ready
+      ansible.builtin.setup:
   roles:
     - common
     - docker_service

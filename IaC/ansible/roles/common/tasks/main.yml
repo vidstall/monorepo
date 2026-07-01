@@ -1,24 +1,18 @@
 ---
-- name: Ensure Xaisen service user exists
-  ansible.builtin.user:
-    name: "{{ xaisen_user }}"
-    system: true
-    create_home: true
-
 - name: Ensure Xaisen service directory exists
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}"
     state: directory
-    owner: "{{ xaisen_user }}"
-    group: "{{ xaisen_user }}"
+    owner: root
+    group: root
     mode: "0755"
 
 - name: Ensure Xaisen runtime contract directory exists
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/contract"
     state: directory
-    owner: "{{ xaisen_user }}"
-    group: "{{ xaisen_user }}"
+    owner: root
+    group: root
     mode: "0750"
   when: xaisen_contract_env is defined and xaisen_contract_env | length > 0
 
@@ -26,7 +20,7 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../../{{ xaisen_contract_env }}"
     dest: "{{ xaisen_services_root }}/runtime/contract/{{ xaisen_env }}.env"
-    owner: "{{ xaisen_user }}"
-    group: "{{ xaisen_user }}"
+    owner: root
+    group: root
     mode: "0640"
   when: xaisen_contract_env is defined and xaisen_contract_env | length > 0
