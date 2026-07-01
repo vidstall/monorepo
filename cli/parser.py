@@ -53,12 +53,13 @@ def _add_infra_group(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     )
     deploy.add_argument("--contract-network", default="devnet", choices=CONTRACT_NETWORK_CHOICES)
     deploy.add_argument(
-        "--client-oss",
+        "--frontend",
         action="store_true",
         default=False,
+        dest="client_oss",
         help="Host frontend on object storage: init bucket, build static client, upload, skip client container on routes nodes",
     )
-    deploy.add_argument("--oss-bucket", default=None, help="OSS bucket name (required with --client-oss)")
+    deploy.add_argument("--oss-bucket", default=None, help="OSS bucket name for --frontend (falls back to ALICLOUD_OSS_BUCKET in secrets)")
     deploy.add_argument("--oss-domain", default=None, dest="oss_domain", help="Custom domain to bind to the OSS bucket with auto HTTPS (e.g. thesis.rotexai.com)")
     add_infra_shape(deploy)
     deploy.set_defaults(func=cmd_deploy)

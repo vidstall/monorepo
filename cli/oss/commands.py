@@ -42,7 +42,7 @@ def cmd_oss_init(args: argparse.Namespace) -> None:
 
     oss2 = _require_oss2()
     env = build_env(args.provider)
-    bucket_name = args.oss_bucket
+    bucket_name = getattr(args, "oss_bucket", None) or env.get("ALICLOUD_OSS_BUCKET", "") or "xaisen-client"
 
     bucket, region = _bucket_client(env, bucket_name)
 

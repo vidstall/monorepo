@@ -63,7 +63,7 @@ def cmd_deploy(args: argparse.Namespace) -> None:
             cmd_deploy_contract(contract_args)
             env = build_env(args.provider)
 
-        if getattr(args, "client_oss", False) and getattr(args, "oss_bucket", None):
+        if getattr(args, "client_oss", False):
             from cli.oss import cmd_oss_init, cmd_oss_deploy
             cmd_oss_init(args)
             cmd_oss_deploy(args)
