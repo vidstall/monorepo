@@ -48,10 +48,11 @@ def add_contract_parser(subparsers: argparse._SubParsersAction[argparse.Argument
     check.set_defaults(handler=lambda args: contract.check(args.env))
 
     publish = actions.add_parser("publish", help="Publish or dry-run publish the Sui package.")
+    add_contract_env(publish)
     publish.add_argument("--dry-run", action="store_true", help="Build a publish transaction without executing it.")
     publish.add_argument("--yes", action="store_true", help="Allow an on-chain publish transaction.")
     publish.add_argument("--gas-budget", help="Gas budget in MIST.")
-    publish.set_defaults(handler=lambda args: contract.publish(args.dry_run, args.yes, args.gas_budget))
+    publish.set_defaults(handler=lambda args: contract.publish(args.env, args.dry_run, args.yes, args.gas_budget))
 
 
 def add_contract_env(parser: argparse.ArgumentParser) -> None:

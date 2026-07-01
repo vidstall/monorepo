@@ -20,10 +20,14 @@ def check(env: str) -> int:
     return test(env)
 
 
-def publish(dry_run: bool, yes: bool, gas_budget: str | None) -> int:
+def publish(env: str, dry_run: bool, yes: bool, gas_budget: str | None) -> int:
     if not dry_run and not yes:
         print("Refusing to publish contract without --dry-run or --yes.", file=sys.stderr)
         return 2
+
+    build_code = run(["sui", "move", "--build-env", env, "build", "--path", CONTRACT_DIR])
+    if build_code != 0:
+        return build_code
 
     args: list[str | object] = ["sui", "client", "publish", CONTRACT_DIR]
     if dry_run:
