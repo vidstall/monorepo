@@ -193,6 +193,53 @@ fun owner_can_toggle_active_status() {
 }
 
 #[test]
+fun owner_can_heartbeat_worker() {
+    let mut ctx = ctx(OWNER, 8_1);
+    let mut clock = clock::create_for_testing(&mut ctx);
+    let mut registry = registered_registry(&clock, &mut ctx);
+
+    assert!(node_registry::worker_updated_at_ms(&registry, 1) == 0);
+
+    clock::set_for_testing(&mut clock, 4000);
+    node_registry::heartbeat_worker(&mut registry, 1, &clock, &mut ctx);
+
+    assert!(node_registry::worker_updated_at_ms(&registry, 1) == 4000);
+    assert!(node_registry::worker_active(&registry, 1));
+
+    node_registry::unregister_worker(&mut registry, 1, &mut ctx);
+    node_registry::destroy_registry_for_testing(registry);
+    clock::destroy_for_testing(clock);
+}
+
+#[test]
+#[expected_failure(abort_code = E_NOT_NODE_OWNER, location = xaisen_contract::node_registry)]
+fun non_owner_cannot_heartbeat_worker() {
+    let mut owner_ctx = ctx(OWNER, 8_2);
+    let clock = clock::create_for_testing(&mut owner_ctx);
+    let mut registry = registered_registry(&clock, &mut owner_ctx);
+    let mut other_ctx = ctx(OTHER, 8_3);
+
+    node_registry::heartbeat_worker(&mut registry, 1, &clock, &mut other_ctx);
+
+    node_registry::unregister_worker(&mut registry, 1, &mut owner_ctx);
+    node_registry::destroy_registry_for_testing(registry);
+    clock::destroy_for_testing(clock);
+}
+
+#[test]
+#[expected_failure(abort_code = E_NODE_NOT_FOUND, location = xaisen_contract::node_registry)]
+fun heartbeat_unknown_node_aborts() {
+    let mut ctx = ctx(OWNER, 8_4);
+    let clock = clock::create_for_testing(&mut ctx);
+    let mut registry = node_registry::new_registry_for_testing<TEST_COIN>(&mut ctx);
+
+    node_registry::heartbeat_worker(&mut registry, 1, &clock, &mut ctx);
+
+    node_registry::destroy_registry_for_testing(registry);
+    clock::destroy_for_testing(clock);
+}
+
+#[test]
 fun hire_worker_creates_rental_and_marks_worker_busy() {
     let mut owner_ctx = ctx(OWNER, 9);
     let clock = clock::create_for_testing(&mut owner_ctx);

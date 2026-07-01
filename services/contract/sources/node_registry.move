@@ -143,6 +143,11 @@ public struct WorkerUnregistered has copy, drop {
     owner: address,
 }
 
+public struct WorkerHeartbeat has copy, drop {
+    node_id: u64,
+    timestamp_ms: u64,
+}
+
 public struct WorkerPriceUpdated has copy, drop {
     node_id: u64,
     owner: address,
@@ -355,6 +360,24 @@ public entry fun set_worker_active<T>(
         active,
         timestamp_ms,
     });
+}
+
+public entry fun heartbeat_worker<T>(
+    registry: &mut Registry<T>,
+    node_id: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    assert_node_exists(registry, node_id);
+
+    let sender = tx_context::sender(ctx);
+    let timestamp_ms = clock::timestamp_ms(clock);
+    let record = table::borrow_mut(&mut registry.workers, node_id);
+
+    assert_worker_owner(record.owner, sender);
+    record.updated_at_ms = timestamp_ms;
+
+    event::emit(WorkerHeartbeat { node_id, timestamp_ms });
 }
 
 public entry fun update_worker_price<T>(
