@@ -55,7 +55,7 @@ function contractEnvPath(network: ContractNetwork): string {
     process.cwd(),
     "..",
     "..",
-    "secrets",
+    "runtime",
     "contract",
     `${network}.env`,
   );
