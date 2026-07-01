@@ -947,6 +947,10 @@ public fun node_count<T>(registry: &Registry<T>): u64 {
     registry.node_count
 }
 
+public fun next_node_id<T>(registry: &Registry<T>): u64 {
+    registry.next_node_id
+}
+
 public fun active_worker_count<T>(registry: &Registry<T>): u64 {
     registry.active_worker_count
 }
@@ -1055,6 +1059,30 @@ public fun room_proposal_finalized<T>(registry: &Registry<T>, rental_id: u64): b
 
 public fun role_proposal_exists<T>(registry: &Registry<T>, proposal_id: u64): bool {
     table::contains(&registry.role_proposals, proposal_id)
+}
+
+public fun next_role_proposal_id<T>(registry: &Registry<T>): u64 {
+    registry.next_role_proposal_id
+}
+
+public fun role_proposal_role<T>(registry: &Registry<T>, proposal_id: u64): u8 {
+    assert!(table::contains(&registry.role_proposals, proposal_id), E_PROPOSAL_NOT_FOUND);
+    table::borrow(&registry.role_proposals, proposal_id).role
+}
+
+public fun role_proposal_nominee_node_id<T>(registry: &Registry<T>, proposal_id: u64): u64 {
+    assert!(table::contains(&registry.role_proposals, proposal_id), E_PROPOSAL_NOT_FOUND);
+    table::borrow(&registry.role_proposals, proposal_id).nominee_node_id
+}
+
+public fun role_proposal_deadline_ms<T>(registry: &Registry<T>, proposal_id: u64): u64 {
+    assert!(table::contains(&registry.role_proposals, proposal_id), E_PROPOSAL_NOT_FOUND);
+    table::borrow(&registry.role_proposals, proposal_id).deadline_ms
+}
+
+public fun role_proposal_finalized<T>(registry: &Registry<T>, proposal_id: u64): bool {
+    assert!(table::contains(&registry.role_proposals, proposal_id), E_PROPOSAL_NOT_FOUND);
+    table::borrow(&registry.role_proposals, proposal_id).finalized
 }
 
 public entry fun set_coordinator_endpoint<T>(

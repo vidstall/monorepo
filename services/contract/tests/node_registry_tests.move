@@ -31,6 +31,7 @@ const E_WORKER_ACTIVE: u64 = 13;
 const E_INVALID_CAPACITY: u64 = 14;
 const E_NOT_ACTIVE_WORKER: u64 = 15;
 const E_ALREADY_VOTED: u64 = 16;
+const E_PROPOSAL_NOT_FOUND: u64 = 17;
 const E_PROPOSAL_EXPIRED: u64 = 18;
 const E_PROPOSAL_ALREADY_FINALIZED: u64 = 19;
 const E_INVALID_ROLE: u64 = 20;
@@ -50,6 +51,27 @@ fun registry_initializes_empty() {
     assert!(node_registry::active_worker_count_for_testing(&registry) == 0);
 
     node_registry::destroy_registry_for_testing(registry);
+}
+
+#[test]
+fun next_node_id_tracks_registrations_including_gaps() {
+    let mut ctx = ctx(OWNER, 1_5);
+    let clock = clock::create_for_testing(&mut ctx);
+    let mut registry = node_registry::new_registry_for_testing<TEST_COIN>(&mut ctx);
+
+    assert!(node_registry::next_node_id(&registry) == 1);
+
+    node_registry::register_worker(&mut registry, uri(), hash(1), PRICE, stake(&mut ctx), &clock, &mut ctx);
+    node_registry::register_worker(&mut registry, uri(), hash(2), PRICE, stake(&mut ctx), &clock, &mut ctx);
+    assert!(node_registry::next_node_id(&registry) == 3);
+
+    node_registry::unregister_worker(&mut registry, 1, &mut ctx);
+    assert!(node_registry::node_count(&registry) == 1);
+    assert!(node_registry::next_node_id(&registry) == 3);
+
+    node_registry::unregister_worker(&mut registry, 2, &mut ctx);
+    node_registry::destroy_registry_for_testing(registry);
+    clock::destroy_for_testing(clock);
 }
 
 #[test]
@@ -722,6 +744,62 @@ fun propose_role_creates_proposal() {
     node_registry::remove_worker_for_testing(&mut registry, 1, &mut owner_ctx);
     node_registry::destroy_registry_for_testing(registry);
     clock::destroy_for_testing(clock);
+}
+
+#[test]
+fun role_proposal_accessors_report_pending_state() {
+    let mut owner_ctx = ctx(OWNER, 94_1);
+    let mut clock = clock::create_for_testing(&mut owner_ctx);
+    let mut registry = node_registry::new_registry_for_testing<TEST_COIN>(&mut owner_ctx);
+
+    node_registry::register_worker(&mut registry, uri(), hash(1), PRICE, stake(&mut owner_ctx), &clock, &mut owner_ctx);
+    let mut wb_ctx = ctx(WORKER_B, 94_2);
+    node_registry::register_worker(&mut registry, uri(), hash(1), PRICE, stake(&mut wb_ctx), &clock, &mut wb_ctx);
+    let mut wc_ctx = ctx(WORKER_C, 94_3);
+    node_registry::register_worker(&mut registry, uri(), hash(1), PRICE, stake(&mut wc_ctx), &clock, &mut wc_ctx);
+
+    assert!(node_registry::next_role_proposal_id(&registry) == 1);
+
+    clock::set_for_testing(&mut clock, 1000);
+    let mut propose_ctx = ctx(OWNER, 94_4);
+    node_registry::propose_role(
+        &mut registry,
+        1,
+        2,
+        node_registry::role_router_for_testing(),
+        &clock,
+        &mut propose_ctx,
+    );
+
+    assert!(node_registry::next_role_proposal_id(&registry) == 2);
+    assert!(node_registry::role_proposal_exists(&registry, 1));
+    assert!(node_registry::role_proposal_role(&registry, 1) == node_registry::role_router_for_testing());
+    assert!(node_registry::role_proposal_nominee_node_id(&registry, 1) == 2);
+    assert!(node_registry::role_proposal_deadline_ms(&registry, 1) == 1000 + node_registry::default_vote_deadline_ms_for_testing());
+    assert!(!node_registry::role_proposal_finalized(&registry, 1));
+
+    let mut wb_vote_ctx = ctx(WORKER_B, 94_5);
+    node_registry::cast_role_vote(&mut registry, 2, 1, &clock, &mut wb_vote_ctx);
+    assert!(node_registry::role_proposal_finalized(&registry, 1));
+
+    node_registry::remove_role_proposal_for_testing(&mut registry, 1);
+    node_registry::remove_role_map_entry_for_testing(&mut registry, 2);
+    node_registry::remove_worker_for_testing(&mut registry, 1, &mut owner_ctx);
+    node_registry::remove_worker_for_testing(&mut registry, 2, &mut wb_ctx);
+    node_registry::remove_worker_for_testing(&mut registry, 3, &mut wc_ctx);
+    node_registry::destroy_registry_for_testing(registry);
+    clock::destroy_for_testing(clock);
+}
+
+#[test]
+#[expected_failure(abort_code = E_PROPOSAL_NOT_FOUND, location = xaisen_contract::node_registry)]
+fun role_proposal_accessor_unknown_id_aborts() {
+    let mut ctx = ctx(OWNER, 94_6);
+    let registry = node_registry::new_registry_for_testing<TEST_COIN>(&mut ctx);
+
+    let _ = node_registry::role_proposal_role(&registry, 1);
+
+    node_registry::destroy_registry_for_testing(registry);
 }
 
 #[test]
