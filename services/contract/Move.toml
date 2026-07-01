@@ -1,0 +1,9 @@
+[package]
+name = "xaisen_contract"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+
+[environments]
+devnet = "b696f95e"
