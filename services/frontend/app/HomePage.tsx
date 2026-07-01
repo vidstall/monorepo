@@ -135,7 +135,7 @@ function JoinRoomForm() {
   function handleJoin(e: FormEvent) {
     e.preventDefault();
     const name = roomName.trim();
-    if (name) router.push(`/rooms/${encodeURIComponent(name)}`);
+    if (name) router.push(`/rooms?roomName=${encodeURIComponent(name)}`);
   }
 
   return (
@@ -191,7 +191,7 @@ function CreateRoomForm() {
       }
 
       setStatus("room ordered — joining…");
-      router.push(`/rooms/${encodeURIComponent(name)}`);
+      router.push(`/rooms?roomName=${encodeURIComponent(name)}`);
     } catch (err) {
       setStatus(null);
       setError(err instanceof Error ? err.message : "Failed to create room");
