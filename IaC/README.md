@@ -55,10 +55,10 @@ On a successful publish or a sync of an already-published package, `vidctl` writ
 ./vidctl registry login --provider alibaba
 ./vidctl registry build --service frontend
 ./vidctl registry push --service frontend
-./vidctl registry publish --provider alibaba --all
+./vidctl registry publish --all
 ```
 
-Provider-aware registry commands load `secrets/registry/<provider>.env`, for example `secrets/registry/dockerhub.env` or `secrets/registry/selfhost.env`. Each file uses generic keys:
+`registry login` loads `secrets/registry/<provider>.env`, for example `secrets/registry/dockerhub.env` or `secrets/registry/selfhost.env`. Each file uses generic keys:
 
 ```bash
 export REGISTRY_PREFIX="registry.example.com/xaisen"

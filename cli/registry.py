@@ -145,14 +145,14 @@ def push(service: str | None, all_services: bool, tag: str | None) -> int:
     return each_service("push", service, all_services, tag)
 
 
-def publish(service: str | None, all_services: bool, tag: str | None, provider: str = DEFAULT_PROVIDER) -> int:
-    code = ensure_login(provider)
+def publish(service: str | None, all_services: bool, tag: str | None) -> int:
+    code = login()
     if code != 0:
         return code
-    code = each_service("build", service, all_services, tag, provider)
+    code = build(service, all_services, tag)
     if code != 0:
         return code
-    return each_service("push", service, all_services, tag, provider)
+    return push(service, all_services, tag)
 
 
 def each_service(

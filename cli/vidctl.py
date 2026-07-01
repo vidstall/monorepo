@@ -82,8 +82,7 @@ def add_registry_parser(subparsers: argparse._SubParsersAction[argparse.Argument
 
     publish = actions.add_parser("publish", help="Log in, build, and push Docker image(s).")
     add_registry_selection(publish)
-    add_registry_provider(publish)
-    publish.set_defaults(handler=lambda args: registry.publish(args.service, args.all, args.tag, args.provider))
+    publish.set_defaults(handler=lambda args: registry.publish(args.service, args.all, args.tag))
 
 
 def add_registry_selection(parser: argparse.ArgumentParser) -> None:
