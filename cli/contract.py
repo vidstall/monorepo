@@ -29,6 +29,17 @@ def check(env: str) -> int:
     return test(env)
 
 
+def ensure_active_sui_env(env: str) -> int:
+    completed = subprocess.run(
+        ["sui", "client", "active-env"], capture_output=True, text=True, check=False
+    )
+    active = completed.stdout.strip()
+    if active == env:
+        return 0
+    print(f"Switching sui client active environment: {active or '(unset)'} -> {env}")
+    return run(["sui", "client", "switch", "--env", env])
+
+
 def publish(
     env: str,
     dry_run: bool,
@@ -39,6 +50,10 @@ def publish(
     if not dry_run and not yes:
         print("Refusing to publish contract without --dry-run or --yes.", file=sys.stderr)
         return 2
+
+    code = ensure_active_sui_env(env)
+    if code != 0:
+        return code
 
     deployment = load_deployment(env)
     existing_package_id = deployment.get("CONTRACT_PACKAGE_ID")
