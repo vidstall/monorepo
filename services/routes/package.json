@@ -13,13 +13,13 @@
     "@mysten/sui": "2.16.3",
     "livekit-server-sdk": "2.15.4",
     "next": "15.5.16",
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   },
   "devDependencies": {
     "@types/node": "24.12.4",
-    "@types/react": "18.3.28",
-    "@types/react-dom": "18.3.7",
+    "@types/react": "19.1.0",
+    "@types/react-dom": "19.1.0",
     "prettier": "3.8.3",
     "typescript": "5.9.3"
   },
