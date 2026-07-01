@@ -58,7 +58,9 @@ On a successful publish or a sync of an already-published package, `vidctl` writ
 ./vidctl registry publish --all
 ```
 
-`registry login` loads `secrets/registry/<provider>.env`, for example `secrets/registry/dockerhub.env` or `secrets/registry/selfhost.env`. Each file uses generic keys:
+`registry login` loads `secrets/registry/<provider>.env`, for example `secrets/registry/dockerhub.env` or `secrets/registry/selfhost.env`. After a successful login, `vidctl` writes the selected provider and per-service image repositories to `runtime/registry.toml`. `registry build`, `registry push`, and `registry publish` read image names from that runtime file.
+
+Each provider env file uses generic keys:
 
 ```bash
 export REGISTRY_PREFIX="registry.example.com/xaisen"

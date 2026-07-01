@@ -93,7 +93,7 @@ def add_registry_parser(subparsers: argparse._SubParsersAction[argparse.Argument
         add_registry_selection(item)
         item.set_defaults(handler=lambda args, selected_handler=handler: selected_handler(args.service, args.all, args.tag))
 
-    publish = actions.add_parser("publish", help="Log in, build, and push Docker image(s).")
+    publish = actions.add_parser("publish", help="Build and push Docker image(s).")
     add_registry_selection(publish)
     publish.set_defaults(handler=lambda args: registry.publish(args.service, args.all, args.tag))
 
