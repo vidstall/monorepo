@@ -179,6 +179,10 @@ def require_env(key: str) -> str:
     return value
 
 
+def alibaba_scan_all_regions() -> bool:
+    return os.getenv("ALIBABA_SCAN_ALL_REGIONS", "").lower() in ("1", "true", "yes")
+
+
 def create_frontend_site(instance: TopologyInstance) -> dict[str, Any]:
     provider = str(instance.get("provider", ""))
     desired_state = str(instance.get("desired_state", ""))
@@ -694,31 +698,94 @@ def create_azure_vm(instance: TopologyInstance, public_key: str) -> dict[str, An
     return {"address": public_ip.ip_address, "user": "azureuser"}
 
 
+def find_alibaba_spot_type(name: str, provider: Any, region: str) -> tuple[str, str, Any, Any]:
+    """Search for a 1 vCPU / 1 GiB spot-capable Alibaba instance type.
+
+    Tries `region` (via the already-constructed `provider`) first. If nothing
+    matches there and ALIBABA_SCAN_ALL_REGIONS is set, probes every other account
+    region with ad-hoc providers, stopping at the first region with any match.
+    Note: sorting by price (sorted_by="Price") would require BSS OpenAPI billing
+    permissions this account's RAM user doesn't have, so this just takes the
+    first spec match instead.
+    """
+    import pulumi_alicloud as alicloud
+
+    result = alicloud.ecs.get_instance_types(
+        cpu_core_count=1,
+        memory_size=1,
+        spot_strategy="SpotAsPriceGo",
+        network_type="Vpc",
+        opts=pulumi.InvokeOptions(provider=provider),
+    )
+    if result.instance_types:
+        matched = result.instance_types[0]
+        return region, str(matched.id), matched, provider
+
+    if not alibaba_scan_all_regions():
+        raise ValueError(f"No 1 vCPU / 1 GiB spot-capable Alibaba instance type found in region {region}.")
+
+    access_key = require_env("ALIBABA_CLOUD_ACCESS_KEY_ID")
+    secret_key = require_env("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+    regions = alicloud.get_regions(opts=pulumi.InvokeOptions(provider=provider))
+    for idx, candidate_region in enumerate(r for r in regions.ids if r != region):
+        candidate_provider = alicloud.Provider(
+            f"{name}-vm-provider-{idx}",
+            access_key=access_key,
+            secret_key=secret_key,
+            region=candidate_region,
+        )
+        result = alicloud.ecs.get_instance_types(
+            cpu_core_count=1,
+            memory_size=1,
+            spot_strategy="SpotAsPriceGo",
+            network_type="Vpc",
+            opts=pulumi.InvokeOptions(provider=candidate_provider),
+        )
+        if result.instance_types:
+            matched = result.instance_types[0]
+            return candidate_region, str(matched.id), matched, candidate_provider
+
+    raise ValueError("No 1 vCPU / 1 GiB spot-capable Alibaba instance type found in any Alibaba region.")
+
+
 def create_alibaba_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     import pulumi_alicloud as alicloud
 
     name = instance["name"]
     port = int(instance.get("port") or 0)
-    region = provider_region("alibaba", instance)
-    size = str(instance.get("size") or "ecs.t6-c1m1.large")
+    spot_strategy = "SpotAsPriceGo"
 
+    region = provider_region("alibaba", instance)
     provider = alicloud.Provider(
         f"{name}-vm-provider",
         access_key=require_env("ALIBABA_CLOUD_ACCESS_KEY_ID"),
         secret_key=require_env("ALIBABA_CLOUD_ACCESS_KEY_SECRET"),
         region=region,
     )
-    opts = pulumi.ResourceOptions(provider=provider)
 
-    available_zones = alicloud.get_zones(
-        available_instance_type=size,
-        available_resource_creation="Instance",
-        network_type="Vpc",
-        opts=pulumi.InvokeOptions(provider=provider),
-    )
-    if not available_zones.ids:
-        raise ValueError(f"No Alibaba ECS zone in {region} currently supports instance type {size}")
-    zone = str(instance.get("zone") or available_zones.ids[0])
+    pinned_size = str(instance.get("size") or "")
+    if pinned_size:
+        spot_capable_types = alicloud.ecs.get_instance_types(
+            instance_type=pinned_size,
+            spot_strategy=spot_strategy,
+            network_type="Vpc",
+            opts=pulumi.InvokeOptions(provider=provider),
+        )
+        if not spot_capable_types.instance_types:
+            raise ValueError(
+                f"Pinned instance type {pinned_size} has no spot capacity in {region}; "
+                "rerun with --find-instance-type."
+            )
+        size = pinned_size
+        matched = spot_capable_types.instance_types[0]
+    else:
+        region, size, matched, provider = find_alibaba_spot_type(name, provider, region)
+
+    instance["region"] = region
+    instance["size"] = size
+
+    opts = pulumi.ResourceOptions(provider=provider)
+    zone = str(instance.get("zone") or matched.availability_zones[0])
 
     vpc = alicloud.vpc.Network(f"{name}-vm-vpc", cidr_block="172.16.0.0/16", vpc_name=f"xaisen-{name}", opts=opts)
     vswitch = alicloud.vpc.Switch(
@@ -766,12 +833,15 @@ def create_alibaba_vm(instance: TopologyInstance, public_key: str) -> dict[str, 
         f"{name}-vm",
         instance_name=f"xaisen-{name}",
         instance_type=size,
+        instance_charge_type="PostPaid",
+        spot_strategy=spot_strategy,
         availability_zone=zone,
         image_id=images.images[0].id,
         vswitch_id=vswitch.id,
         security_groups=[sg.id],
         key_name=key.key_pair_name,
         internet_max_bandwidth_out=5,
+        system_disk_size=20,
         status="Stopped" if instance.get("desired_state") == "stopped" else "Running",
         stopped_mode="KeepCharging",
         opts=opts,

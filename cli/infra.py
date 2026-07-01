@@ -120,6 +120,45 @@ def inventory() -> int:
     return 0
 
 
+def persist_alibaba_vm_resolution(
+    topology: dict[str, Any],
+    env_name: str,
+    name: str,
+    service: str,
+    provider: str,
+) -> None:
+    """Copy the region/size Pulumi resolved for this VM back into topology.toml.
+
+    Best-effort: a failure here shouldn't fail an otherwise-successful deploy,
+    it just means the next run re-searches instead of reusing the pin.
+    """
+    try:
+        raw = subprocess.check_output(
+            ["pulumi", "stack", "output", "topology", "--json", "--stack", env_name],
+            cwd=PULUMI_DIR,
+            env=command_env(),
+            text=True,
+        )
+        remote_topology = json.loads(raw)
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        return
+
+    for remote_instance in remote_topology.get("instances", []):
+        if (
+            remote_instance.get("name") == name
+            and remote_instance.get("service") == service
+            and remote_instance.get("provider") == provider
+            and remote_instance.get("env", env_name) == env_name
+        ):
+            local_instance = find_instance(topology, env_name, name, service, provider)
+            if local_instance is not None:
+                if remote_instance.get("region"):
+                    local_instance["region"] = remote_instance["region"]
+                if remote_instance.get("size"):
+                    local_instance["size"] = remote_instance["size"]
+            return
+
+
 def ansible_inventory() -> int:
     executable = venv_bin("ansible-inventory")
     if not executable.exists():
@@ -179,7 +218,15 @@ def deploy(yes: bool) -> int:
     return code
 
 
-def control(action: str, name: str, service: str, provider: str, yes: bool = False) -> int:
+def control(
+    action: str,
+    name: str,
+    service: str,
+    provider: str,
+    yes: bool = False,
+    find_instance_type: bool = False,
+    all_region: bool = False,
+) -> int:
     if service not in DOCKER_SERVICES:
         print(f"Unknown service: {service}", file=sys.stderr)
         return 2
@@ -260,7 +307,7 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
     if backend == "object_storage":
         set_frontend_storage_defaults(instance, env_name)
     elif backend == "vm" and action in {"start", "restart"}:
-        set_vm_defaults(instance)
+        set_vm_defaults(instance, topology, find_instance_type=find_instance_type)
     write_topology(topology)
 
     code = 0
@@ -273,9 +320,13 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
         if backend == "object_storage" and provider == "alibaba":
             code = pulumi_up(env_name, parallel=4)
         elif backend == "vm" and provider == "alibaba":
+            # An --all-region search may create ad-hoc region-probe provider
+            # resources that aren't in the fixed target URN list, so fall back
+            # to an untargeted apply whenever that scan is in play.
             code = pulumi_up(
                 env_name,
-                targets=alibaba_vm_target_urns(env_name, name, service, bool(instance.get("port"))),
+                targets=None if all_region else alibaba_vm_target_urns(env_name, name, service, bool(instance.get("port"))),
+                extra_env={"ALIBABA_SCAN_ALL_REGIONS": "1" if all_region else "0"},
             )
         else:
             code = pulumi_up(env_name)
@@ -297,6 +348,8 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
         elif backend == "vm" and action in {"start", "restart"}:
             failed_stage = "inventory"
             code = inventory()
+            if code == 0 and provider == "alibaba":
+                persist_alibaba_vm_resolution(topology, env_name, name, service, provider)
             if code == 0:
                 failed_stage = "configure"
                 container_state = "restarted" if action == "restart" else "started"
@@ -363,9 +416,16 @@ def select_or_create_stack(stack: str) -> int:
     return run(["pulumi", "stack", "init", stack], cwd=PULUMI_DIR, env=env)
 
 
-def pulumi_up(stack: str, parallel: int | None = None, targets: list[str] | None = None) -> int:
+def pulumi_up(
+    stack: str,
+    parallel: int | None = None,
+    targets: list[str] | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> int:
     env = command_env()
     env["PULUMI_STACK"] = stack
+    if extra_env:
+        env.update(extra_env)
     args = ["pulumi", "up", "--yes", "--stack", stack]
     for target in targets or []:
         args.extend(["--target", target])
@@ -471,6 +531,13 @@ def find_instance(
             and instance.get("env", env_name) == env_name
         ):
             return instance
+    return None
+
+
+def find_pinned_alibaba_instance(topology: dict[str, Any], service: str, provider: str) -> dict[str, Any] | None:
+    for item in topology.get("instances", []):
+        if item.get("service") == service and item.get("provider") == provider and item.get("region") and item.get("size"):
+            return item
     return None
 
 
@@ -600,11 +667,23 @@ def ensure_ssh_keypair(instance: dict[str, Any]) -> str:
     return f"runtime/ssh_key/{name}"
 
 
-def set_vm_defaults(instance: dict[str, Any]) -> None:
+def set_vm_defaults(instance: dict[str, Any], topology: dict[str, Any], find_instance_type: bool = False) -> None:
     service = str(instance.get("service", ""))
     provider = str(instance.get("provider", ""))
     instance.setdefault("port", SERVICE_PORTS.get(service, 0))
-    instance.setdefault("size", VM_INSTANCE_SIZES.get(provider, ""))
+
+    if provider == "alibaba":
+        if find_instance_type:
+            instance.pop("region", None)
+            instance.pop("size", None)
+        elif not (instance.get("region") and instance.get("size")):
+            pinned = find_pinned_alibaba_instance(topology, service, provider)
+            if pinned:
+                instance["region"] = pinned["region"]
+                instance["size"] = pinned["size"]
+    else:
+        instance.setdefault("size", VM_INSTANCE_SIZES.get(provider, ""))
+
     instance["ssh_key_dir"] = ensure_ssh_keypair(instance)
 
 

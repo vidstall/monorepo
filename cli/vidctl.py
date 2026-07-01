@@ -157,6 +157,17 @@ def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.Argume
         parser.add_argument("--provider", required=True, choices=sorted(infra.PROVIDERS), help="Cloud provider for the topology instance.")
         if action == "kill":
             parser.add_argument("--yes", action="store_true", help="Confirm destructive instance deletion.")
+        if action in {"start", "restart"}:
+            parser.add_argument(
+                "--find-instance-type",
+                action="store_true",
+                help="Force a fresh Alibaba spot instance-type/region search instead of reusing the pinned one for this service.",
+            )
+            parser.add_argument(
+                "--all-region",
+                action="store_true",
+                help="Scan every Alibaba region for spot capacity instead of only the default region.",
+            )
         parser.set_defaults(
             handler=lambda args, selected_action=action: infra.control(
                 selected_action,
@@ -164,5 +175,7 @@ def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.Argume
                 args.service,
                 args.provider,
                 getattr(args, "yes", False),
+                getattr(args, "find_instance_type", False),
+                getattr(args, "all_region", False),
             )
         )
