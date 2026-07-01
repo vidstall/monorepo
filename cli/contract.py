@@ -9,10 +9,11 @@ from pathlib import Path
 
 import tomllib
 
-from .context import CONTRACT_DIR, contract_env_path, run, write_kv_env_file
+from .context import CONTRACT_DIR, contract_env_path, read_env_file, run, write_kv_env_file
 
 SUI_COIN_TYPE = "0x2::sui::SUI"
 PUBLISHED_TOML = CONTRACT_DIR / "Published.toml"
+MOVE_TOML = CONTRACT_DIR / "Move.toml"
 
 
 def build(env: str) -> int:
@@ -30,15 +31,39 @@ def check(env: str) -> int:
     return test(env)
 
 
-def publish(env: str, dry_run: bool, yes: bool, gas_budget: str | None) -> int:
+def publish(
+    env: str,
+    dry_run: bool,
+    yes: bool,
+    gas_budget: str | None,
+    create_registry_if_missing: bool = False,
+) -> int:
     if not dry_run and not yes:
         print("Refusing to publish contract without --dry-run or --yes.", file=sys.stderr)
         return 2
 
+    deployment = load_deployment(env)
+    existing_package_id = deployment.get("CONTRACT_PACKAGE_ID")
+    existing_upgrade_cap_id = deployment.get("CONTRACT_UPGRADE_CAP_ID")
+    if existing_package_id:
+        if not existing_upgrade_cap_id:
+            print(
+                f"Cannot upgrade {env}: missing CONTRACT_UPGRADE_CAP_ID in {contract_env_path(env)} "
+                "and services/contract/Published.toml.",
+                file=sys.stderr,
+            )
+            return 1
+        return upgrade_existing(
+            env,
+            deployment,
+            dry_run,
+            gas_budget,
+            create_registry_if_missing,
+        )
+
     preview = test_publish(env, gas_budget)
     if preview is None:
         return 1
-
     if dry_run:
         return 0
 
@@ -52,33 +77,183 @@ def publish(env: str, dry_run: bool, yes: bool, gas_budget: str | None) -> int:
             *(["--gas-budget", gas_budget] if gas_budget else []),
         ]
     )
-
-    published_metadata = None
-    if publish_result is None and publish_error and "already published" in publish_error.lower():
-        published_metadata = load_published_metadata(env)
-
-    if publish_result is None and published_metadata is None:
+    if publish_result is None:
         if publish_error:
             sys.stderr.write(publish_error)
         return publish_code or 1
 
-    package_id = (
-        parse_published_package_id(publish_result)
-        if publish_result
-        else (published_metadata or {}).get("published-at")
-    )
-    upgrade_cap_id = (
-        parse_upgrade_cap_id(publish_result)
-        if publish_result
-        else (published_metadata or {}).get("upgrade-capability")
-    )
-    deployer_address = parse_sender(publish_result) if publish_result else None
-    publish_tx_digest = parse_transaction_digest(publish_result) if publish_result else None
-
+    package_id = parse_published_package_id(publish_result)
+    upgrade_cap_id = parse_upgrade_cap_id(publish_result)
+    deployer_address = parse_sender(publish_result)
+    publish_tx_digest = parse_transaction_digest(publish_result)
     if not package_id:
         print("Could not determine published package ID.", file=sys.stderr)
         return 1
 
+    registry_object_id = create_registry(package_id, gas_budget)
+    if not registry_object_id:
+        return 1
+
+    write_kv_env_file(
+        contract_env_path(env),
+        {
+            "CONTRACT_NETWORK": env,
+            "CONTRACT_CHAIN_ID": deployment.get("CONTRACT_CHAIN_ID", ""),
+            "CONTRACT_PACKAGE_ID": package_id,
+            "CONTRACT_ORIGINAL_PACKAGE_ID": package_id,
+            "CONTRACT_REGISTRY_OBJECT_ID": registry_object_id,
+            "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id or "",
+            "CONTRACT_DEPLOYER_ADDRESS": deployer_address or "",
+            "CONTRACT_PUBLISH_TX_DIGEST": publish_tx_digest or "",
+        },
+    )
+    return 0
+
+
+def upgrade_existing(
+    env: str,
+    deployment: dict[str, str],
+    dry_run: bool,
+    gas_budget: str | None,
+    create_registry_if_missing: bool,
+) -> int:
+    package_id = deployment["CONTRACT_PACKAGE_ID"]
+    upgrade_cap_id = deployment["CONTRACT_UPGRADE_CAP_ID"]
+    registry_object_id = deployment.get("CONTRACT_REGISTRY_OBJECT_ID")
+
+    if not registry_object_id and not create_registry_if_missing:
+        print(
+            f"Refusing to upgrade {env}: missing CONTRACT_REGISTRY_OBJECT_ID in {contract_env_path(env)}. "
+            "Add the existing registry object ID, or rerun with --create-registry-if-missing "
+            "to create a fresh shared registry.",
+            file=sys.stderr,
+        )
+        return 1
+
+    pubfile_path = write_runtime_pubfile(env, deployment)
+    if pubfile_path is None:
+        return 1
+
+    try:
+        preview = test_upgrade(env, upgrade_cap_id, gas_budget, pubfile_path)
+        if preview is None:
+            return 1
+        if dry_run:
+            return 0
+
+        upgrade_code, upgrade_result, upgrade_error = run_sui_json(
+            [
+                "sui",
+                "client",
+                "upgrade",
+                "--upgrade-capability",
+                upgrade_cap_id,
+                "--build-env",
+                env,
+                "--pubfile-path",
+                pubfile_path,
+                "--json",
+                *(["--gas-budget", gas_budget] if gas_budget else []),
+                CONTRACT_DIR,
+            ]
+        )
+        if upgrade_result is None:
+            if upgrade_error:
+                sys.stderr.write(upgrade_error)
+            return upgrade_code or 1
+
+        package_id = parse_published_package_id(upgrade_result) or package_id
+        upgrade_tx_digest = parse_transaction_digest(upgrade_result)
+    finally:
+        try:
+            os.unlink(pubfile_path)
+        except FileNotFoundError:
+            pass
+
+    if not registry_object_id:
+        registry_object_id = create_registry(package_id, gas_budget)
+        if not registry_object_id:
+            return 1
+
+    write_kv_env_file(
+        contract_env_path(env),
+        {
+            "CONTRACT_NETWORK": env,
+            "CONTRACT_CHAIN_ID": deployment.get("CONTRACT_CHAIN_ID", ""),
+            "CONTRACT_PACKAGE_ID": package_id,
+            "CONTRACT_ORIGINAL_PACKAGE_ID": deployment.get("CONTRACT_ORIGINAL_PACKAGE_ID", deployment["CONTRACT_PACKAGE_ID"]),
+            "CONTRACT_REGISTRY_OBJECT_ID": registry_object_id,
+            "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id,
+            "CONTRACT_DEPLOYER_ADDRESS": deployment.get("CONTRACT_DEPLOYER_ADDRESS", ""),
+            "CONTRACT_PUBLISH_TX_DIGEST": deployment.get("CONTRACT_PUBLISH_TX_DIGEST", ""),
+            "CONTRACT_UPGRADE_TX_DIGEST": upgrade_tx_digest or "",
+        },
+    )
+    return 0
+
+
+def test_publish(env: str, gas_budget: str | None) -> dict | None:
+    pubfile_path = str(Path(tempfile.gettempdir()) / f"vidctl-contract-{os.getpid()}.toml")
+    try:
+        os.unlink(pubfile_path)
+    except FileNotFoundError:
+        pass
+
+    _code, result, error = run_sui_json(
+        [
+            "sui",
+            "client",
+            "test-publish",
+            CONTRACT_DIR,
+            "--build-env",
+            env,
+            "--pubfile-path",
+            pubfile_path,
+            "--dry-run",
+            "--json",
+            *(["--gas-budget", gas_budget] if gas_budget else []),
+        ]
+    )
+
+    try:
+        os.unlink(pubfile_path)
+    except FileNotFoundError:
+        pass
+
+    if result is None and error:
+        sys.stderr.write(error)
+    return result
+
+
+def test_upgrade(
+    env: str,
+    upgrade_cap_id: str,
+    gas_budget: str | None,
+    pubfile_path: str,
+) -> dict | None:
+    _code, result, error = run_sui_json(
+        [
+            "sui",
+            "client",
+            "test-upgrade",
+            "--upgrade-capability",
+            upgrade_cap_id,
+            "--build-env",
+            env,
+            "--pubfile-path",
+            pubfile_path,
+            "--dry-run",
+            "--json",
+            *(["--gas-budget", gas_budget] if gas_budget else []),
+            CONTRACT_DIR,
+        ]
+    )
+    if result is None and error:
+        sys.stderr.write(error)
+    return result
+
+
+def create_registry(package_id: str, gas_budget: str | None) -> str | None:
     registry_code, registry_result, registry_error = run_sui_json(
         [
             "sui",
@@ -99,55 +274,13 @@ def publish(env: str, dry_run: bool, yes: bool, gas_budget: str | None) -> int:
     if registry_result is None:
         if registry_error:
             sys.stderr.write(registry_error)
-        return registry_code or 1
+        return None
 
     registry_object_id = parse_created_object_id(registry_result, "Registry<")
     if not registry_object_id:
         print("Could not determine registry object ID.", file=sys.stderr)
-        return 1
-
-    write_kv_env_file(
-        contract_env_path(env),
-        {
-            "CONTRACT_NETWORK": env,
-            "CONTRACT_PACKAGE_ID": package_id,
-            "CONTRACT_REGISTRY_OBJECT_ID": registry_object_id,
-            "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id or "",
-            "CONTRACT_DEPLOYER_ADDRESS": deployer_address or "",
-            "CONTRACT_PUBLISH_TX_DIGEST": publish_tx_digest or "",
-        },
-    )
-    return 0
-
-
-def test_publish(env: str, gas_budget: str | None) -> dict | None:
-    pubfile_path = str(Path(tempfile.gettempdir()) / f"vidctl-contract-{os.getpid()}.toml")
-    try:
-        os.unlink(pubfile_path)
-    except FileNotFoundError:
-        pass
-    _code, result, error = run_sui_json(
-        [
-            "sui",
-            "client",
-            "test-publish",
-            CONTRACT_DIR,
-            "--build-env",
-            env,
-            "--pubfile-path",
-            pubfile_path,
-            "--dry-run",
-            "--json",
-            *(["--gas-budget", gas_budget] if gas_budget else []),
-        ]
-    )
-    try:
-        os.unlink(pubfile_path)
-    except FileNotFoundError:
-        pass
-    if result is None and error:
-        sys.stderr.write(error)
-    return result
+        return None
+    return registry_object_id
 
 
 def run_sui_json(args: list[str]) -> tuple[int, dict | None, str]:
@@ -184,6 +317,81 @@ def load_published_metadata(network: str) -> dict | None:
         return None
     data = tomllib.loads(PUBLISHED_TOML.read_text())
     return find_network_metadata(data, network)
+
+
+def load_deployment(network: str) -> dict[str, str]:
+    deployment: dict[str, str] = {}
+    published_metadata = load_published_metadata(network)
+    if published_metadata:
+        if published_metadata.get("chain-id"):
+            deployment["CONTRACT_CHAIN_ID"] = published_metadata["chain-id"]
+        if published_metadata.get("published-at"):
+            deployment["CONTRACT_PACKAGE_ID"] = published_metadata["published-at"]
+            deployment["CONTRACT_ORIGINAL_PACKAGE_ID"] = published_metadata.get(
+                "original-id",
+                published_metadata["published-at"],
+            )
+        if published_metadata.get("upgrade-capability"):
+            deployment["CONTRACT_UPGRADE_CAP_ID"] = published_metadata["upgrade-capability"]
+
+    if not deployment.get("CONTRACT_CHAIN_ID"):
+        chain_id = load_move_environment_chain_id(network)
+        if chain_id:
+            deployment["CONTRACT_CHAIN_ID"] = chain_id
+
+    env_values = read_env_file(contract_env_path(network))
+    deployment.update({key: value for key, value in env_values.items() if value})
+    return deployment
+
+
+def load_move_environment_chain_id(network: str) -> str | None:
+    if not MOVE_TOML.exists():
+        return None
+    data = tomllib.loads(MOVE_TOML.read_text())
+    environments = data.get("environments", {})
+    if isinstance(environments, dict):
+        chain_id = environments.get(network)
+        if isinstance(chain_id, str):
+            return chain_id
+    return None
+
+
+def write_runtime_pubfile(env: str, deployment: dict[str, str]) -> str | None:
+    chain_id = deployment.get("CONTRACT_CHAIN_ID")
+    if not chain_id:
+        print(
+            f"Cannot upgrade {env}: missing chain id. Add CONTRACT_CHAIN_ID to {contract_env_path(env)}.",
+            file=sys.stderr,
+        )
+        return None
+
+    package_id = deployment["CONTRACT_PACKAGE_ID"]
+    original_package_id = deployment.get("CONTRACT_ORIGINAL_PACKAGE_ID", package_id)
+    upgrade_cap_id = deployment["CONTRACT_UPGRADE_CAP_ID"]
+    pubfile_path = Path(tempfile.gettempdir()) / f"vidctl-Pub.{env}.{os.getpid()}.toml"
+    pubfile_path.write_text(
+        "\n".join(
+            [
+                "# generated by vidctl",
+                "# this file contains metadata from ephemeral publications",
+                "# this file should not be committed to source control",
+                "",
+                f'build-env = "{env}"',
+                f'chain-id = "{chain_id}"',
+                "",
+                "[[published]]",
+                "",
+                f'source = {{ local = "{CONTRACT_DIR}" }}',
+                f'published-at = "{package_id}"',
+                f'original-id = "{original_package_id}"',
+                "version = 1",
+                'build-config = { flavor = "sui", edition = "2024" }',
+                f'upgrade-capability = "{upgrade_cap_id}"',
+                "",
+            ]
+        )
+    )
+    return str(pubfile_path)
 
 
 def find_network_metadata(node: object, network: str) -> dict | None:
