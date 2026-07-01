@@ -11,8 +11,8 @@ export function generateRoomId(): string {
 }
 
 export function randomString(length: number): string {
-  let result = '';
-  const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let result = "";
+  const characters = "abcdefghijklmnopqrstuvwxyz0123456789";
   const charactersLength = characters.length;
   for (let i = 0; i < length; i++) {
     result += characters.charAt(Math.floor(Math.random() * charactersLength));
@@ -25,7 +25,7 @@ export function isLowPowerDevice() {
 }
 
 export function isMeetStaging() {
-  return new URL(location.origin).host === 'meet.staging.livekit.io';
+  return new URL(location.origin).host === "meet.staging.livekit.io";
 }
 
 const _GRPC_URLS: Record<string, string> = {
@@ -48,12 +48,21 @@ export async function getRoutesEndpointAsync(): Promise<string> {
   if (!_routesEndpointCache) {
     _routesEndpointCache = (async () => {
       const registryObjectId = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID;
-      const network = (process.env.NEXT_PUBLIC_SUI_NETWORK ?? "devnet") as keyof typeof _GRPC_URLS;
-      if (!registryObjectId) throw new Error("NEXT_PUBLIC_REGISTRY_OBJECT_ID not set");
+      const network = (process.env.NEXT_PUBLIC_SUI_NETWORK ??
+        "devnet") as keyof typeof _GRPC_URLS;
+      if (!registryObjectId)
+        throw new Error("NEXT_PUBLIC_REGISTRY_OBJECT_ID not set");
       const { SuiGrpcClient } = await import("@mysten/sui/grpc");
-      const client = new SuiGrpcClient({ network, baseUrl: _GRPC_URLS[network] });
-      const obj = await client.getObject({ objectId: registryObjectId, include: { json: true } });
-      const fields = (obj.object as { json?: Record<string, string> } | null)?.json ?? null;
+      const client = new SuiGrpcClient({
+        network,
+        baseUrl: _GRPC_URLS[network],
+      });
+      const obj = await client.getObject({
+        objectId: registryObjectId,
+        include: { json: true },
+      });
+      const fields =
+        (obj.object as { json?: Record<string, string> } | null)?.json ?? null;
       const endpoint = fields?.coordinator_endpoint;
       if (!endpoint) throw new Error("coordinator_endpoint not set on-chain");
       return endpoint;

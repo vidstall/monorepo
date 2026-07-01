@@ -1,6 +1,10 @@
-'use client';
+"use client";
 
-import { formatChatMessageLinks, RoomContext, VideoConference } from '@livekit/components-react';
+import {
+  formatChatMessageLinks,
+  RoomContext,
+  VideoConference,
+} from "@livekit/components-react";
 import {
   ExternalE2EEKeyProvider,
   LogLevel,
@@ -9,13 +13,13 @@ import {
   RoomOptions,
   VideoPresets,
   type VideoCodec,
-} from 'livekit-client';
-import { DebugMode } from '@/lib/Debug';
-import { useEffect, useMemo, useState } from 'react';
-import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
-import { SettingsMenu } from '@/lib/SettingsMenu';
-import { useSetupE2EE } from '@/lib/useSetupE2EE';
-import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
+} from "livekit-client";
+import { DebugMode } from "@/lib/Debug";
+import { useEffect, useMemo, useState } from "react";
+import { KeyboardShortcuts } from "@/lib/KeyboardShortcuts";
+import { SettingsMenu } from "@/lib/SettingsMenu";
+import { useSetupE2EE } from "@/lib/useSetupE2EE";
+import { useLowCPUOptimizer } from "@/lib/usePerfomanceOptimiser";
 
 export function VideoConferenceClientImpl(props: {
   liveKitUrl: string;
@@ -36,7 +40,7 @@ export function VideoConferenceClientImpl(props: {
         red: !e2eeEnabled,
         videoCodec: props.codec,
       },
-      adaptiveStream: { pixelDensity: 'screen' },
+      adaptiveStream: { pixelDensity: "screen" },
       dynacast: true,
       e2ee: e2eeEnabled
         ? {
@@ -70,9 +74,11 @@ export function VideoConferenceClientImpl(props: {
 
   useEffect(() => {
     if (e2eeSetupComplete) {
-      room.connect(props.liveKitUrl, props.token, connectOptions).catch((error) => {
-        console.error(error);
-      });
+      room
+        .connect(props.liveKitUrl, props.token, connectOptions)
+        .catch((error) => {
+          console.error(error);
+        });
       room.localParticipant.enableCameraAndMicrophone().catch((error) => {
         console.error(error);
       });
@@ -88,7 +94,9 @@ export function VideoConferenceClientImpl(props: {
         <VideoConference
           chatMessageFormatter={formatChatMessageLinks}
           SettingsComponent={
-            process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU === 'true' ? SettingsMenu : undefined
+            process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU === "true"
+              ? SettingsMenu
+              : undefined
           }
         />
         <DebugMode logLevel={LogLevel.debug} />

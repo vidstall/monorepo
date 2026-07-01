@@ -1,20 +1,20 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { decodePassphrase } from '@/lib/client-utils';
-import { getWorkingRoute } from '@/lib/route-discovery';
-import { DebugMode } from '@/lib/Debug';
-import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
-import { RecordingIndicator } from '@/lib/RecordingIndicator';
-import { SettingsMenu } from '@/lib/SettingsMenu';
-import { ConnectionDetails } from '@/lib/types';
+import React from "react";
+import { decodePassphrase } from "@/lib/client-utils";
+import { getWorkingRoute } from "@/lib/route-discovery";
+import { DebugMode } from "@/lib/Debug";
+import { KeyboardShortcuts } from "@/lib/KeyboardShortcuts";
+import { RecordingIndicator } from "@/lib/RecordingIndicator";
+import { SettingsMenu } from "@/lib/SettingsMenu";
+import { ConnectionDetails } from "@/lib/types";
 import {
   formatChatMessageLinks,
   LocalUserChoices,
   PreJoin,
   RoomContext,
   VideoConference,
-} from '@livekit/components-react';
+} from "@livekit/components-react";
 import {
   ExternalE2EEKeyProvider,
   RoomOptions,
@@ -26,12 +26,12 @@ import {
   RoomEvent,
   TrackPublishDefaults,
   VideoCaptureOptions,
-} from 'livekit-client';
-import { useRouter } from 'next/navigation';
-import { useSetupE2EE } from '@/lib/useSetupE2EE';
-import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
+} from "livekit-client";
+import { useRouter } from "next/navigation";
+import { useSetupE2EE } from "@/lib/useSetupE2EE";
+import { useLowCPUOptimizer } from "@/lib/usePerfomanceOptimiser";
 
-const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
+const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == "true";
 
 export function PageClientImpl(props: {
   roomName: string;
@@ -41,73 +41,85 @@ export function PageClientImpl(props: {
   codec: VideoCodec;
   singlePeerConnection: boolean;
 }) {
-  const [preJoinChoices, setPreJoinChoices] = React.useState<LocalUserChoices | undefined>(
-    undefined,
-  );
+  const [preJoinChoices, setPreJoinChoices] = React.useState<
+    LocalUserChoices | undefined
+  >(undefined);
   const preJoinDefaults = React.useMemo(() => {
     return {
-      username: '',
+      username: "",
       videoEnabled: true,
       audioEnabled: true,
     };
   }, []);
-  const [connectionDetails, setConnectionDetails] = React.useState<ConnectionDetails | undefined>(
-    undefined,
-  );
+  const [connectionDetails, setConnectionDetails] = React.useState<
+    ConnectionDetails | undefined
+  >(undefined);
 
   const MAX_ROUTE_ATTEMPTS = 3;
 
-  const handlePreJoinSubmit = React.useCallback(async (values: LocalUserChoices) => {
-    setPreJoinChoices(values);
-    const excluded = new Set<string>();
-    let lastError: unknown;
+  const handlePreJoinSubmit = React.useCallback(
+    async (values: LocalUserChoices) => {
+      setPreJoinChoices(values);
+      const excluded = new Set<string>();
+      let lastError: unknown;
 
-    for (let attempt = 0; attempt < MAX_ROUTE_ATTEMPTS; attempt++) {
-      let routesEndpoint: string;
-      try {
-        routesEndpoint = await getWorkingRoute(excluded);
-      } catch (e) {
-        lastError = e;
-        break;
-      }
-
-      const url = new URL(`${routesEndpoint}/connection-details`, window.location.origin);
-      url.searchParams.append('roomName', props.roomName);
-      url.searchParams.append('participantName', values.username);
-      if (props.region) {
-        url.searchParams.append('region', props.region);
-      }
-      if (props.rentalId) {
-        url.searchParams.append('rentalId', props.rentalId);
-      }
-
-      try {
-        const connectionDetailsResp = await fetch(url.toString(), {
-          credentials: 'include',
-        });
-        if (!connectionDetailsResp.ok) {
-          const errorText = await connectionDetailsResp.text();
-          throw new Error(
-            `Failed to fetch connection details (${connectionDetailsResp.status}): ${errorText || connectionDetailsResp.statusText}`,
-          );
+      for (let attempt = 0; attempt < MAX_ROUTE_ATTEMPTS; attempt++) {
+        let routesEndpoint: string;
+        try {
+          routesEndpoint = await getWorkingRoute(excluded);
+        } catch (e) {
+          lastError = e;
+          break;
         }
-        const connectionDetailsData = await connectionDetailsResp.json();
-        setConnectionDetails(connectionDetailsData);
-        return;
-      } catch (e) {
-        lastError = e;
-        excluded.add(routesEndpoint);
-      }
-    }
 
-    throw lastError ?? new Error('Failed to fetch connection details: no routes available');
-  }, [props.region, props.rentalId, props.roomName]);
-  const handlePreJoinError = React.useCallback((e: any) => console.error(e), []);
+        const url = new URL(
+          `${routesEndpoint}/connection-details`,
+          window.location.origin,
+        );
+        url.searchParams.append("roomName", props.roomName);
+        url.searchParams.append("participantName", values.username);
+        if (props.region) {
+          url.searchParams.append("region", props.region);
+        }
+        if (props.rentalId) {
+          url.searchParams.append("rentalId", props.rentalId);
+        }
+
+        try {
+          const connectionDetailsResp = await fetch(url.toString(), {
+            credentials: "include",
+          });
+          if (!connectionDetailsResp.ok) {
+            const errorText = await connectionDetailsResp.text();
+            throw new Error(
+              `Failed to fetch connection details (${connectionDetailsResp.status}): ${errorText || connectionDetailsResp.statusText}`,
+            );
+          }
+          const connectionDetailsData = await connectionDetailsResp.json();
+          setConnectionDetails(connectionDetailsData);
+          return;
+        } catch (e) {
+          lastError = e;
+          excluded.add(routesEndpoint);
+        }
+      }
+
+      throw (
+        lastError ??
+        new Error("Failed to fetch connection details: no routes available")
+      );
+    },
+    [props.region, props.rentalId, props.roomName],
+  );
+  const handlePreJoinError = React.useCallback(
+    (e: any) => console.error(e),
+    [],
+  );
 
   return (
-    <main data-lk-theme="default" style={{ height: '100%' }}>
+    <main data-lk-theme="default" style={{ height: "100%" }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
-        <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
+        <div style={{ display: "grid", placeItems: "center", height: "100%" }}>
           <PreJoin
             defaults={preJoinDefaults}
             onSubmit={handlePreJoinSubmit}
@@ -145,8 +157,10 @@ function VideoConferenceComponent(props: {
   const [e2eeSetupComplete, setE2eeSetupComplete] = React.useState(false);
 
   const roomOptions = React.useMemo((): RoomOptions => {
-    let videoCodec: VideoCodec | undefined = props.options.codec ? props.options.codec : 'vp9';
-    if (e2eeEnabled && (videoCodec === 'av1' || videoCodec === 'vp9')) {
+    let videoCodec: VideoCodec | undefined = props.options.codec
+      ? props.options.codec
+      : "vp9";
+    if (e2eeEnabled && (videoCodec === "av1" || videoCodec === "vp9")) {
       videoCodec = undefined;
     }
     const videoCaptureDefaults: VideoCaptureOptions = {
@@ -169,7 +183,10 @@ function VideoConferenceComponent(props: {
       },
       adaptiveStream: true,
       dynacast: true,
-      e2ee: keyProvider && worker && e2eeEnabled ? { keyProvider, worker } : undefined,
+      e2ee:
+        keyProvider && worker && e2eeEnabled
+          ? { keyProvider, worker }
+          : undefined,
       singlePeerConnection: props.options.singlePeerConnection,
     };
   }, [props.userChoices, props.options.hq, props.options.codec]);
@@ -240,10 +257,12 @@ function VideoConferenceComponent(props: {
   const lowPowerMode = useLowCPUOptimizer(room);
 
   const router = useRouter();
-  const handleOnLeave = React.useCallback(() => router.push('/'), [router]);
+  const handleOnLeave = React.useCallback(() => router.push("/"), [router]);
   const handleError = React.useCallback((error: Error) => {
     console.error(error);
-    alert(`Encountered an unexpected error, check the console logs for details: ${error.message}`);
+    alert(
+      `Encountered an unexpected error, check the console logs for details: ${error.message}`,
+    );
   }, []);
   const handleEncryptionError = React.useCallback((error: Error) => {
     console.error(error);
@@ -254,7 +273,7 @@ function VideoConferenceComponent(props: {
 
   React.useEffect(() => {
     if (lowPowerMode) {
-      console.warn('Low power mode enabled');
+      console.warn("Low power mode enabled");
     }
   }, [lowPowerMode]);
 

@@ -14,7 +14,10 @@ import {
   fetchContractConfig,
 } from "@/lib/contract-api";
 import { dAppKit } from "@/lib/sui-dapp-kit";
-import { fetchPendingRouterProposals, PendingRoleProposal } from "@/lib/role-proposals";
+import {
+  fetchPendingRouterProposals,
+  PendingRoleProposal,
+} from "@/lib/role-proposals";
 
 type FormValues = Record<string, FormDataEntryValue>;
 
@@ -48,7 +51,9 @@ function ContractPanelInner() {
   const [config, setConfig] = useState<ContractConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [pendingProposals, setPendingProposals] = useState<PendingRoleProposal[]>([]);
+  const [pendingProposals, setPendingProposals] = useState<
+    PendingRoleProposal[]
+  >([]);
   const [proposalsError, setProposalsError] = useState<string | null>(null);
   const [proposalsLoading, setProposalsLoading] = useState(false);
 
@@ -69,7 +74,9 @@ function ContractPanelInner() {
       setPendingProposals(await fetchPendingRouterProposals());
     } catch (err) {
       setProposalsError(
-        err instanceof Error ? err.message : "Failed to load pending role proposals",
+        err instanceof Error
+          ? err.message
+          : "Failed to load pending role proposals",
       );
     } finally {
       setProposalsLoading(false);
@@ -122,7 +129,10 @@ function ContractPanelInner() {
     }
   }
 
-  async function voteOnProposal(event: FormEvent<HTMLFormElement>, proposalId: string) {
+  async function voteOnProposal(
+    event: FormEvent<HTMLFormElement>,
+    proposalId: string,
+  ) {
     const values = formValues(event);
     try {
       await execute("cast-role-vote", { ...values, proposalId });
@@ -197,11 +207,7 @@ function ContractPanelInner() {
           <strong>Hire worker</strong>
           <Field name="nodeId" placeholder="Node ID" inputMode="numeric" />
           <Field name="roomName" placeholder="Room name" />
-          <Field
-            name="capacity"
-            placeholder="Capacity"
-            inputMode="numeric"
-          />
+          <Field name="capacity" placeholder="Capacity" inputMode="numeric" />
           <Field
             name="paymentMist"
             placeholder="Payment, MIST"
@@ -341,7 +347,13 @@ function ContractPanelInner() {
       </div>
 
       <div style={{ display: "grid", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
           <strong>Pending role proposals (router)</strong>
           <button
             className="lk-button"
@@ -356,7 +368,9 @@ function ContractPanelInner() {
           <p style={{ margin: 0, color: "#ff6b6b" }}>{proposalsError}</p>
         )}
         {!proposalsError && pendingProposals.length === 0 && (
-          <p style={{ margin: 0, opacity: 0.72 }}>No pending router role proposals.</p>
+          <p style={{ margin: 0, opacity: 0.72 }}>
+            No pending router role proposals.
+          </p>
         )}
         {pendingProposals.map((proposal) => (
           <form
@@ -370,10 +384,15 @@ function ContractPanelInner() {
             }}
           >
             <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-              Proposal #{proposal.proposalId}: nominee node #{proposal.nomineeNodeId}, deadline{" "}
+              Proposal #{proposal.proposalId}: nominee node #
+              {proposal.nomineeNodeId}, deadline{" "}
               {new Date(proposal.deadlineMs).toLocaleString()}
             </span>
-            <Field name="voterNodeId" placeholder="Your node ID" inputMode="numeric" />
+            <Field
+              name="voterNodeId"
+              placeholder="Your node ID"
+              inputMode="numeric"
+            />
             <button className="lk-button" type="submit">
               Vote Yes
             </button>

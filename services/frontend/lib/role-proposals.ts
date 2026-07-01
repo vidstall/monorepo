@@ -31,9 +31,11 @@ function loadChainConfig(): ChainConfig {
   const network = (process.env.NEXT_PUBLIC_SUI_NETWORK ?? "devnet") as Network;
   const packageId = process.env.NEXT_PUBLIC_PACKAGE_ID;
   const registryObjectId = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID;
-  if (!(network in JSON_RPC_URLS)) throw new Error(`Unsupported contract network: ${network}`);
+  if (!(network in JSON_RPC_URLS))
+    throw new Error(`Unsupported contract network: ${network}`);
   if (!packageId) throw new Error("NEXT_PUBLIC_PACKAGE_ID not set");
-  if (!registryObjectId) throw new Error("NEXT_PUBLIC_REGISTRY_OBJECT_ID not set");
+  if (!registryObjectId)
+    throw new Error("NEXT_PUBLIC_REGISTRY_OBJECT_ID not set");
   return { network, packageId, registryObjectId };
 }
 
@@ -42,7 +44,10 @@ function moveTarget(config: ChainConfig, functionName: string): string {
 }
 
 function client(config: ChainConfig): SuiJsonRpcClient {
-  return new SuiJsonRpcClient({ network: config.network as never, url: JSON_RPC_URLS[config.network] });
+  return new SuiJsonRpcClient({
+    network: config.network as never,
+    url: JSON_RPC_URLS[config.network],
+  });
 }
 
 async function devInspect(
@@ -55,8 +60,11 @@ async function devInspect(
     transactionBlock: tx,
     sender: ZERO_SENDER,
   });
-  if (result.effects.status.status !== "success" || !result.results) return null;
-  return result.results.map((r) => new Uint8Array(r.returnValues?.[0]?.[0] ?? []));
+  if (result.effects.status.status !== "success" || !result.results)
+    return null;
+  return result.results.map(
+    (r) => new Uint8Array(r.returnValues?.[0]?.[0] ?? []),
+  );
 }
 
 function parseU64(bytes: Uint8Array): bigint {
@@ -79,20 +87,27 @@ async function fetchNextProposalId(config: ChainConfig): Promise<number> {
       arguments: [tx.object(config.registryObjectId)],
     });
   });
-  if (!results?.[0]) throw new Error("failed to read next_role_proposal_id from registry");
+  if (!results?.[0])
+    throw new Error("failed to read next_role_proposal_id from registry");
   return Number(parseU64(results[0]));
 }
 
 /** Same PTB-abort constraint as route-discovery: check existence first (non-asserting), then
  * fetch details only for ids confirmed to exist. */
-async function fetchExistingProposalIds(config: ChainConfig, nextProposalId: number): Promise<number[]> {
+async function fetchExistingProposalIds(
+  config: ChainConfig,
+  nextProposalId: number,
+): Promise<number[]> {
   if (nextProposalId <= 1) return [];
   const results = await devInspect(config, (tx) => {
     for (let proposalId = 1; proposalId < nextProposalId; proposalId++) {
       tx.moveCall({
         target: moveTarget(config, "role_proposal_exists"),
         typeArguments: [SUI_COIN_TYPE],
-        arguments: [tx.object(config.registryObjectId), tx.pure.u64(BigInt(proposalId))],
+        arguments: [
+          tx.object(config.registryObjectId),
+          tx.pure.u64(BigInt(proposalId)),
+        ],
       });
     }
   });
@@ -145,12 +160,18 @@ async function fetchProposalDetails(
     const nomineeNodeId = parseU64(results[base + 2]);
     const deadlineMs = Number(parseU64(results[base + 3]));
     if (role !== ROLE_ROUTER || finalized) return;
-    pending.push({ proposalId: String(proposalId), nomineeNodeId: String(nomineeNodeId), deadlineMs });
+    pending.push({
+      proposalId: String(proposalId),
+      nomineeNodeId: String(nomineeNodeId),
+      deadlineMs,
+    });
   });
   return pending;
 }
 
-export async function fetchPendingRouterProposals(): Promise<PendingRoleProposal[]> {
+export async function fetchPendingRouterProposals(): Promise<
+  PendingRoleProposal[]
+> {
   const config = loadChainConfig();
   const nextProposalId = await fetchNextProposalId(config);
   const existingIds = await fetchExistingProposalIds(config, nextProposalId);

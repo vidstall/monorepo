@@ -1,5 +1,5 @@
-import { LocalAudioTrack, LocalVideoTrack, videoCodecs } from 'livekit-client';
-import { VideoCodec } from 'livekit-client';
+import { LocalAudioTrack, LocalVideoTrack, videoCodecs } from "livekit-client";
+import { VideoCodec } from "livekit-client";
 
 export interface SessionProps {
   roomName: string;
