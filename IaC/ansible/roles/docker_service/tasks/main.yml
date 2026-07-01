@@ -31,6 +31,42 @@
     group: root
     mode: "0750"
 
+- name: Derive routes sslip.io endpoint
+  ansible.builtin.set_fact:
+    xaisen_routes_hostname: "{{ ansible_host }}.sslip.io"
+    xaisen_routes_public_url: "https://{{ ansible_host }}.sslip.io/api"
+  when: xaisen_service == "routes"
+
+- name: Create routes proxy state directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - "{{ xaisen_services_root }}/runtime/routes/caddy-data"
+    - "{{ xaisen_services_root }}/runtime/routes/caddy-config"
+  when: xaisen_service == "routes"
+
+- name: Write routes Caddy configuration
+  ansible.builtin.copy:
+    dest: "{{ xaisen_services_root }}/runtime/routes/Caddyfile"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {{ xaisen_routes_hostname }} {
+        reverse_proxy xaisen-routes:3001
+      }
+  when: xaisen_service == "routes"
+
+- name: Ensure private routes Docker network exists
+  community.docker.docker_network:
+    name: xaisen-routes
+    state: present
+  when: xaisen_service == "routes"
+
 - name: Check for a per-service secrets file locally
   ansible.builtin.stat:
     path: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service }}.env"
@@ -52,8 +88,10 @@
     name: "xaisen-{{ xaisen_service }}"
     image: "{{ xaisen_images[xaisen_service] }}:{{ xaisen_tags[xaisen_service] }}"
     restart_policy: unless-stopped
-    state: "{{ xaisen_container_state | default('started') if xaisen_desired_state == 'running' else 'stopped' }}"
-    ports: "{{ [xaisen_port ~ ':' ~ xaisen_port] if (xaisen_port | default(0) | int > 0) else [] }}"
+    state: "{{ 'started' if xaisen_desired_state == 'running' else 'stopped' }}"
+    restart: "{{ (xaisen_container_state | default('started')) == 'restarted' }}"
+    ports: "{{ [] if xaisen_service == 'routes' else ([xaisen_port ~ ':' ~ xaisen_port] if (xaisen_port | default(0) | int > 0) else []) }}"
+    networks: "{{ [{'name': 'xaisen-routes'}] if xaisen_service == 'routes' else omit }}"
     env_file: "{{ (xaisen_services_root ~ '/runtime/' ~ xaisen_service ~ '/service.env') if (xaisen_service_secrets_file.stat.exists | default(false)) else omit }}"
     volumes:
       - "{{ xaisen_services_root }}/runtime/contract:{{ xaisen_services_root }}/runtime/contract:ro"
@@ -62,6 +100,41 @@
       CONTRACT_ENV_PATH: "{{ xaisen_services_root }}/runtime/contract/{{ xaisen_env }}.env"
       ROUTES_OPERATOR_KEY_PATH: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/{{ inventory_hostname }}.json"
       ROUTES_INSTANCE_NAME: "{{ inventory_hostname }}"
+      ROUTES_PUBLIC_URL: "{{ xaisen_routes_public_url if xaisen_service == 'routes' else omit }}"
   when:
     - xaisen_images is defined and xaisen_service in xaisen_images
     - xaisen_tags is defined and xaisen_service in xaisen_tags
+
+- name: Run routes HTTPS proxy
+  community.docker.docker_container:
+    name: xaisen-routes-proxy
+    image: "{{ xaisen_registry_host }}/xaisen/caddy:2-alpine"
+    restart_policy: unless-stopped
+    state: "{{ 'started' if xaisen_desired_state == 'running' else 'stopped' }}"
+    restart: "{{ (xaisen_container_state | default('started')) == 'restarted' }}"
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - name: xaisen-routes
+    volumes:
+      - "{{ xaisen_services_root }}/runtime/routes/Caddyfile:/etc/caddy/Caddyfile:ro"
+      - "{{ xaisen_services_root }}/runtime/routes/caddy-data:/data"
+      - "{{ xaisen_services_root }}/runtime/routes/caddy-config:/config"
+  when: xaisen_service == "routes"
+
+- name: Wait for routes trusted HTTPS endpoint
+  ansible.builtin.uri:
+    url: "{{ xaisen_routes_public_url }}/contract/health"
+    method: GET
+    status_code: 200
+    validate_certs: true
+  delegate_to: localhost
+  become: false
+  register: xaisen_routes_https_health
+  until: xaisen_routes_https_health.status | default(0) == 200
+  retries: 60
+  delay: 5
+  when:
+    - xaisen_service == "routes"
+    - xaisen_desired_state == "running"

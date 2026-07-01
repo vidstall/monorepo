@@ -273,7 +273,10 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
         if backend == "object_storage" and provider == "alibaba":
             code = pulumi_up(env_name, parallel=4)
         elif backend == "vm" and provider == "alibaba":
-            code = pulumi_up(env_name, targets=alibaba_vm_target_urns(env_name, name, bool(instance.get("port"))))
+            code = pulumi_up(
+                env_name,
+                targets=alibaba_vm_target_urns(env_name, name, service, bool(instance.get("port"))),
+            )
         else:
             code = pulumi_up(env_name)
 
@@ -371,7 +374,12 @@ def pulumi_up(stack: str, parallel: int | None = None, targets: list[str] | None
     return run(args, cwd=PULUMI_DIR, env=env)
 
 
-def alibaba_vm_target_urns(stack: str, name: str, has_service_port: bool) -> list[str]:
+def alibaba_vm_target_urns(
+    stack: str,
+    name: str,
+    service: str,
+    has_service_port: bool,
+) -> list[str]:
     prefix = f"urn:pulumi:{stack}::xaisen-iac::"
     resources = [
         ("pulumi:providers:alicloud", f"{name}-vm-provider"),
@@ -382,7 +390,14 @@ def alibaba_vm_target_urns(stack: str, name: str, has_service_port: bool) -> lis
         ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-ssh"),
         ("alicloud:ecs/instance:Instance", f"{name}-vm"),
     ]
-    if has_service_port:
+    if service == "routes":
+        resources.extend(
+            [
+                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-http"),
+                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-https"),
+            ]
+        )
+    elif has_service_port:
         resources.append(("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-port"))
     return [f"{prefix}{resource_type}::{resource_name}" for resource_type, resource_name in resources]
 

@@ -741,12 +741,15 @@ def create_alibaba_vm(instance: TopologyInstance, public_key: str) -> dict[str, 
         security_group_id=sg.id,
         opts=opts,
     )
-    if port:
+    public_ports = [(80, "http"), (443, "https")] if instance.get("service") == "routes" else [(port, "port")]
+    for public_port, rule_name in public_ports:
+        if not public_port:
+            continue
         alicloud.ecs.SecurityGroupRule(
-            f"{name}-vm-sg-port",
+            f"{name}-vm-sg-{rule_name}",
             type="ingress",
             ip_protocol="tcp",
-            port_range=f"{port}/{port}",
+            port_range=f"{public_port}/{public_port}",
             cidr_ip="0.0.0.0/0",
             security_group_id=sg.id,
             opts=opts,

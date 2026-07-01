@@ -121,7 +121,7 @@ class InfraTopologyTests(unittest.TestCase):
         self.assertEqual(code, 0)
         pulumi_up.assert_called_once_with(
             "devnet",
-            targets=infra.alibaba_vm_target_urns("devnet", "node-1", False),
+            targets=infra.alibaba_vm_target_urns("devnet", "node-1", "routes", False),
         )
         inventory.assert_not_called()
         configure.assert_not_called()
@@ -231,7 +231,7 @@ class InfraTopologyTests(unittest.TestCase):
             patch.object(infra, "command_env", return_value={}),
             patch.object(infra, "run", return_value=0) as run,
         ):
-            targets = infra.alibaba_vm_target_urns("devnet", "routes-1", True)
+            targets = infra.alibaba_vm_target_urns("devnet", "routes-1", "routes", True)
             code = infra.pulumi_up("devnet", targets=targets)
 
         self.assertEqual(code, 0)
@@ -239,6 +239,20 @@ class InfraTopologyTests(unittest.TestCase):
         self.assertIn("--target", args)
         self.assertIn("urn:pulumi:devnet::xaisen-iac::alicloud:ecs/instance:Instance::routes-1-vm", args)
         self.assertIn("urn:pulumi:devnet::xaisen-iac::alicloud:vpc/switch:Switch::routes-1-vm-vswitch", args)
+        self.assertIn("urn:pulumi:devnet::xaisen-iac::alicloud:ecs/securityGroupRule:SecurityGroupRule::routes-1-vm-sg-http", args)
+        self.assertIn("urn:pulumi:devnet::xaisen-iac::alicloud:ecs/securityGroupRule:SecurityGroupRule::routes-1-vm-sg-https", args)
+        self.assertNotIn("urn:pulumi:devnet::xaisen-iac::alicloud:ecs/securityGroupRule:SecurityGroupRule::routes-1-vm-sg-port", args)
+
+        with (
+            patch.object(infra, "command_env", return_value={}),
+            patch.object(infra, "run", return_value=0) as run,
+        ):
+            targets = infra.alibaba_vm_target_urns("devnet", "coordinator-1", "coordinator", True)
+            code = infra.pulumi_up("devnet", targets=targets)
+
+        self.assertEqual(code, 0)
+        args = run.call_args.args[0]
+        self.assertIn("urn:pulumi:devnet::xaisen-iac::alicloud:ecs/securityGroupRule:SecurityGroupRule::coordinator-1-vm-sg-port", args)
 
     def test_frontend_start_builds_and_skips_ansible(self) -> None:
         infra.write_topology(
@@ -580,6 +594,11 @@ class InfraTopologyTests(unittest.TestCase):
                 captured["instance"] = {"name": resource_name, **kwargs}
                 super().__init__(resource_name, **kwargs)
 
+        class FakeSecurityGroupRule(FakeResource):
+            def __init__(self, resource_name: str, **kwargs: dict) -> None:
+                captured.setdefault("security_group_rules", {})[resource_name] = kwargs
+                super().__init__(resource_name, **kwargs)
+
         fake_alicloud = SimpleNamespace(
             Provider=FakeResource,
             get_zones=lambda **_kwargs: SimpleNamespace(ids=["cn-hangzhou-h"]),
@@ -587,7 +606,7 @@ class InfraTopologyTests(unittest.TestCase):
             ecs=SimpleNamespace(
                 KeyPair=FakeResource,
                 SecurityGroup=FakeResource,
-                SecurityGroupRule=FakeResource,
+                SecurityGroupRule=FakeSecurityGroupRule,
                 Instance=FakeInstance,
                 get_images=lambda **_kwargs: SimpleNamespace(images=[SimpleNamespace(id="ubuntu-image")]),
             ),
@@ -632,6 +651,9 @@ class InfraTopologyTests(unittest.TestCase):
         self.assertEqual(captured["instance"]["status"], "Stopped")
         self.assertEqual(captured["instance"]["stopped_mode"], "KeepCharging")
         self.assertEqual(captured["instance"]["availability_zone"], "cn-hangzhou-h")
+        self.assertEqual(captured["security_group_rules"]["node-1-vm-sg-http"]["port_range"], "80/80")
+        self.assertEqual(captured["security_group_rules"]["node-1-vm-sg-https"]["port_range"], "443/443")
+        self.assertNotIn("node-1-vm-sg-port", captured["security_group_rules"])
 
     def test_frontend_pause_keeps_bucket_and_does_not_build(self) -> None:
         infra.write_topology(
