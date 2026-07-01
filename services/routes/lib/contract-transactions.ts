@@ -1,14 +1,12 @@
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { loadContractConfig } from "@/lib/contract-config";
-
-const SUI_COIN_TYPE = "0x2::sui::SUI";
-const SUI_CLOCK_OBJECT_ID = "0x6";
-const JSON_RPC_URLS = {
-  devnet: "https://fullnode.devnet.sui.io:443",
-  testnet: "https://fullnode.testnet.sui.io:443",
-  mainnet: "https://fullnode.mainnet.sui.io:443",
-} as const;
+import {
+  JSON_RPC_URLS,
+  SUI_CLOCK_OBJECT_ID,
+  SUI_COIN_TYPE,
+  moveTarget,
+} from "@/lib/contract-move-shared";
 
 type TransactionAction =
   | "register-worker"
@@ -60,10 +58,6 @@ function hashBytes(value: unknown): number[] {
   }
 
   return Array.from(Buffer.from(normalized, "hex"));
-}
-
-function moveTarget(functionName: string): string {
-  return `${loadContractConfig().packageId}::node_registry::${functionName}`;
 }
 
 function addMoveCall(
