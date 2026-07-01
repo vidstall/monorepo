@@ -87,11 +87,158 @@ class InfraTopologyTests(unittest.TestCase):
         self.assertEqual(code, 0)
         pulumi_up.assert_called_once_with("devnet")
         inventory.assert_called_once()
-        configure.assert_called_once()
+        configure.assert_called_once_with(host_limit="node-1", container_state="started")
         instance = self.read_topology()["instances"][0]
         self.assertEqual(instance["backend"], "vm")
         self.assertEqual(instance["desired_state"], "running")
         self.assertEqual(instance["last_status"], "running")
+
+    def test_alibaba_pause_powers_off_without_ansible(self) -> None:
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [
+                    {
+                        "name": "node-1",
+                        "service": "routes",
+                        "provider": "alibaba",
+                        "backend": "vm",
+                        "desired_state": "running",
+                    }
+                ],
+            }
+        )
+
+        with (
+            patch.object(infra, "pulumi_up", return_value=0) as pulumi_up,
+            patch.object(infra, "inventory", return_value=0) as inventory,
+            patch.object(infra, "configure", return_value=0) as configure,
+        ):
+            code = infra.control("pause", "node-1", "routes", "alibaba")
+
+        self.assertEqual(code, 0)
+        pulumi_up.assert_called_once_with(
+            "devnet",
+            targets=infra.alibaba_vm_target_urns("devnet", "node-1", False),
+        )
+        inventory.assert_not_called()
+        configure.assert_not_called()
+        instance = self.read_topology()["instances"][0]
+        self.assertEqual(instance["desired_state"], "stopped")
+        self.assertEqual(instance["last_status"], "stopped")
+
+    def test_alibaba_restart_reconfigures_and_restarts_container(self) -> None:
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [
+                    {
+                        "name": "node-1",
+                        "service": "routes",
+                        "provider": "alibaba",
+                        "backend": "vm",
+                        "desired_state": "stopped",
+                    }
+                ],
+            }
+        )
+
+        with (
+            patch.object(infra, "command_env", return_value={
+                "ALIBABA_CLOUD_ACCESS_KEY_ID": "key",
+                "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "secret",
+                "ALIBABA_CLOUD_REGION": "cn-hangzhou",
+            }),
+            patch.object(infra, "pulumi_up", return_value=0),
+            patch.object(infra, "inventory", return_value=0),
+            patch.object(infra, "configure", return_value=0) as configure,
+        ):
+            code = infra.control("restart", "node-1", "routes", "alibaba")
+
+        self.assertEqual(code, 0)
+        configure.assert_called_once_with(host_limit="node-1", container_state="restarted")
+        self.assertEqual(self.read_topology()["instances"][0]["last_status"], "running")
+
+    def test_inventory_failure_is_returned_after_successful_pulumi(self) -> None:
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [],
+            }
+        )
+
+        with (
+            patch.object(infra, "pulumi_up", return_value=0),
+            patch.object(infra, "inventory", return_value=7),
+            patch.object(infra, "configure", return_value=0) as configure,
+        ):
+            code = infra.control("start", "node-1", "routes", "digitalocean")
+
+        self.assertEqual(code, 7)
+        configure.assert_not_called()
+        instance = self.read_topology()["instances"][0]
+        self.assertEqual(instance["desired_state"], "running")
+        self.assertIn("inventory failed", instance["last_error"])
+
+    def test_configure_failure_is_returned_and_recorded(self) -> None:
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [],
+            }
+        )
+
+        with (
+            patch.object(infra, "pulumi_up", return_value=0),
+            patch.object(infra, "inventory", return_value=0),
+            patch.object(infra, "configure", return_value=8),
+        ):
+            code = infra.control("start", "node-1", "routes", "digitalocean")
+
+        self.assertEqual(code, 8)
+        instance = self.read_topology()["instances"][0]
+        self.assertEqual(instance["desired_state"], "running")
+        self.assertIn("configure failed", instance["last_error"])
+        self.assertEqual(self.read_history()["events"][-1]["result"], "failure")
+
+    def test_non_alibaba_pause_is_rejected_before_topology_change(self) -> None:
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [],
+            }
+        )
+
+        with patch.object(infra, "pulumi_up", return_value=0) as pulumi_up:
+            code = infra.control("pause", "node-1", "routes", "aws")
+
+        self.assertEqual(code, 1)
+        pulumi_up.assert_not_called()
+        self.assertEqual(self.read_topology().get("instances", []), [])
+
+    def test_pulumi_up_targets_only_selected_instance(self) -> None:
+        with (
+            patch.object(infra, "command_env", return_value={}),
+            patch.object(infra, "run", return_value=0) as run,
+        ):
+            targets = infra.alibaba_vm_target_urns("devnet", "routes-1", True)
+            code = infra.pulumi_up("devnet", targets=targets)
+
+        self.assertEqual(code, 0)
+        args = run.call_args.args[0]
+        self.assertIn("--target", args)
+        self.assertIn("urn:pulumi:devnet::xaisen-iac::alicloud:ecs/instance:Instance::routes-1-vm", args)
+        self.assertIn("urn:pulumi:devnet::xaisen-iac::alicloud:vpc/switch:Switch::routes-1-vm-vswitch", args)
 
     def test_frontend_start_builds_and_skips_ansible(self) -> None:
         infra.write_topology(
@@ -244,6 +391,7 @@ class InfraTopologyTests(unittest.TestCase):
         fake_pulumi.export = lambda *_args, **_kwargs: None
         fake_pulumi.FileAsset = lambda path: path
         fake_pulumi.ResourceOptions = lambda **kwargs: kwargs
+        fake_pulumi.InvokeOptions = lambda **kwargs: kwargs
 
         module_path = Path(__file__).resolve().parents[1] / "IaC" / "pulumi" / "__main__.py"
         topology_path = Path(__file__).resolve().parents[1] / "runtime" / "topology.toml"
@@ -417,6 +565,73 @@ class InfraTopologyTests(unittest.TestCase):
         self.assertEqual(code, 0)
         pulumi_up.assert_called_once_with("devnet", parallel=4)
         self.assertEqual(self.read_topology()["instances"][0]["region"], "ap-southeast-1")
+
+    def test_alibaba_vm_maps_stopped_topology_to_ecs_power_state(self) -> None:
+        captured: dict[str, dict] = {}
+
+        class FakeResource:
+            def __init__(self, resource_name: str, **kwargs: dict) -> None:
+                self.id = f"{resource_name}-id"
+                self.key_pair_name = kwargs.get("key_pair_name", resource_name)
+                self.public_ip = "192.0.2.10"
+
+        class FakeInstance(FakeResource):
+            def __init__(self, resource_name: str, **kwargs: dict) -> None:
+                captured["instance"] = {"name": resource_name, **kwargs}
+                super().__init__(resource_name, **kwargs)
+
+        fake_alicloud = SimpleNamespace(
+            Provider=FakeResource,
+            get_zones=lambda **_kwargs: SimpleNamespace(ids=["cn-hangzhou-h"]),
+            vpc=SimpleNamespace(Network=FakeResource, Switch=FakeResource),
+            ecs=SimpleNamespace(
+                KeyPair=FakeResource,
+                SecurityGroup=FakeResource,
+                SecurityGroupRule=FakeResource,
+                Instance=FakeInstance,
+                get_images=lambda **_kwargs: SimpleNamespace(images=[SimpleNamespace(id="ubuntu-image")]),
+            ),
+        )
+        fake_pulumi = ModuleType("pulumi")
+        fake_pulumi.Config = lambda _name: SimpleNamespace(get_object=lambda _key: None)
+        fake_pulumi.warn = lambda _message: None
+        fake_pulumi.export = lambda *_args, **_kwargs: None
+        fake_pulumi.ResourceOptions = lambda **kwargs: kwargs
+        fake_pulumi.InvokeOptions = lambda **kwargs: kwargs
+
+        module_path = Path(__file__).resolve().parents[1] / "IaC" / "pulumi" / "__main__.py"
+        spec = importlib.util.spec_from_file_location("pulumi_main_alibaba_vm_for_test", module_path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch.dict(sys.modules, {"pulumi": fake_pulumi, "pulumi_alicloud": fake_alicloud}),
+            patch.dict(
+                "os.environ",
+                {
+                    "ALIBABA_CLOUD_ACCESS_KEY_ID": "key",
+                    "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "secret",
+                    "ALIBABA_CLOUD_REGION": "cn-hangzhou",
+                },
+                clear=False,
+            ),
+        ):
+            spec.loader.exec_module(module)
+            module.create_alibaba_vm(
+                {
+                    "name": "node-1",
+                    "service": "routes",
+                    "provider": "alibaba",
+                    "desired_state": "stopped",
+                    "port": 3001,
+                },
+                "ssh-ed25519 test",
+            )
+
+        self.assertEqual(captured["instance"]["status"], "Stopped")
+        self.assertEqual(captured["instance"]["stopped_mode"], "KeepCharging")
+        self.assertEqual(captured["instance"]["availability_zone"], "cn-hangzhou-h")
 
     def test_frontend_pause_keeps_bucket_and_does_not_build(self) -> None:
         infra.write_topology(

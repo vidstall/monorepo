@@ -134,8 +134,10 @@ def ping() -> int:
     return code
 
 
-def configure() -> int:
-    code = ansible_playbook("site.yml", extra_vars=docker_deploy_extra_vars())
+def configure(host_limit: str | None = None, container_state: str = "started") -> int:
+    extra_vars = docker_deploy_extra_vars()
+    extra_vars["xaisen_container_state"] = container_state
+    code = ansible_playbook("site.yml", extra_vars=extra_vars, host_limit=host_limit)
     record_history("infra configure", env=active_stack(), result_for_code=code)
     return code
 
@@ -189,6 +191,15 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
     env_name = validate_network(str(topology.get("active_env", "devnet")))
     contract_path = contract_env_path(env_name)
     backend = service_backend(service)
+
+    if backend == "vm" and action in {"pause", "restart"} and provider != "alibaba":
+        message = (
+            f"{action} is not yet supported for {provider} VM services; "
+            "powered lifecycle support currently requires --provider alibaba."
+        )
+        print(message, file=sys.stderr)
+        record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+        return 1
 
     if action in {"start", "restart"}:
         missing_keys = missing_contract_keys(contract_path)
@@ -261,6 +272,8 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
         failed_stage = "pulumi"
         if backend == "object_storage" and provider == "alibaba":
             code = pulumi_up(env_name, parallel=4)
+        elif backend == "vm" and provider == "alibaba":
+            code = pulumi_up(env_name, targets=alibaba_vm_target_urns(env_name, name, bool(instance.get("port"))))
         else:
             code = pulumi_up(env_name)
 
@@ -278,15 +291,22 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
             ]
             if backend == "vm":
                 shutil.rmtree(SSH_KEY_ROOT / name, ignore_errors=True)
-        else:
+        elif backend == "vm" and action in {"start", "restart"}:
+            failed_stage = "inventory"
+            code = inventory()
+            if code == 0:
+                failed_stage = "configure"
+                container_state = "restarted" if action == "restart" else "started"
+                code = configure(host_limit=name, container_state=container_state)
+
+        if code == 0 and action != "kill":
             instance["last_status"] = next_state
             instance["last_error"] = ""
         write_topology(topology)
-        if backend == "vm" and action in {"start", "restart"}:
-            inventory()
-            configure()
-    else:
-        instance["desired_state"] = previous
+
+    if code != 0:
+        if failed_stage in {"frontend build", "pulumi"}:
+            instance["desired_state"] = previous
         instance["last_error"] = f"{failed_stage} failed with exit code {code}"
         write_topology(topology)
 
@@ -305,12 +325,18 @@ def control(action: str, name: str, service: str, provider: str, yes: bool = Fal
     return code
 
 
-def ansible_playbook(playbook: str, extra_vars: dict[str, Any] | None = None) -> int:
+def ansible_playbook(
+    playbook: str,
+    extra_vars: dict[str, Any] | None = None,
+    host_limit: str | None = None,
+) -> int:
     executable = venv_bin("ansible-playbook")
     if not executable.exists():
         print("Ansible is missing. Run: ./vidctl bootstrap", file=sys.stderr)
         return 1
     args = [executable, f"playbooks/{playbook}"]
+    if host_limit:
+        args += ["--limit", host_limit]
     if extra_vars:
         args += ["--extra-vars", json.dumps(extra_vars)]
     return run(args, cwd=ANSIBLE_DIR)
@@ -334,13 +360,31 @@ def select_or_create_stack(stack: str) -> int:
     return run(["pulumi", "stack", "init", stack], cwd=PULUMI_DIR, env=env)
 
 
-def pulumi_up(stack: str, parallel: int | None = None) -> int:
+def pulumi_up(stack: str, parallel: int | None = None, targets: list[str] | None = None) -> int:
     env = command_env()
     env["PULUMI_STACK"] = stack
     args = ["pulumi", "up", "--yes", "--stack", stack]
+    for target in targets or []:
+        args.extend(["--target", target])
     if parallel is not None:
         args.extend(["--parallel", str(parallel)])
     return run(args, cwd=PULUMI_DIR, env=env)
+
+
+def alibaba_vm_target_urns(stack: str, name: str, has_service_port: bool) -> list[str]:
+    prefix = f"urn:pulumi:{stack}::xaisen-iac::"
+    resources = [
+        ("pulumi:providers:alicloud", f"{name}-vm-provider"),
+        ("alicloud:vpc/network:Network", f"{name}-vm-vpc"),
+        ("alicloud:vpc/switch:Switch", f"{name}-vm-vswitch"),
+        ("alicloud:ecs/keyPair:KeyPair", f"{name}-vm-key"),
+        ("alicloud:ecs/securityGroup:SecurityGroup", f"{name}-vm-sg"),
+        ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-ssh"),
+        ("alicloud:ecs/instance:Instance", f"{name}-vm"),
+    ]
+    if has_service_port:
+        resources.append(("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-port"))
+    return [f"{prefix}{resource_type}::{resource_name}" for resource_type, resource_name in resources]
 
 
 def active_stack() -> str:
