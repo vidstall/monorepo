@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { bcs } from "@mysten/sui/bcs";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import type { SuiTransactionBlockResponse } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
@@ -9,7 +10,11 @@ import {
   SUI_COIN_TYPE,
   moveTarget,
 } from "@/lib/contract-move-shared";
-import { getPersistedNodeId, loadOperatorKeypair, persistNodeId } from "@/lib/operator-keypair";
+import {
+  getPersistedNodeId,
+  loadOperatorKeypair,
+  persistNodeId,
+} from "@/lib/operator-keypair";
 
 const ROLE_ROUTER = 2;
 
@@ -31,13 +36,16 @@ function metadataHash(url: string): number[] {
 
 function requireEnv(name: string): string {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is required for routes self-registration`);
+  if (!value)
+    throw new Error(`${name} is required for routes self-registration`);
   return value;
 }
 
 function assertSuccess(result: SuiTransactionBlockResponse): void {
   if (result.effects && result.effects.status.status !== "success") {
-    throw new Error(`Transaction failed: ${result.effects.status.error ?? "unknown error"}`);
+    throw new Error(
+      `Transaction failed: ${result.effects.status.error ?? "unknown error"}`,
+    );
   }
 }
 
@@ -72,10 +80,15 @@ async function registerWorker(): Promise<string> {
 
   assertSuccess(result);
 
-  const event = result.events?.find((e) => e.type.endsWith("::node_registry::WorkerRegistered"));
-  const nodeId = (event?.parsedJson as Record<string, unknown> | undefined)?.node_id;
+  const event = result.events?.find((e) =>
+    e.type.endsWith("::node_registry::WorkerRegistered"),
+  );
+  const nodeId = (event?.parsedJson as Record<string, unknown> | undefined)
+    ?.node_id;
   if (nodeId === undefined || nodeId === null) {
-    throw new Error("register_worker succeeded but node_id could not be parsed from events");
+    throw new Error(
+      "register_worker succeeded but node_id could not be parsed from events",
+    );
   }
   return String(nodeId);
 }
@@ -133,6 +146,58 @@ async function setActive(nodeId: string, active: boolean): Promise<void> {
   assertSuccess(result);
 }
 
+async function currentMetadata(nodeId: string): Promise<string | null> {
+  const config = loadContractConfig();
+  const c = client();
+  const tx = new Transaction();
+  tx.moveCall({
+    target: moveTarget("worker_metadata_uri"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      tx.object(config.registryObjectId),
+      tx.pure.u64(BigInt(nodeId)),
+    ],
+  });
+  const result = await c.devInspectTransactionBlock({
+    transactionBlock: tx,
+    sender:
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+  });
+  const bytes = result.results?.[0]?.returnValues?.[0]?.[0];
+  if (!bytes) return null;
+  return new TextDecoder().decode(
+    bcs.byteVector().parse(new Uint8Array(bytes)),
+  );
+}
+
+async function updateMetadata(
+  nodeId: string,
+  publicUrl: string,
+): Promise<void> {
+  const config = loadContractConfig();
+  const keypair = loadOperatorKeypair();
+  const c = client();
+  const tx = new Transaction();
+  tx.setSender(keypair.toSuiAddress());
+  tx.moveCall({
+    target: moveTarget("update_worker_metadata"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      tx.object(config.registryObjectId),
+      tx.pure.u64(BigInt(nodeId)),
+      tx.pure.vector("u8", metadataBytes(publicUrl)),
+      tx.pure.vector("u8", metadataHash(publicUrl)),
+      tx.object(SUI_CLOCK_OBJECT_ID),
+    ],
+  });
+  const result = await c.signAndExecuteTransaction({
+    transaction: tx,
+    signer: keypair,
+    options: { showEffects: true },
+  });
+  assertSuccess(result);
+}
+
 async function heartbeat(nodeId: string): Promise<void> {
   const config = loadContractConfig();
   const keypair = loadOperatorKeypair();
@@ -168,28 +233,45 @@ export async function bootstrapOperator(): Promise<void> {
 
     let nodeId = getPersistedNodeId();
     if (!nodeId) {
-      console.log("[routes] no persisted node_id; registering as a new worker...");
+      console.log(
+        "[routes] no persisted node_id; registering as a new worker...",
+      );
       nodeId = await registerWorker();
       persistNodeId(nodeId);
-      console.log(`[routes] registered as node_id=${nodeId}; self-nominating for ROLE_ROUTER`);
+      console.log(
+        `[routes] registered as node_id=${nodeId}; self-nominating for ROLE_ROUTER`,
+      );
       await proposeSelfAsRouter(nodeId);
     } else {
+      const publicUrl = requireEnv("ROUTES_PUBLIC_URL");
+      if ((await currentMetadata(nodeId)) !== publicUrl) {
+        console.log(
+          `[routes] public URL changed; updating metadata for node_id=${nodeId}`,
+        );
+        await updateMetadata(nodeId, publicUrl);
+      }
       console.log(`[routes] found persisted node_id=${nodeId}; marking active`);
       await setActive(nodeId, true);
     }
 
     _nodeId = nodeId;
-    const intervalMs = Number(process.env.ROUTES_HEARTBEAT_INTERVAL_MS ?? 5 * 60 * 1000);
+    const intervalMs = Number(
+      process.env.ROUTES_HEARTBEAT_INTERVAL_MS ?? 5 * 60 * 1000,
+    );
     _heartbeatTimer = setInterval(() => {
       if (!_nodeId) return;
-      heartbeat(_nodeId).catch((err) => console.error("[routes] heartbeat failed", err));
+      heartbeat(_nodeId).catch((err) =>
+        console.error("[routes] heartbeat failed", err),
+      );
     }, intervalMs);
 
     const shutdown = () => {
       if (_heartbeatTimer) clearInterval(_heartbeatTimer);
       if (_nodeId) {
         setActive(_nodeId, false)
-          .catch((err) => console.error("[routes] failed to mark inactive on shutdown", err))
+          .catch((err) =>
+            console.error("[routes] failed to mark inactive on shutdown", err),
+          )
           .finally(() => process.exit(0));
       } else {
         process.exit(0);
@@ -198,6 +280,9 @@ export async function bootstrapOperator(): Promise<void> {
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
   } catch (error) {
-    console.error("[routes] operator bootstrap failed; continuing without on-chain registration", error);
+    console.error(
+      "[routes] operator bootstrap failed; continuing without on-chain registration",
+      error,
+    );
   }
 }
