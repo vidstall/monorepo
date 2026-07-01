@@ -57,14 +57,18 @@ class ContractPublishTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.env_path = self.root / "devnet.env"
         self.published_toml = self.root / "Published.toml"
+        self.runtime_dir = self.root / "runtime"
         self.commands: list[list[str]] = []
 
         self.path_patch = patch.object(contract, "contract_env_path", lambda _env: self.env_path)
         self.pubfile_patch = patch.object(contract, "PUBLISHED_TOML", self.published_toml)
+        self.runtime_patch = patch.object(contract, "RUNTIME_DIR", self.runtime_dir)
         self.path_patch.start()
         self.pubfile_patch.start()
+        self.runtime_patch.start()
         self.addCleanup(self.path_patch.stop)
         self.addCleanup(self.pubfile_patch.stop)
+        self.addCleanup(self.runtime_patch.stop)
 
     def fake_sui(self, args: list[object], cwd: Path | None = None) -> tuple[int, dict | None, str]:
         command = [str(arg) for arg in args]
@@ -97,6 +101,8 @@ class ContractPublishTests(unittest.TestCase):
         self.assertEqual(values["CONTRACT_UPGRADE_CAP_ID"], "0xupgradecap")
         self.assertEqual(values["CONTRACT_DEPLOYER_ADDRESS"], "0xdeployer")
         self.assertEqual(values["CONTRACT_PUBLISH_TX_DIGEST"], "0xpublishdigest")
+        self.assertIn(str(self.runtime_dir / "Pub.devnet.toml"), self.commands[0])
+        self.assertIn(str(self.runtime_dir / "Pub.devnet.toml"), self.commands[1])
 
     def test_existing_publish_upgrades_and_preserves_registry(self) -> None:
         self.write_env(
@@ -122,6 +128,9 @@ class ContractPublishTests(unittest.TestCase):
         self.assertEqual(values["CONTRACT_UPGRADE_CAP_ID"], "0xupgradecap")
         self.assertEqual(values["CONTRACT_PUBLISH_TX_DIGEST"], "0xpublishdigest")
         self.assertEqual(values["CONTRACT_UPGRADE_TX_DIGEST"], "0xupgradedigest")
+        pubfile = self.runtime_dir / "Pub.devnet.toml"
+        self.assertTrue(pubfile.exists())
+        self.assertIn('source = { local = "', pubfile.read_text())
 
     def test_existing_publish_fails_when_registry_missing(self) -> None:
         self.write_env(
@@ -179,6 +188,7 @@ class ContractPublishTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual([command[2] for command in self.commands], ["test-upgrade"])
         self.assertEqual(self.env_path.read_text(), before)
+        self.assertTrue((self.runtime_dir / "Pub.devnet.toml").exists())
 
 
 if __name__ == "__main__":

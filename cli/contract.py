@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import tomllib
 
-from .context import CONTRACT_DIR, contract_env_path, read_env_file, run, write_kv_env_file
+from .context import CONTRACT_DIR, RUNTIME_DIR, contract_env_path, read_env_file, run, write_kv_env_file
 
 SUI_COIN_TYPE = "0x2::sui::SUI"
 PUBLISHED_TOML = CONTRACT_DIR / "Published.toml"
@@ -73,6 +71,8 @@ def publish(
             "client",
             "publish",
             CONTRACT_DIR,
+            "--pubfile-path",
+            runtime_pubfile_path(env),
             "--json",
             *(["--gas-budget", gas_budget] if gas_budget else []),
         ]
@@ -134,41 +134,35 @@ def upgrade_existing(
     if pubfile_path is None:
         return 1
 
-    try:
-        preview = test_upgrade(env, upgrade_cap_id, gas_budget, pubfile_path)
-        if preview is None:
-            return 1
-        if dry_run:
-            return 0
+    preview = test_upgrade(env, upgrade_cap_id, gas_budget, pubfile_path)
+    if preview is None:
+        return 1
+    if dry_run:
+        return 0
 
-        upgrade_code, upgrade_result, upgrade_error = run_sui_json(
-            [
-                "sui",
-                "client",
-                "upgrade",
-                "--upgrade-capability",
-                upgrade_cap_id,
-                "--build-env",
-                env,
-                "--pubfile-path",
-                pubfile_path,
-                "--json",
-                *(["--gas-budget", gas_budget] if gas_budget else []),
-                CONTRACT_DIR,
-            ]
-        )
-        if upgrade_result is None:
-            if upgrade_error:
-                sys.stderr.write(upgrade_error)
-            return upgrade_code or 1
+    upgrade_code, upgrade_result, upgrade_error = run_sui_json(
+        [
+            "sui",
+            "client",
+            "upgrade",
+            "--upgrade-capability",
+            upgrade_cap_id,
+            "--build-env",
+            env,
+            "--pubfile-path",
+            pubfile_path,
+            "--json",
+            *(["--gas-budget", gas_budget] if gas_budget else []),
+            CONTRACT_DIR,
+        ]
+    )
+    if upgrade_result is None:
+        if upgrade_error:
+            sys.stderr.write(upgrade_error)
+        return upgrade_code or 1
 
-        package_id = parse_published_package_id(upgrade_result) or package_id
-        upgrade_tx_digest = parse_transaction_digest(upgrade_result)
-    finally:
-        try:
-            os.unlink(pubfile_path)
-        except FileNotFoundError:
-            pass
+    package_id = parse_published_package_id(upgrade_result) or package_id
+    upgrade_tx_digest = parse_transaction_digest(upgrade_result)
 
     if not registry_object_id:
         registry_object_id = create_registry(package_id, gas_budget)
@@ -193,12 +187,7 @@ def upgrade_existing(
 
 
 def test_publish(env: str, gas_budget: str | None) -> dict | None:
-    pubfile_path = str(Path(tempfile.gettempdir()) / f"vidctl-contract-{os.getpid()}.toml")
-    try:
-        os.unlink(pubfile_path)
-    except FileNotFoundError:
-        pass
-
+    pubfile_path = runtime_pubfile_path(env)
     _code, result, error = run_sui_json(
         [
             "sui",
@@ -214,12 +203,6 @@ def test_publish(env: str, gas_budget: str | None) -> dict | None:
             *(["--gas-budget", gas_budget] if gas_budget else []),
         ]
     )
-
-    try:
-        os.unlink(pubfile_path)
-    except FileNotFoundError:
-        pass
-
     if result is None and error:
         sys.stderr.write(error)
     return result
@@ -368,7 +351,8 @@ def write_runtime_pubfile(env: str, deployment: dict[str, str]) -> str | None:
     package_id = deployment["CONTRACT_PACKAGE_ID"]
     original_package_id = deployment.get("CONTRACT_ORIGINAL_PACKAGE_ID", package_id)
     upgrade_cap_id = deployment["CONTRACT_UPGRADE_CAP_ID"]
-    pubfile_path = Path(tempfile.gettempdir()) / f"vidctl-Pub.{env}.{os.getpid()}.toml"
+    pubfile_path = Path(runtime_pubfile_path(env))
+    pubfile_path.parent.mkdir(parents=True, exist_ok=True)
     pubfile_path.write_text(
         "\n".join(
             [
@@ -392,6 +376,11 @@ def write_runtime_pubfile(env: str, deployment: dict[str, str]) -> str | None:
         )
     )
     return str(pubfile_path)
+
+
+def runtime_pubfile_path(env: str) -> str:
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    return str(RUNTIME_DIR / f"Pub.{env}.toml")
 
 
 def find_network_metadata(node: object, network: str) -> dict | None:
