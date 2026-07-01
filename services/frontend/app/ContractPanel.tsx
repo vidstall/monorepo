@@ -14,6 +14,7 @@ import {
   fetchContractConfig,
 } from "@/lib/contract-api";
 import { dAppKit } from "@/lib/sui-dapp-kit";
+import { fetchPendingRouterProposals, PendingRoleProposal } from "@/lib/role-proposals";
 
 type FormValues = Record<string, FormDataEntryValue>;
 
@@ -47,6 +48,9 @@ function ContractPanelInner() {
   const [config, setConfig] = useState<ContractConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [pendingProposals, setPendingProposals] = useState<PendingRoleProposal[]>([]);
+  const [proposalsError, setProposalsError] = useState<string | null>(null);
+  const [proposalsLoading, setProposalsLoading] = useState(false);
 
   useEffect(() => {
     fetchContractConfig()
@@ -56,6 +60,24 @@ function ContractPanelInner() {
           err instanceof Error ? err.message : "Failed to load contract config",
         ),
       );
+  }, []);
+
+  async function refreshPendingProposals() {
+    setProposalsLoading(true);
+    setProposalsError(null);
+    try {
+      setPendingProposals(await fetchPendingRouterProposals());
+    } catch (err) {
+      setProposalsError(
+        err instanceof Error ? err.message : "Failed to load pending role proposals",
+      );
+    } finally {
+      setProposalsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshPendingProposals();
   }, []);
 
   async function execute(
@@ -97,6 +119,17 @@ function ContractPanelInner() {
       setError(
         err instanceof Error ? err.message : "Contract transaction failed",
       );
+    }
+  }
+
+  async function voteOnProposal(event: FormEvent<HTMLFormElement>, proposalId: string) {
+    const values = formValues(event);
+    try {
+      await execute("cast-role-vote", { ...values, proposalId });
+      await refreshPendingProposals();
+    } catch (err) {
+      setStatus(null);
+      setError(err instanceof Error ? err.message : "Failed to cast vote");
     }
   }
 
@@ -305,6 +338,47 @@ function ContractPanelInner() {
             Cancel Order
           </button>
         </form>
+      </div>
+
+      <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <strong>Pending role proposals (router)</strong>
+          <button
+            className="lk-button"
+            type="button"
+            disabled={proposalsLoading}
+            onClick={() => refreshPendingProposals()}
+          >
+            {proposalsLoading ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+        {proposalsError && (
+          <p style={{ margin: 0, color: "#ff6b6b" }}>{proposalsError}</p>
+        )}
+        {!proposalsError && pendingProposals.length === 0 && (
+          <p style={{ margin: 0, opacity: 0.72 }}>No pending router role proposals.</p>
+        )}
+        {pendingProposals.map((proposal) => (
+          <form
+            key={proposal.proposalId}
+            onSubmit={(event) => voteOnProposal(event, proposal.proposalId)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+              Proposal #{proposal.proposalId}: nominee node #{proposal.nomineeNodeId}, deadline{" "}
+              {new Date(proposal.deadlineMs).toLocaleString()}
+            </span>
+            <Field name="voterNodeId" placeholder="Your node ID" inputMode="numeric" />
+            <button className="lk-button" type="submit">
+              Vote Yes
+            </button>
+          </form>
+        ))}
       </div>
 
       {(status || error) && (

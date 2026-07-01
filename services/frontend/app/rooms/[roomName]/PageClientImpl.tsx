@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { decodePassphrase, getRoutesEndpoint } from '@/lib/client-utils';
+import { decodePassphrase } from '@/lib/client-utils';
+import { getWorkingRoute } from '@/lib/route-discovery';
 import { DebugMode } from '@/lib/Debug';
 import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
@@ -40,7 +41,6 @@ export function PageClientImpl(props: {
   codec: VideoCodec;
   singlePeerConnection: boolean;
 }) {
-  const routesEndpoint = getRoutesEndpoint();
   const [preJoinChoices, setPreJoinChoices] = React.useState<LocalUserChoices | undefined>(
     undefined,
   );
@@ -55,29 +55,53 @@ export function PageClientImpl(props: {
     undefined,
   );
 
+  const MAX_ROUTE_ATTEMPTS = 3;
+
   const handlePreJoinSubmit = React.useCallback(async (values: LocalUserChoices) => {
     setPreJoinChoices(values);
-    const url = new URL(`${routesEndpoint}/connection-details`, window.location.origin);
-    url.searchParams.append('roomName', props.roomName);
-    url.searchParams.append('participantName', values.username);
-    if (props.region) {
-      url.searchParams.append('region', props.region);
+    const excluded = new Set<string>();
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < MAX_ROUTE_ATTEMPTS; attempt++) {
+      let routesEndpoint: string;
+      try {
+        routesEndpoint = await getWorkingRoute(excluded);
+      } catch (e) {
+        lastError = e;
+        break;
+      }
+
+      const url = new URL(`${routesEndpoint}/connection-details`, window.location.origin);
+      url.searchParams.append('roomName', props.roomName);
+      url.searchParams.append('participantName', values.username);
+      if (props.region) {
+        url.searchParams.append('region', props.region);
+      }
+      if (props.rentalId) {
+        url.searchParams.append('rentalId', props.rentalId);
+      }
+
+      try {
+        const connectionDetailsResp = await fetch(url.toString(), {
+          credentials: 'include',
+        });
+        if (!connectionDetailsResp.ok) {
+          const errorText = await connectionDetailsResp.text();
+          throw new Error(
+            `Failed to fetch connection details (${connectionDetailsResp.status}): ${errorText || connectionDetailsResp.statusText}`,
+          );
+        }
+        const connectionDetailsData = await connectionDetailsResp.json();
+        setConnectionDetails(connectionDetailsData);
+        return;
+      } catch (e) {
+        lastError = e;
+        excluded.add(routesEndpoint);
+      }
     }
-    if (props.rentalId) {
-      url.searchParams.append('rentalId', props.rentalId);
-    }
-    const connectionDetailsResp = await fetch(url.toString(), {
-      credentials: 'include',
-    });
-    if (!connectionDetailsResp.ok) {
-      const errorText = await connectionDetailsResp.text();
-      throw new Error(
-        `Failed to fetch connection details (${connectionDetailsResp.status}): ${errorText || connectionDetailsResp.statusText}`,
-      );
-    }
-    const connectionDetailsData = await connectionDetailsResp.json();
-    setConnectionDetails(connectionDetailsData);
-  }, [props.region, props.rentalId, props.roomName, routesEndpoint]);
+
+    throw lastError ?? new Error('Failed to fetch connection details: no routes available');
+  }, [props.region, props.rentalId, props.roomName]);
   const handlePreJoinError = React.useCallback((e: any) => console.error(e), []);
 
   return (
