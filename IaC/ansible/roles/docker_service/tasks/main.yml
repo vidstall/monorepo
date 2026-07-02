@@ -85,6 +85,11 @@
     mode: "0640"
   when: xaisen_service_secrets_file.stat.exists | default(false)
 
+- name: Check for an existing operator state file on the host
+  ansible.builtin.stat:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/{{ inventory_hostname }}.json"
+  register: xaisen_existing_operator_state
+
 - name: Write operator wallet credentials
   ansible.builtin.copy:
     dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/{{ inventory_hostname }}.json"
@@ -92,7 +97,11 @@
     group: root
     mode: "0600"
     content: "{{ xaisen_operator_wallet_json }}"
-  when: xaisen_operator_wallet_json is defined
+  # Only seed credentials on first boot. The routes container persists its own
+  # on-chain node_id into this same file after registering; overwriting it on
+  # every restart would reset node_id to null and force a spurious
+  # re-registration (a new worker node) on every deploy.
+  when: xaisen_operator_wallet_json is defined and not xaisen_existing_operator_state.stat.exists
   no_log: true
   register: xaisen_wallet_credentials_write
 
