@@ -154,6 +154,21 @@ def persist_alibaba_vm_resolution(
             return
 
 
+def instance_address(name: str) -> str:
+    try:
+        import yaml
+    except ImportError:
+        return ""
+    if not GENERATED_INVENTORY.exists():
+        return ""
+    try:
+        data = yaml.safe_load(GENERATED_INVENTORY.read_text(encoding="utf-8"))
+        host = data["all"]["children"]["xaisen"]["hosts"].get(name, {})
+        return str(host.get("ansible_host", ""))
+    except (KeyError, TypeError, AttributeError):
+        return ""
+
+
 def ansible_inventory() -> int:
     executable = venv_bin("ansible-inventory")
     if not executable.exists():
@@ -168,10 +183,16 @@ def ping() -> int:
     return code
 
 
-def configure(host_limit: str | None = None, container_state: str = "started") -> int:
-    extra_vars = docker_deploy_extra_vars()
-    extra_vars["xaisen_container_state"] = container_state
-    code = ansible_playbook("site.yml", extra_vars=extra_vars, host_limit=host_limit)
+def configure(
+    host_limit: str | None = None,
+    container_state: str = "started",
+    extra_vars: dict[str, Any] | None = None,
+) -> int:
+    all_extra_vars = docker_deploy_extra_vars()
+    all_extra_vars["xaisen_container_state"] = container_state
+    if extra_vars:
+        all_extra_vars.update(extra_vars)
+    code = ansible_playbook("site.yml", extra_vars=all_extra_vars, host_limit=host_limit)
     record_history("infra configure", env=active_stack(), result_for_code=code)
     return code
 
@@ -280,6 +301,19 @@ def control(
         record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=2, error=message)
         return 2
 
+    wallet_entry: dict[str, Any] | None = None
+    wallet_created = False
+    if backend == "vm" and action in {"start", "restart"}:
+        from . import wallet
+
+        try:
+            wallet_entry, wallet_created = wallet.ensure_wallet(name, service, env_name)
+        except (subprocess.CalledProcessError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
+            message = f"Failed to create/load operator wallet for {name}: {exc}"
+            print(message, file=sys.stderr)
+            record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+            return 1
+
     instance = find_instance(topology, env_name, name, service, provider)
     if instance is None:
         instance = new_instance(env_name, name, service, provider)
@@ -339,7 +373,12 @@ def control(
             if code == 0:
                 failed_stage = "configure"
                 container_state = "restarted" if action == "restart" else "started"
-                code = configure(host_limit=name, container_state=container_state)
+                configure_extra_vars = (
+                    {"xaisen_operator_wallet_json": wallet.operator_state_json(wallet_entry)}
+                    if wallet_created and wallet_entry is not None
+                    else None
+                )
+                code = configure(host_limit=name, container_state=container_state, extra_vars=configure_extra_vars)
 
         if code == 0 and action != "kill":
             instance["last_status"] = next_state
@@ -351,6 +390,17 @@ def control(
             instance["desired_state"] = previous
         instance["last_error"] = f"{failed_stage} failed with exit code {code}"
         write_topology(topology)
+
+    if code == 0 and backend == "vm" and action in {"start", "restart"} and wallet_entry is not None:
+        address = instance_address(name)
+        wallet_address = str(wallet_entry.get("address", ""))
+        try:
+            balance_mist = wallet.current_balance_mist(wallet_address)
+        except (subprocess.CalledProcessError, json.JSONDecodeError):
+            balance_mist = int(wallet_entry.get("last_balance_mist", 0))
+        print(f"IP:      {address or 'unknown'}")
+        print(f"Wallet:  {wallet_address[:8]}...")
+        print(f"Balance: {balance_mist / 1_000_000_000:.4f} SUI")
 
     record_history(
         action,

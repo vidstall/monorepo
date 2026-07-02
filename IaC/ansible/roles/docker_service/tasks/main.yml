@@ -85,6 +85,16 @@
     mode: "0640"
   when: xaisen_service_secrets_file.stat.exists | default(false)
 
+- name: Write operator wallet credentials
+  ansible.builtin.copy:
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/{{ inventory_hostname }}.json"
+    owner: root
+    group: root
+    mode: "0600"
+    content: "{{ xaisen_operator_wallet_json }}"
+  when: xaisen_operator_wallet_json is defined
+  no_log: true
+
 - name: Run the service container
   community.docker.docker_container:
     name: "xaisen-{{ xaisen_service }}"
