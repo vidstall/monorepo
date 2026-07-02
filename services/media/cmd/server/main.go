@@ -252,6 +252,9 @@ func startServer(ctx context.Context, c *cli.Command) error {
 	if url := conf.Trace.JaegerURL; url != "" {
 		jaeger.Configure(ctx, url, "livekit")
 	}
+	if err := service.EnsureXaisenClusterKey(ctx, conf); err != nil {
+		return fmt.Errorf("bootstrap Xaisen cluster credential: %w", err)
+	}
 
 	// validate API key length
 	err = conf.ValidateKeys()
@@ -294,6 +297,9 @@ func startServer(ctx context.Context, c *cli.Command) error {
 
 	if err := prometheus.Init(string(currentNode.NodeID()), currentNode.NodeType()); err != nil {
 		return err
+	}
+	if err := service.StartXaisenBroker(ctx, conf, string(currentNode.NodeID())); err != nil {
+		return fmt.Errorf("start Xaisen media broker: %w", err)
 	}
 
 	server, err := service.InitializeServer(conf, currentNode)
