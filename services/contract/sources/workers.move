@@ -1,6 +1,7 @@
 #[allow(lint(public_entry))]
 module xaisen_contract::workers;
 
+use std::vector;
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
 use sui::transfer;
@@ -32,6 +33,15 @@ public entry fun register_worker<T>(
     let node_id = worker_store::insert(
         registry.workers_mut(), sender, metadata_uri, metadata_hash, price_per_rental, stake_coin, timestamp_ms,
     );
+
+    let deactivated_ids = worker_store::sweep_stale(registry.workers_mut(), timestamp_ms);
+    let mut i = 0;
+    while (i < vector::length(&deactivated_ids)) {
+        let stale_id = *vector::borrow(&deactivated_ids, i);
+        let stale_owner = worker_store::owner(worker_store::borrow(registry.workers(), stale_id));
+        worker_events::emit_worker_auto_deactivated(stale_id, stale_owner, timestamp_ms);
+        i = i + 1;
+    };
 
     worker_events::emit_worker_registered(
         node_id, sender, metadata_uri_for_event, metadata_hash_for_event, price_per_rental, stake_amount, timestamp_ms,

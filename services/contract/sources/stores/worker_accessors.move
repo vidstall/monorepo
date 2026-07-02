@@ -61,6 +61,8 @@ public fun worker_updated_at_ms<T>(store: &WorkerStore<T>, node_id: u64): u64 {
 }
 
 #[test_only]
+public fun sweep_cap_for_testing(): u64 { worker_store::sweep_cap_for_testing() }
+#[test_only]
 public fun min_worker_stake_for_testing(): u64 { worker_store::min_worker_stake() }
 #[test_only]
 public fun no_active_rental_for_testing(): u64 { worker_store::no_active_rental() }

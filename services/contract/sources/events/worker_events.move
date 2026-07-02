@@ -27,6 +27,12 @@ public struct WorkerStatusUpdated has copy, drop {
     timestamp_ms: u64,
 }
 
+public struct WorkerAutoDeactivated has copy, drop {
+    node_id: u64,
+    owner: address,
+    timestamp_ms: u64,
+}
+
 public struct WorkerUnregistered has copy, drop {
     node_id: u64,
     owner: address,
@@ -64,6 +70,10 @@ public(package) fun emit_worker_metadata_updated(
 
 public(package) fun emit_worker_status_updated(node_id: u64, owner: address, active: bool, timestamp_ms: u64) {
     event::emit(WorkerStatusUpdated { node_id, owner, active, timestamp_ms });
+}
+
+public(package) fun emit_worker_auto_deactivated(node_id: u64, owner: address, timestamp_ms: u64) {
+    event::emit(WorkerAutoDeactivated { node_id, owner, timestamp_ms });
 }
 
 public(package) fun emit_worker_unregistered(node_id: u64, owner: address) {

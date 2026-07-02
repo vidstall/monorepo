@@ -84,3 +84,35 @@ public entry fun cast_role_vote<T>(
         governance_events::emit_role_assigned(proposal_id, nominee_node_id, role, timestamp_ms);
     };
 }
+
+public fun next_role_proposal_id<T>(registry: &Registry<T>): u64 {
+    role_vote_store::next_role_proposal_id(registry.role_votes())
+}
+
+public fun has_worker_role<T>(registry: &Registry<T>, node_id: u64): bool {
+    role_vote_store::has_worker_role(registry.role_votes(), node_id)
+}
+
+public fun worker_role<T>(registry: &Registry<T>, node_id: u64): u8 {
+    role_vote_store::worker_role(registry.role_votes(), node_id)
+}
+
+public fun role_proposal_exists<T>(registry: &Registry<T>, proposal_id: u64): bool {
+    role_vote_store::role_proposal_exists(registry.role_votes(), proposal_id)
+}
+
+public fun role_proposal_role<T>(registry: &Registry<T>, proposal_id: u64): u8 {
+    role_vote_store::role_proposal_role(registry.role_votes(), proposal_id)
+}
+
+public fun role_proposal_nominee_node_id<T>(registry: &Registry<T>, proposal_id: u64): u64 {
+    role_vote_store::role_proposal_nominee_node_id(registry.role_votes(), proposal_id)
+}
+
+public fun role_proposal_deadline_ms<T>(registry: &Registry<T>, proposal_id: u64): u64 {
+    role_vote_store::role_proposal_deadline_ms(registry.role_votes(), proposal_id)
+}
+
+public fun role_proposal_finalized<T>(registry: &Registry<T>, proposal_id: u64): bool {
+    role_vote_store::role_proposal_finalized(registry.role_votes(), proposal_id)
+}

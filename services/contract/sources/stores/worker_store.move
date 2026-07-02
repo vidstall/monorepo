@@ -17,6 +17,8 @@ const E_WORKER_ACTIVE: u64 = 13;
 const METADATA_HASH_LENGTH: u64 = 32;
 const MIN_WORKER_STAKE: u64 = 1_000;
 const NO_ACTIVE_RENTAL: u64 = 0;
+const STALE_THRESHOLD_MS: u64 = 1_800_000; // 30 minutes
+const SWEEP_CAP: u64 = 50; // max ids scanned per register_worker call
 
 public struct WorkerRecord<phantom T> has store {
     owner: address,
@@ -131,6 +133,28 @@ public(package) fun set_active<T>(store: &mut WorkerStore<T>, node_id: u64, acti
     if (was_active && !active) { store.active_worker_count = store.active_worker_count - 1; }
     else if (!was_active && active) { store.active_worker_count = store.active_worker_count + 1; };
 }
+
+public(package) fun sweep_stale<T>(store: &mut WorkerStore<T>, now_ms: u64): vector<u64> {
+    let mut deactivated = vector[];
+    let upper = if (store.next_node_id > SWEEP_CAP + 1) { SWEEP_CAP + 1 } else { store.next_node_id };
+    let mut id = 1;
+    while (id < upper) {
+        if (table::contains(&store.workers, id)) {
+            let record = table::borrow(&store.workers, id);
+            let is_active = record.active;
+            let updated_at_ms = record.updated_at_ms;
+            if (is_active && now_ms > updated_at_ms && (now_ms - updated_at_ms) > STALE_THRESHOLD_MS) {
+                set_active(store, id, false, now_ms);
+                vector::push_back(&mut deactivated, id);
+            };
+        };
+        id = id + 1;
+    };
+    deactivated
+}
+
+#[test_only]
+public fun sweep_cap_for_testing(): u64 { SWEEP_CAP }
 
 public(package) fun owner<T>(record: &WorkerRecord<T>): address { record.owner }
 public(package) fun active<T>(record: &WorkerRecord<T>): bool { record.active }

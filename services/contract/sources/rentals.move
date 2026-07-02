@@ -106,3 +106,15 @@ public entry fun cancel_rental<T>(registry: &mut Registry<T>, rental_id: u64, ct
     transfer::public_transfer(coin::from_balance(payment, ctx), client);
     rental_events::emit_rental_canceled(rental_id, node_id, client, payment_amount);
 }
+
+public fun rental_capacity<T>(registry: &Registry<T>, rental_id: u64): u64 {
+    rental_store::rental_capacity(registry.rentals(), rental_id)
+}
+
+public fun rental_payment_amount<T>(registry: &Registry<T>, rental_id: u64): u64 {
+    rental_store::rental_payment_amount(registry.rentals(), rental_id)
+}
+
+public fun rental_client<T>(registry: &Registry<T>, rental_id: u64): address {
+    rental_store::rental_client(registry.rentals(), rental_id)
+}
