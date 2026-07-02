@@ -899,6 +899,55 @@ fun inactive_worker_cannot_vote_on_role() {
 
 // ── Test helpers ────────────────────────────────────────────────────
 
+#[test]
+fun routed_order_registers_profiles_assigns_and_splits_payment() {
+    let mut media_ctx = ctx(OWNER, 200);
+    let mut clock = clock::create_for_testing(&mut media_ctx);
+    let mut registry = node_registry::new_registry_for_testing<TEST_COIN>(&mut media_ctx);
+    node_registry::register_worker(&mut registry, uri(), hash(1), PRICE, stake(&mut media_ctx), &clock, &mut media_ctx);
+    node_registry::propose_role(&mut registry, 1, 1, node_registry::role_sfu_for_testing(), &clock, &mut media_ctx);
+
+    let mut router_ctx = ctx(OTHER, 201);
+    node_registry::register_worker(&mut registry, uri(), hash(2), PRICE, stake(&mut router_ctx), &clock, &mut router_ctx);
+    node_registry::propose_role(&mut registry, 2, 2, node_registry::role_router_for_testing(), &clock, &mut router_ctx);
+    let mut media_vote_ctx = ctx(OWNER, 203);
+    node_registry::cast_role_vote(&mut registry, 1, 2, &clock, &mut media_vote_ctx);
+
+    let mut media_profile_ctx = ctx(OWNER, 204);
+    node_registry::set_node_profile(&mut registry, 1, hash(3), b"https://media/broker", b"apac", 1, &mut media_profile_ctx);
+    let mut cluster_ctx = ctx(OWNER, 205);
+    node_registry::register_media_cluster(&mut registry, 1, b"wss://media", PRICE, &mut cluster_ctx);
+    let mut router_profile_ctx = ctx(OTHER, 206);
+    node_registry::set_node_profile(&mut registry, 2, hash(4), b"https://router", b"apac", 0, &mut router_profile_ctx);
+
+    let mut client_ctx = ctx(CLIENT, 202);
+    node_registry::order_room(&mut registry, room(), CAPACITY, payment(&mut client_ctx), &clock, &mut client_ctx);
+    let mut assign_ctx = ctx(OTHER, 207);
+    node_registry::assign_routed_order(&mut registry, 2, 1, 1, 1, &clock, &mut assign_ctx);
+    assert!(node_registry::routed_assignment_exists(&registry, 1));
+    assert!(node_registry::routed_assignment_router(&registry, 1) == 2);
+    assert!(node_registry::routed_assignment_cluster(&registry, 1) == 1);
+    assert!(node_registry::routed_assignment_revision(&registry, 1) == 1);
+
+    let mut reassign_ctx = ctx(OTHER, 208);
+    node_registry::assign_routed_order(&mut registry, 2, 1, 1, 1, &clock, &mut reassign_ctx);
+    assert!(node_registry::routed_assignment_revision(&registry, 1) == 2);
+    clock::set_for_testing(&mut clock, 4000);
+    let mut completion_ctx = ctx(CLIENT, 209);
+    node_registry::complete_rental(&mut registry, 1, &clock, &mut completion_ctx);
+    assert!(node_registry::total_rewards_paid(&registry) == PRICE);
+
+    node_registry::remove_routed_configuration_for_testing(&mut registry, 2, 1, 1);
+    node_registry::remove_role_proposal_for_testing(&mut registry, 1);
+    node_registry::remove_role_proposal_for_testing(&mut registry, 2);
+    node_registry::remove_role_map_entry_for_testing(&mut registry, 1);
+    node_registry::remove_role_map_entry_for_testing(&mut registry, 2);
+    node_registry::remove_worker_for_testing(&mut registry, 1, &mut media_ctx);
+    node_registry::remove_worker_for_testing(&mut registry, 2, &mut router_ctx);
+    node_registry::destroy_registry_for_testing(registry);
+    clock::destroy_for_testing(clock);
+}
+
 fun registered_registry(
     clock: &clock::Clock,
     ctx: &mut tx_context::TxContext,

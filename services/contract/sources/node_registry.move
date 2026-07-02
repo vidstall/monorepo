@@ -5,6 +5,7 @@ use std::vector;
 use sui::balance::{Self, Balance};
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
+use sui::dynamic_field;
 use sui::event;
 use sui::object::{Self, UID};
 use sui::table::{Self, Table};
@@ -33,6 +34,12 @@ const E_PROPOSAL_EXPIRED: u64 = 18;
 const E_PROPOSAL_ALREADY_FINALIZED: u64 = 19;
 const E_INVALID_ROLE: u64 = 20;
 const E_NOMINEE_NOT_FOUND: u64 = 21;
+const E_INVALID_PUBLIC_KEY: u64 = 22;
+const E_INVALID_ENDPOINT: u64 = 23;
+const E_ROLE_REQUIRED: u64 = 24;
+const E_CLUSTER_NOT_FOUND: u64 = 25;
+const E_CLUSTER_INACTIVE: u64 = 26;
+const E_NOT_CLUSTER_MEMBER: u64 = 28;
 
 const METADATA_HASH_LENGTH: u64 = 32;
 const MIN_WORKER_STAKE: u64 = 1_000;
@@ -46,6 +53,9 @@ const ROLE_COORDINATOR: u8 = 1;
 const ROLE_ROUTER: u8 = 2;
 
 const DEFAULT_VOTE_DEADLINE_MS: u64 = 3_600_000;
+const X25519_PUBLIC_KEY_LENGTH: u64 = 32;
+const MEDIA_PAYMENT_BPS: u64 = 8_000;
+const BPS_DENOMINATOR: u64 = 10_000;
 
 // ── Core structs ────────────────────────────────────────────────────
 
@@ -109,6 +119,35 @@ public struct RoleProposal has store {
     deadline_ms: u64,
     finalized: bool,
     passed: bool,
+}
+
+// These records are dynamic fields so adding them is compatible with an
+// already-published Registry object layout.
+public struct NodeProfileKey has copy, drop, store { node_id: u64 }
+public struct MediaClusterKey has copy, drop, store { cluster_id: u64 }
+public struct ClusterMemberKey has copy, drop, store { cluster_id: u64, node_id: u64 }
+public struct RoutedAssignmentKey has copy, drop, store { rental_id: u64 }
+
+public struct NodeProfile has store {
+    x25519_public_key: vector<u8>,
+    broker_endpoint: vector<u8>,
+    region: vector<u8>,
+    cluster_id: u64,
+}
+
+public struct MediaCluster has store {
+    owner_node_id: u64,
+    treasury: address,
+    client_url: vector<u8>,
+    price_per_rental: u64,
+    active: bool,
+}
+
+public struct RoutedAssignment has store {
+    router_node_id: u64,
+    media_node_id: u64,
+    cluster_id: u64,
+    revision: u64,
 }
 
 // ── Events ──────────────────────────────────────────────────────────
@@ -216,6 +255,34 @@ public struct RoomAssignmentFinalized has copy, drop {
     rental_id: u64,
     assigned_node_id: u64,
     timestamp_ms: u64,
+}
+
+public struct NodeProfileUpdated has copy, drop {
+    node_id: u64,
+    cluster_id: u64,
+}
+
+public struct MediaClusterRegistered has copy, drop {
+    cluster_id: u64,
+    owner_node_id: u64,
+    treasury: address,
+    price_per_rental: u64,
+}
+
+public struct RoutedAssignmentUpdated has copy, drop {
+    rental_id: u64,
+    router_node_id: u64,
+    media_node_id: u64,
+    cluster_id: u64,
+    revision: u64,
+}
+
+public struct RoutedPaymentSplit has copy, drop {
+    rental_id: u64,
+    media_amount: u64,
+    router_amount: u64,
+    media_treasury: address,
+    router_owner: address,
 }
 
 public struct RoleProposalCreated has copy, drop {
@@ -548,8 +615,18 @@ public entry fun complete_rental<T>(
     let client = rental.client;
     let payment_amount = balance::value(&rental.payment);
 
-    let record = table::borrow_mut(&mut registry.workers, node_id);
-    record.active_rental_id = NO_ACTIVE_RENTAL;
+    let assignment_key = RoutedAssignmentKey { rental_id };
+    let routed = dynamic_field::exists(&registry.id, assignment_key);
+    let router_owner = if (routed) {
+        let assignment: &RoutedAssignment = dynamic_field::borrow(&registry.id, assignment_key);
+        table::borrow(&registry.workers, assignment.router_node_id).owner
+    } else {
+        @0x0
+    };
+    if (!routed) {
+        let record = table::borrow_mut(&mut registry.workers, node_id);
+        record.active_rental_id = NO_ACTIVE_RENTAL;
+    };
 
     let removed = table::remove(&mut registry.rentals, rental_id);
     let RentalRecord {
@@ -558,14 +635,31 @@ public entry fun complete_rental<T>(
         worker_owner: _,
         room_name: _,
         capacity: _,
-        payment,
+        mut payment,
         status: _,
         created_at_ms: _,
         completed_at_ms: _,
     } = removed;
 
     registry.total_rewards_paid = registry.total_rewards_paid + payment_amount;
-    transfer::public_transfer(coin::from_balance(payment, ctx), worker_owner);
+    if (routed) {
+        let router_amount = payment_amount - ((payment_amount * MEDIA_PAYMENT_BPS) / BPS_DENOMINATOR);
+        let router_payment = balance::split(&mut payment, router_amount);
+        let media_amount = balance::value(&payment);
+        let assignment: RoutedAssignment = dynamic_field::remove(&mut registry.id, assignment_key);
+        let RoutedAssignment { router_node_id: _, media_node_id: _, cluster_id: _, revision: _ } = assignment;
+        transfer::public_transfer(coin::from_balance(payment, ctx), worker_owner);
+        transfer::public_transfer(coin::from_balance(router_payment, ctx), router_owner);
+        event::emit(RoutedPaymentSplit {
+            rental_id,
+            media_amount,
+            router_amount,
+            media_treasury: worker_owner,
+            router_owner,
+        });
+    } else {
+        transfer::public_transfer(coin::from_balance(payment, ctx), worker_owner);
+    };
 
     event::emit(RentalCompleted {
         rental_id,
@@ -937,6 +1031,182 @@ public entry fun cast_role_vote<T>(
     };
 }
 
+// ── Routed media profiles and assignments ──────────────────────────
+
+public entry fun set_node_profile<T>(
+    registry: &mut Registry<T>,
+    node_id: u64,
+    x25519_public_key: vector<u8>,
+    broker_endpoint: vector<u8>,
+    region: vector<u8>,
+    cluster_id: u64,
+    ctx: &mut TxContext,
+) {
+    assert_node_exists(registry, node_id);
+    assert!(vector::length(&x25519_public_key) == X25519_PUBLIC_KEY_LENGTH, E_INVALID_PUBLIC_KEY);
+    assert!(vector::length(&broker_endpoint) > 0, E_INVALID_ENDPOINT);
+    let sender = tx_context::sender(ctx);
+    assert_worker_owner(table::borrow(&registry.workers, node_id).owner, sender);
+
+    let key = NodeProfileKey { node_id };
+    let profile = NodeProfile { x25519_public_key, broker_endpoint, region, cluster_id };
+    if (dynamic_field::exists(&registry.id, key)) {
+        let old: NodeProfile = dynamic_field::remove(&mut registry.id, key);
+        let NodeProfile { x25519_public_key: _, broker_endpoint: _, region: _, cluster_id: _ } = old;
+    };
+    dynamic_field::add(&mut registry.id, key, profile);
+    event::emit(NodeProfileUpdated { node_id, cluster_id });
+}
+
+public entry fun register_media_cluster<T>(
+    registry: &mut Registry<T>,
+    owner_node_id: u64,
+    client_url: vector<u8>,
+    price_per_rental: u64,
+    ctx: &mut TxContext,
+) {
+    assert_node_role(registry, owner_node_id, ROLE_SFU);
+    assert!(vector::length(&client_url) > 0, E_INVALID_ENDPOINT);
+    assert!(price_per_rental > 0, E_INVALID_PRICE);
+    let sender = tx_context::sender(ctx);
+    assert_worker_owner(table::borrow(&registry.workers, owner_node_id).owner, sender);
+    let cluster_id = owner_node_id;
+    let cluster_key = MediaClusterKey { cluster_id };
+    assert!(!dynamic_field::exists(&registry.id, cluster_key), E_INVALID_PRICE);
+    dynamic_field::add(
+        &mut registry.id,
+        cluster_key,
+        MediaCluster { owner_node_id, treasury: sender, client_url, price_per_rental, active: true },
+    );
+    dynamic_field::add(&mut registry.id, ClusterMemberKey { cluster_id, node_id: owner_node_id }, true);
+    event::emit(MediaClusterRegistered { cluster_id, owner_node_id, treasury: sender, price_per_rental });
+}
+
+public entry fun add_media_cluster_member<T>(
+    registry: &mut Registry<T>,
+    cluster_id: u64,
+    node_id: u64,
+    ctx: &mut TxContext,
+) {
+    assert_node_role(registry, node_id, ROLE_SFU);
+    let cluster = borrow_media_cluster(registry, cluster_id);
+    let sender = tx_context::sender(ctx);
+    assert_worker_owner(table::borrow(&registry.workers, cluster.owner_node_id).owner, sender);
+    let key = ClusterMemberKey { cluster_id, node_id };
+    if (!dynamic_field::exists(&registry.id, key)) {
+        dynamic_field::add(&mut registry.id, key, true);
+    };
+}
+
+public entry fun set_media_cluster_active<T>(
+    registry: &mut Registry<T>,
+    cluster_id: u64,
+    active: bool,
+    ctx: &mut TxContext,
+) {
+    let owner_node_id = borrow_media_cluster(registry, cluster_id).owner_node_id;
+    assert_worker_owner(table::borrow(&registry.workers, owner_node_id).owner, tx_context::sender(ctx));
+    let cluster = borrow_media_cluster_mut(registry, cluster_id);
+    cluster.active = active;
+}
+
+public entry fun assign_routed_order<T>(
+    registry: &mut Registry<T>,
+    router_node_id: u64,
+    media_node_id: u64,
+    cluster_id: u64,
+    rental_id: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    assert_router_and_media(registry, router_node_id, media_node_id, cluster_id, tx_context::sender(ctx));
+    assert_rental_exists(registry, rental_id);
+    let assignment_key = RoutedAssignmentKey { rental_id };
+    let revision = if (dynamic_field::exists(&registry.id, assignment_key)) {
+        let assignment: &mut RoutedAssignment = dynamic_field::borrow_mut(&mut registry.id, assignment_key);
+        assignment.router_node_id = router_node_id;
+        assignment.media_node_id = media_node_id;
+        assignment.cluster_id = cluster_id;
+        assignment.revision = assignment.revision + 1;
+        assignment.revision
+    } else {
+        let rental = table::borrow(&registry.rentals, rental_id);
+        assert!(rental.status == RENTAL_AWAITING_ASSIGNMENT, E_RENTAL_NOT_PENDING);
+        let payment_amount = balance::value(&rental.payment);
+        let cluster_price = borrow_media_cluster(registry, cluster_id).price_per_rental;
+        assert!(payment_amount == cluster_price, E_INVALID_PAYMENT_AMOUNT);
+        if (table::contains(&registry.room_proposals, rental_id)) {
+            let proposal = table::remove(&mut registry.room_proposals, rental_id);
+            let RoomAssignmentProposal {
+                rental_id: _, votes, vote_counts, total_votes: _, deadline_ms: _,
+                finalized: _, assigned_node_id: _,
+            } = proposal;
+            votes.drop();
+            vote_counts.drop();
+        };
+        dynamic_field::add(
+            &mut registry.id,
+            assignment_key,
+            RoutedAssignment { router_node_id, media_node_id, cluster_id, revision: 1 },
+        );
+        1
+    };
+
+    let treasury = borrow_media_cluster(registry, cluster_id).treasury;
+    let rental = table::borrow_mut(&mut registry.rentals, rental_id);
+    rental.worker_node_id = media_node_id;
+    rental.worker_owner = treasury;
+    rental.status = RENTAL_ACTIVE;
+    event::emit(RoutedAssignmentUpdated {
+        rental_id,
+        router_node_id,
+        media_node_id,
+        cluster_id,
+        revision,
+    });
+    event::emit(RoomAssignmentFinalized {
+        rental_id,
+        assigned_node_id: media_node_id,
+        timestamp_ms: clock::timestamp_ms(clock),
+    });
+}
+
+fun assert_router_and_media<T>(
+    registry: &Registry<T>,
+    router_node_id: u64,
+    media_node_id: u64,
+    cluster_id: u64,
+    sender: address,
+) {
+    assert_node_role(registry, router_node_id, ROLE_ROUTER);
+    assert_node_role(registry, media_node_id, ROLE_SFU);
+    let router = table::borrow(&registry.workers, router_node_id);
+    assert_worker_owner(router.owner, sender);
+    assert!(router.active, E_NOT_ACTIVE_WORKER);
+    assert!(table::borrow(&registry.workers, media_node_id).active, E_NOT_ACTIVE_WORKER);
+    let cluster = borrow_media_cluster(registry, cluster_id);
+    assert!(cluster.active, E_CLUSTER_INACTIVE);
+    assert!(dynamic_field::exists(&registry.id, ClusterMemberKey { cluster_id, node_id: media_node_id }), E_NOT_CLUSTER_MEMBER);
+}
+
+fun assert_node_role<T>(registry: &Registry<T>, node_id: u64, role: u8) {
+    assert_node_exists(registry, node_id);
+    assert!(table::contains(&registry.role_map, node_id), E_ROLE_REQUIRED);
+    assert!(*table::borrow(&registry.role_map, node_id) == role, E_ROLE_REQUIRED);
+}
+
+fun borrow_media_cluster<T>(registry: &Registry<T>, cluster_id: u64): &MediaCluster {
+    let key = MediaClusterKey { cluster_id };
+    assert!(dynamic_field::exists(&registry.id, key), E_CLUSTER_NOT_FOUND);
+    dynamic_field::borrow(&registry.id, key)
+}
+
+fun borrow_media_cluster_mut<T>(registry: &mut Registry<T>, cluster_id: u64): &mut MediaCluster {
+    let key = MediaClusterKey { cluster_id };
+    assert!(dynamic_field::exists(&registry.id, key), E_CLUSTER_NOT_FOUND);
+    dynamic_field::borrow_mut(&mut registry.id, key)
+}
+
 // ── Public accessors ────────────────────────────────────────────────
 
 public fun node_exists<T>(registry: &Registry<T>, node_id: u64): bool {
@@ -1003,6 +1273,62 @@ public fun worker_created_at_ms<T>(registry: &Registry<T>, node_id: u64): u64 {
 public fun worker_updated_at_ms<T>(registry: &Registry<T>, node_id: u64): u64 {
     assert_node_exists(registry, node_id);
     table::borrow(&registry.workers, node_id).updated_at_ms
+}
+
+public fun has_node_profile<T>(registry: &Registry<T>, node_id: u64): bool {
+    dynamic_field::exists(&registry.id, NodeProfileKey { node_id })
+}
+
+public fun node_x25519_public_key<T>(registry: &Registry<T>, node_id: u64): vector<u8> {
+    dynamic_field::borrow<NodeProfileKey, NodeProfile>(&registry.id, NodeProfileKey { node_id }).x25519_public_key
+}
+
+public fun node_broker_endpoint<T>(registry: &Registry<T>, node_id: u64): vector<u8> {
+    dynamic_field::borrow<NodeProfileKey, NodeProfile>(&registry.id, NodeProfileKey { node_id }).broker_endpoint
+}
+
+public fun node_region<T>(registry: &Registry<T>, node_id: u64): vector<u8> {
+    dynamic_field::borrow<NodeProfileKey, NodeProfile>(&registry.id, NodeProfileKey { node_id }).region
+}
+
+public fun node_cluster_id<T>(registry: &Registry<T>, node_id: u64): u64 {
+    dynamic_field::borrow<NodeProfileKey, NodeProfile>(&registry.id, NodeProfileKey { node_id }).cluster_id
+}
+
+public fun media_cluster_exists<T>(registry: &Registry<T>, cluster_id: u64): bool {
+    dynamic_field::exists(&registry.id, MediaClusterKey { cluster_id })
+}
+
+public fun media_cluster_client_url<T>(registry: &Registry<T>, cluster_id: u64): vector<u8> {
+    borrow_media_cluster(registry, cluster_id).client_url
+}
+
+public fun media_cluster_price<T>(registry: &Registry<T>, cluster_id: u64): u64 {
+    borrow_media_cluster(registry, cluster_id).price_per_rental
+}
+
+public fun media_cluster_active<T>(registry: &Registry<T>, cluster_id: u64): bool {
+    borrow_media_cluster(registry, cluster_id).active
+}
+
+public fun routed_assignment_exists<T>(registry: &Registry<T>, rental_id: u64): bool {
+    dynamic_field::exists(&registry.id, RoutedAssignmentKey { rental_id })
+}
+
+public fun routed_assignment_router<T>(registry: &Registry<T>, rental_id: u64): u64 {
+    dynamic_field::borrow<RoutedAssignmentKey, RoutedAssignment>(&registry.id, RoutedAssignmentKey { rental_id }).router_node_id
+}
+
+public fun routed_assignment_cluster<T>(registry: &Registry<T>, rental_id: u64): u64 {
+    dynamic_field::borrow<RoutedAssignmentKey, RoutedAssignment>(&registry.id, RoutedAssignmentKey { rental_id }).cluster_id
+}
+
+public fun routed_assignment_media<T>(registry: &Registry<T>, rental_id: u64): u64 {
+    dynamic_field::borrow<RoutedAssignmentKey, RoutedAssignment>(&registry.id, RoutedAssignmentKey { rental_id }).media_node_id
+}
+
+public fun routed_assignment_revision<T>(registry: &Registry<T>, rental_id: u64): u64 {
+    dynamic_field::borrow<RoutedAssignmentKey, RoutedAssignment>(&registry.id, RoutedAssignmentKey { rental_id }).revision
 }
 
 public fun rental_exists<T>(registry: &Registry<T>, rental_id: u64): bool {
@@ -1240,6 +1566,22 @@ public fun remove_role_map_entry_for_testing<T>(
     node_id: u64,
 ) {
     table::remove(&mut registry.role_map, node_id);
+}
+
+#[test_only]
+public fun remove_routed_configuration_for_testing<T>(
+    registry: &mut Registry<T>,
+    router_node_id: u64,
+    media_node_id: u64,
+    cluster_id: u64,
+) {
+    let router_profile: NodeProfile = dynamic_field::remove(&mut registry.id, NodeProfileKey { node_id: router_node_id });
+    let NodeProfile { x25519_public_key: _, broker_endpoint: _, region: _, cluster_id: _ } = router_profile;
+    let media_profile: NodeProfile = dynamic_field::remove(&mut registry.id, NodeProfileKey { node_id: media_node_id });
+    let NodeProfile { x25519_public_key: _, broker_endpoint: _, region: _, cluster_id: _ } = media_profile;
+    let _: bool = dynamic_field::remove(&mut registry.id, ClusterMemberKey { cluster_id, node_id: media_node_id });
+    let cluster: MediaCluster = dynamic_field::remove(&mut registry.id, MediaClusterKey { cluster_id });
+    let MediaCluster { owner_node_id: _, treasury: _, client_url: _, price_per_rental: _, active: _ } = cluster;
 }
 
 #[test_only]
