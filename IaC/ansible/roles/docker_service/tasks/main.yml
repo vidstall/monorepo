@@ -90,7 +90,8 @@
     restart_policy: unless-stopped
     state: "{{ 'started' if xaisen_desired_state == 'running' else 'stopped' }}"
     restart: "{{ (xaisen_container_state | default('started')) == 'restarted' }}"
-    ports: "{{ [] if xaisen_service == 'routes' else ([xaisen_port ~ ':' ~ xaisen_port] if (xaisen_port | default(0) | int > 0) else []) }}"
+    network_mode: "{{ 'host' if xaisen_service == 'media' else omit }}"
+    ports: "{{ omit if xaisen_service in ['routes', 'media'] else ([xaisen_port ~ ':' ~ xaisen_port] if (xaisen_port | default(0) | int > 0) else []) }}"
     networks: "{{ [{'name': 'xaisen-routes'}] if xaisen_service == 'routes' else omit }}"
     env_file: "{{ (xaisen_services_root ~ '/runtime/' ~ xaisen_service ~ '/service.env') if (xaisen_service_secrets_file.stat.exists | default(false)) else omit }}"
     volumes:
@@ -102,6 +103,8 @@
       ROUTES_OPERATOR_KEY_PATH: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/{{ inventory_hostname }}.json"
       ROUTES_INSTANCE_NAME: "{{ inventory_hostname }}"
       ROUTES_PUBLIC_URL: "{{ xaisen_routes_public_url if xaisen_service == 'routes' else omit }}"
+      NODE_IP: "{{ ansible_host if xaisen_service == 'media' else omit }}"
+      UDP_PORT: "{{ '50000-60000' if xaisen_service == 'media' else omit }}"
   when:
     - xaisen_images is defined and xaisen_service in xaisen_images
     - xaisen_tags is defined and xaisen_service in xaisen_tags

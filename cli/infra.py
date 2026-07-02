@@ -457,6 +457,14 @@ def alibaba_vm_target_urns(
                 ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-https"),
             ]
         )
+    elif service == "media":
+        resources.extend(
+            [
+                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-signal"),
+                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-ice"),
+                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-rtc"),
+            ]
+        )
     elif has_service_port:
         resources.append(("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-port"))
     return [f"{prefix}{resource_type}::{resource_name}" for resource_type, resource_name in resources]
