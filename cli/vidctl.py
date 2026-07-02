@@ -59,6 +59,16 @@ def add_contract_parser(subparsers: argparse._SubParsersAction[argparse.Argument
         action="store_true",
         help="Create a fresh shared registry when upgrading a package with no saved registry object ID.",
     )
+    publish.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "Force a fresh publish (new package + new shared registry), ignoring/clearing any "
+            "existing published state for this environment. Existing on-chain worker/stake data is "
+            "NOT migrated. Use when local source has diverged from what's deployed on-chain (e.g. a "
+            "module was renamed/removed) and a normal upgrade is rejected as incompatible."
+        ),
+    )
     publish.set_defaults(
         handler=lambda args: contract.publish(
             args.env,
@@ -66,6 +76,7 @@ def add_contract_parser(subparsers: argparse._SubParsersAction[argparse.Argument
             args.yes,
             args.gas_budget,
             args.create_registry_if_missing,
+            args.force,
         )
     )
 

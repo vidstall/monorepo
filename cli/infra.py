@@ -169,6 +169,55 @@ def instance_address(name: str) -> str:
         return ""
 
 
+def registry_status(name: str, service: str, address: str) -> str:
+    key_path = SSH_KEY_ROOT / name / "id_ed25519"
+    if not address or not key_path.exists():
+        return "unknown (host unreachable)"
+    container_name = f"xaisen-{service}"
+    try:
+        result = subprocess.run(
+            [
+                "ssh",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=8",
+                "-i", str(key_path),
+                f"root@{address}",
+                f"docker logs {container_name} 2>&1 | grep -E 'operator address|node_id=|bootstrap failed' | tail -40",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return f"unknown ({exc})"
+
+    output = result.stdout.strip()
+    if not output:
+        return "unknown (no operator log lines found)"
+
+    # docker logs preserves history across `docker restart` (same container),
+    # so only consider lines from the most recent boot's operator address block.
+    lines = output.splitlines()
+    last_boot_start = max(
+        (i for i, line in enumerate(lines) if "operator address" in line),
+        default=0,
+    )
+    lines = lines[last_boot_start:]
+
+    if any("bootstrap failed" in line for line in lines):
+        error_line = next((line for line in lines if "bootstrap failed" in line), "")
+        return f"not registered ({error_line.split('Error:', 1)[-1].strip() or 'see logs'})"
+    node_id_line = next(
+        (line for line in reversed(lines) if "node_id=" in line),
+        "",
+    )
+    if node_id_line:
+        node_id = node_id_line.split("node_id=", 1)[-1].split(";")[0].strip()
+        return f"registered (node_id={node_id})"
+    return "unknown (unrecognized log output)"
+
+
 def ansible_inventory() -> int:
     executable = venv_bin("ansible-inventory")
     if not executable.exists():
@@ -375,7 +424,7 @@ def control(
                 container_state = "restarted" if action == "restart" else "started"
                 configure_extra_vars = (
                     {"xaisen_operator_wallet_json": wallet.operator_state_json(wallet_entry)}
-                    if wallet_created and wallet_entry is not None
+                    if wallet_entry is not None
                     else None
                 )
                 code = configure(host_limit=name, container_state=container_state, extra_vars=configure_extra_vars)
@@ -401,6 +450,7 @@ def control(
         print(f"IP:      {address or 'unknown'}")
         print(f"Wallet:  {wallet_address[:8]}...")
         print(f"Balance: {balance_mist / 1_000_000_000:.4f} SUI")
+        print(f"Registry: {registry_status(name, service, address)}")
 
     record_history(
         action,

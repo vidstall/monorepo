@@ -46,6 +46,7 @@ def publish(
     yes: bool,
     gas_budget: str | None,
     create_registry_if_missing: bool = False,
+    force: bool = False,
 ) -> int:
     if not dry_run and not yes:
         print("Refusing to publish contract without --dry-run or --yes.", file=sys.stderr)
@@ -55,7 +56,17 @@ def publish(
     if code != 0:
         return code
 
-    deployment = load_deployment(env)
+    if force:
+        if not dry_run:
+            clear_published_entry(env)
+        deployment: dict[str, str] = {
+            key: value
+            for key, value in load_deployment(env).items()
+            if key in {"CONTRACT_NETWORK", "CONTRACT_CHAIN_ID"}
+        }
+    else:
+        deployment = load_deployment(env)
+
     existing_package_id = deployment.get("CONTRACT_PACKAGE_ID")
     existing_upgrade_cap_id = deployment.get("CONTRACT_UPGRADE_CAP_ID")
     if existing_package_id:
@@ -160,10 +171,6 @@ def upgrade_existing(
             "upgrade",
             "--upgrade-capability",
             upgrade_cap_id,
-            "--build-env",
-            env,
-            "--pubfile-path",
-            pubfile_path,
             "--json",
             *(["--gas-budget", gas_budget] if gas_budget else []),
             CONTRACT_DIR,
@@ -258,7 +265,7 @@ def create_registry(package_id: str, gas_budget: str | None) -> str | None:
             "--package",
             package_id,
             "--module",
-            "node_registry",
+            "registry",
             "--function",
             "create_registry",
             "--type-args",
@@ -313,6 +320,33 @@ def load_published_metadata(network: str) -> dict | None:
         return None
     data = tomllib.loads(PUBLISHED_TOML.read_text())
     return find_network_metadata(data, network)
+
+
+def clear_published_entry(network: str) -> None:
+    """Strip the `[published.<network>]` table out of Published.toml (a "this
+    package is already published" marker Sui writes/reads for that build env).
+    Used by `--force` to allow a genuinely fresh publish, e.g. when local
+    source has diverged from what's actually deployed on-chain (a module was
+    renamed/removed) and a normal upgrade is rejected as incompatible.
+    """
+    if PUBLISHED_TOML.exists():
+        lines = PUBLISHED_TOML.read_text().splitlines(keepends=True)
+        header = f"[published.{network}]"
+        kept: list[str] = []
+        skipping = False
+        for line in lines:
+            if line.strip() == header:
+                skipping = True
+                continue
+            if skipping and line.strip().startswith("[") and line.strip() != header:
+                skipping = False
+            if not skipping:
+                kept.append(line)
+        PUBLISHED_TOML.write_text("".join(kept))
+
+    pubfile = Path(runtime_pubfile_path(network))
+    if pubfile.exists():
+        pubfile.unlink()
 
 
 def load_deployment(network: str) -> dict[str, str]:
