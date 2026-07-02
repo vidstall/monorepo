@@ -31,13 +31,15 @@
     group: root
     mode: "0750"
 
-- name: Derive routes sslip.io endpoint
+- name: Derive sslip.io edge endpoint
   ansible.builtin.set_fact:
-    xaisen_routes_hostname: "{{ ansible_host }}.sslip.io"
+    xaisen_edge_hostname: "{{ ansible_host }}.sslip.io"
+    xaisen_edge_upstream: "{{ 'xaisen-routes:3001' if xaisen_service == 'routes' else 'xaisen-frontend:3000' }}"
+    xaisen_edge_health_path: "{{ '/api/contract/health' if xaisen_service == 'routes' else '/' }}"
     xaisen_routes_public_url: "https://{{ ansible_host }}.sslip.io/api"
-  when: xaisen_service == "routes"
+  when: xaisen_service in ["routes", "frontend"]
 
-- name: Create routes proxy state directories
+- name: Create edge proxy state directories
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
@@ -45,27 +47,27 @@
     group: root
     mode: "0750"
   loop:
-    - "{{ xaisen_services_root }}/runtime/routes/caddy-data"
-    - "{{ xaisen_services_root }}/runtime/routes/caddy-config"
-  when: xaisen_service == "routes"
+    - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/caddy-data"
+    - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/caddy-config"
+  when: xaisen_service in ["routes", "frontend"]
 
-- name: Write routes Caddy configuration
+- name: Write edge Caddy configuration
   ansible.builtin.copy:
-    dest: "{{ xaisen_services_root }}/runtime/routes/Caddyfile"
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/Caddyfile"
     owner: root
     group: root
     mode: "0644"
     content: |
-      {{ xaisen_routes_hostname }} {
-        reverse_proxy xaisen-routes:3001
+      {{ xaisen_edge_hostname }} {
+        reverse_proxy {{ xaisen_edge_upstream }}
       }
-  when: xaisen_service == "routes"
+  when: xaisen_service in ["routes", "frontend"]
 
-- name: Ensure private routes Docker network exists
+- name: Ensure private edge Docker network exists
   community.docker.docker_network:
-    name: xaisen-routes
+    name: "xaisen-{{ xaisen_service }}"
     state: present
-  when: xaisen_service == "routes"
+  when: xaisen_service in ["routes", "frontend"]
 
 - name: Check for a per-service secrets file locally
   ansible.builtin.stat:
@@ -91,8 +93,8 @@
     state: "{{ 'started' if xaisen_desired_state == 'running' else 'stopped' }}"
     restart: "{{ (xaisen_container_state | default('started')) == 'restarted' }}"
     network_mode: "{{ 'host' if xaisen_service == 'media' else omit }}"
-    ports: "{{ omit if xaisen_service in ['routes', 'media'] else ([xaisen_port ~ ':' ~ xaisen_port] if (xaisen_port | default(0) | int > 0) else []) }}"
-    networks: "{{ [{'name': 'xaisen-routes'}] if xaisen_service == 'routes' else omit }}"
+    ports: "{{ omit if xaisen_service in ['routes', 'media', 'frontend'] else ([xaisen_port ~ ':' ~ xaisen_port] if (xaisen_port | default(0) | int > 0) else []) }}"
+    networks: "{{ [{'name': 'xaisen-' ~ xaisen_service}] if xaisen_service in ['routes', 'frontend'] else omit }}"
     env_file: "{{ (xaisen_services_root ~ '/runtime/' ~ xaisen_service ~ '/service.env') if (xaisen_service_secrets_file.stat.exists | default(false)) else omit }}"
     volumes:
       - "{{ xaisen_services_root }}/runtime/contract:{{ xaisen_services_root }}/runtime/contract:ro"
@@ -112,9 +114,9 @@
     - xaisen_images is defined and xaisen_service in xaisen_images
     - xaisen_tags is defined and xaisen_service in xaisen_tags
 
-- name: Run routes HTTPS proxy
+- name: Run edge HTTPS proxy
   community.docker.docker_container:
-    name: xaisen-routes-proxy
+    name: "xaisen-{{ xaisen_service }}-proxy"
     image: "{{ xaisen_registry_host }}/xaisen/caddy:2-alpine"
     pull: always
     restart_policy: unless-stopped
@@ -124,25 +126,25 @@
       - "80:80"
       - "443:443"
     networks:
-      - name: xaisen-routes
+      - name: "xaisen-{{ xaisen_service }}"
     volumes:
-      - "{{ xaisen_services_root }}/runtime/routes/Caddyfile:/etc/caddy/Caddyfile:ro"
-      - "{{ xaisen_services_root }}/runtime/routes/caddy-data:/data"
-      - "{{ xaisen_services_root }}/runtime/routes/caddy-config:/config"
-  when: xaisen_service == "routes"
+      - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/Caddyfile:/etc/caddy/Caddyfile:ro"
+      - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/caddy-data:/data"
+      - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/caddy-config:/config"
+  when: xaisen_service in ["routes", "frontend"]
 
-- name: Wait for routes trusted HTTPS endpoint
+- name: Wait for edge trusted HTTPS endpoint
   ansible.builtin.uri:
-    url: "{{ xaisen_routes_public_url }}/contract/health"
+    url: "https://{{ xaisen_edge_hostname }}{{ xaisen_edge_health_path }}"
     method: GET
     status_code: 200
     validate_certs: true
   delegate_to: localhost
   become: false
-  register: xaisen_routes_https_health
-  until: xaisen_routes_https_health.status | default(0) == 200
+  register: xaisen_edge_https_health
+  until: xaisen_edge_https_health.status | default(0) == 200
   retries: 60
   delay: 5
   when:
-    - xaisen_service == "routes"
+    - xaisen_service in ["routes", "frontend"]
     - xaisen_desired_state == "running"

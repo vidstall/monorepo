@@ -7,7 +7,7 @@ from ..models import TopologyInstance
 
 def security_rules(instance: TopologyInstance) -> list[tuple[str, str, str]]:
     port = int(instance.get("port") or 0)
-    if instance.get("service") == "routes":
+    if instance.get("service") in ("routes", "frontend"):
         return [("tcp", "80/80", "http"), ("tcp", "443/443", "https")]
     if instance.get("service") == "media":
         return [

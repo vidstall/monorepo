@@ -11,6 +11,7 @@ from .context import (
     REGISTRY_SECRETS_DIR,
     RUNTIME_REGISTRY_TOML,
     command_env,
+    contract_env_path,
     git_short_sha,
     read_env_file,
     run,
@@ -228,7 +229,8 @@ def each_service(action: str, service: str | None, all_services: bool, tag: str 
         for name in services:
             context = DOCKER_SERVICES[name]
             image = image_name(name, resolved_tag)
-            code = run_docker_action(action, image, context)
+            build_args = frontend_contract_build_args() if name == "frontend" else {}
+            code = run_docker_action(action, image, context, build_args)
             if code != 0:
                 return code
             if action == "push":
@@ -242,11 +244,25 @@ def each_service(action: str, service: str | None, all_services: bool, tag: str 
         return 2
 
 
-def run_docker_action(action: str, image: str, context: Path) -> int:
+def frontend_contract_build_args() -> dict[str, str]:
+    from . import infra
+
+    env_name = infra.active_stack()
+    values = read_env_file(contract_env_path(env_name))
+    return {
+        "NEXT_PUBLIC_PACKAGE_ID": values.get("CONTRACT_PACKAGE_ID", ""),
+        "NEXT_PUBLIC_REGISTRY_OBJECT_ID": values.get("CONTRACT_REGISTRY_OBJECT_ID", ""),
+        "NEXT_PUBLIC_SUI_NETWORK": env_name,
+    }
+
+
+def run_docker_action(action: str, image: str, context: Path, build_args: dict[str, str] | None = None) -> int:
     if action == "build":
-        return run(
-            ["docker", "buildx", "build", "--platform", TARGET_PLATFORM, "--load", "-t", image, context]
-        )
+        args = ["docker", "buildx", "build", "--platform", TARGET_PLATFORM, "--load", "-t", image]
+        for key, value in (build_args or {}).items():
+            args.extend(["--build-arg", f"{key}={value}"])
+        args.append(str(context))
+        return run(args)
     if action == "push":
         return run(["docker", "push", image])
     print(f"Unknown registry action: {action}", file=sys.stderr)
