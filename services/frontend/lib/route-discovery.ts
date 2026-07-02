@@ -12,7 +12,7 @@ const ROLE_LABELS: Record<number, string> = {
   [ROLE_ROUTER]: "ROUTER",
 };
 const STALE_THRESHOLD_MS = 15 * 60 * 1000;
-const HEALTH_PROBE_TIMEOUT_MS = 1500;
+const HEALTH_PROBE_TIMEOUT_MS = 4000;
 const CANDIDATES_CACHE_TTL_MS = 60 * 1000;
 const SUI_COIN_TYPE = "0x2::sui::SUI";
 const ZERO_SENDER =
