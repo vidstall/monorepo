@@ -30,6 +30,8 @@ import {
 import { useRouter } from "next/navigation";
 import { useSetupE2EE } from "@/lib/useSetupE2EE";
 import { useLowCPUOptimizer } from "@/lib/usePerfomanceOptimiser";
+import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
+import { roomJoinChallenge, walletNonce } from "@/lib/wallet-challenge";
 
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == "true";
 
@@ -41,6 +43,8 @@ export function PageClientImpl(props: {
   codec: VideoCodec;
   singlePeerConnection: boolean;
 }) {
+  const account = useCurrentAccount();
+  const dAppKit = useDAppKit();
   const [preJoinChoices, setPreJoinChoices] = React.useState<
     LocalUserChoices | undefined
   >(undefined);
@@ -83,6 +87,23 @@ export function PageClientImpl(props: {
         }
         if (props.rentalId) {
           url.searchParams.append("rentalId", props.rentalId);
+          if (!account)
+            throw new Error(
+              "Connect the wallet that created this rental before joining.",
+            );
+          const nonce = walletNonce();
+          const expiresAtMs = Date.now() + 60_000;
+          const proof = await dAppKit.signPersonalMessage({
+            message: roomJoinChallenge({
+              rentalId: props.rentalId,
+              participantName: values.username,
+              nonce,
+              expiresAtMs,
+            }),
+          });
+          url.searchParams.append("walletNonce", nonce);
+          url.searchParams.append("walletExpiresAt", String(expiresAtMs));
+          url.searchParams.append("walletSignature", proof.signature);
         }
 
         try {
@@ -109,7 +130,7 @@ export function PageClientImpl(props: {
         new Error("Failed to fetch connection details: no routes available")
       );
     },
-    [props.region, props.rentalId, props.roomName],
+    [account, dAppKit, props.region, props.rentalId, props.roomName],
   );
   const handlePreJoinError = React.useCallback(
     (e: any) => console.error(e),

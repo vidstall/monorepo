@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 
 import { PageClientImpl } from "./[roomName]/PageClientImpl";
 import { isVideoCodec } from "@/lib/types";
+import { DAppKitProvider } from "@mysten/dapp-kit-react";
+import { dAppKit } from "@/lib/sui-dapp-kit";
 
 function RoomPage() {
   const searchParams = useSearchParams();
@@ -31,8 +33,10 @@ function RoomPage() {
 
 export default function Page() {
   return (
-    <React.Suspense>
-      <RoomPage />
-    </React.Suspense>
+    <DAppKitProvider dAppKit={dAppKit}>
+      <React.Suspense>
+        <RoomPage />
+      </React.Suspense>
+    </DAppKitProvider>
   );
 }
