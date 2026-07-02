@@ -154,3 +154,61 @@ public entry fun withdraw_worker_stake<T>(registry: &mut Registry<T>, node_id: u
     transfer::public_transfer(coin::from_balance(stake, ctx), owner);
     worker_events::emit_worker_stake_withdrawn(node_id, owner, stake_amount);
 }
+
+public fun node_exists<T>(registry: &Registry<T>, node_id: u64): bool {
+    worker_store::contains(registry.workers(), node_id)
+}
+
+public fun node_count<T>(registry: &Registry<T>): u64 { worker_store::node_count(registry.workers()) }
+public fun next_node_id<T>(registry: &Registry<T>): u64 { worker_store::next_node_id(registry.workers()) }
+public fun active_worker_count<T>(registry: &Registry<T>): u64 { worker_store::active_worker_count(registry.workers()) }
+
+public fun worker_owner<T>(registry: &Registry<T>, node_id: u64): address {
+    worker_store::assert_exists(registry.workers(), node_id);
+    worker_store::owner(worker_store::borrow(registry.workers(), node_id))
+}
+
+public fun worker_active<T>(registry: &Registry<T>, node_id: u64): bool {
+    worker_store::assert_exists(registry.workers(), node_id);
+    worker_store::active(worker_store::borrow(registry.workers(), node_id))
+}
+
+public fun worker_rentable<T>(registry: &Registry<T>, node_id: u64): bool {
+    worker_store::assert_exists(registry.workers(), node_id);
+    worker_store::rentable(worker_store::borrow(registry.workers(), node_id))
+}
+
+public fun worker_price_per_rental<T>(registry: &Registry<T>, node_id: u64): u64 {
+    worker_store::assert_exists(registry.workers(), node_id);
+    worker_store::price_per_rental(worker_store::borrow(registry.workers(), node_id))
+}
+
+public fun worker_stake_value<T>(registry: &Registry<T>, node_id: u64): u64 {
+    worker_store::assert_exists(registry.workers(), node_id);
+    worker_store::stake_value(worker_store::borrow(registry.workers(), node_id))
+}
+
+public fun worker_active_rental_id<T>(registry: &Registry<T>, node_id: u64): u64 {
+    worker_store::assert_exists(registry.workers(), node_id);
+    worker_store::active_rental_id(worker_store::borrow(registry.workers(), node_id))
+}
+
+public fun worker_metadata_uri<T>(registry: &Registry<T>, node_id: u64): vector<u8> {
+    worker_store::assert_exists(registry.workers(), node_id);
+    worker_store::metadata_uri(worker_store::borrow(registry.workers(), node_id))
+}
+
+public fun worker_metadata_hash<T>(registry: &Registry<T>, node_id: u64): vector<u8> {
+    worker_store::assert_exists(registry.workers(), node_id);
+    worker_store::metadata_hash(worker_store::borrow(registry.workers(), node_id))
+}
+
+public fun worker_created_at_ms<T>(registry: &Registry<T>, node_id: u64): u64 {
+    worker_store::assert_exists(registry.workers(), node_id);
+    worker_store::created_at_ms(worker_store::borrow(registry.workers(), node_id))
+}
+
+public fun worker_updated_at_ms<T>(registry: &Registry<T>, node_id: u64): u64 {
+    worker_store::assert_exists(registry.workers(), node_id);
+    worker_store::updated_at_ms(worker_store::borrow(registry.workers(), node_id))
+}
