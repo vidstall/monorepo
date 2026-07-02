@@ -86,8 +86,6 @@ def publish(
             "client",
             "publish",
             CONTRACT_DIR,
-            "--pubfile-path",
-            runtime_pubfile_path(env),
             "--json",
             *(["--gas-budget", gas_budget] if gas_budget else []),
         ]
