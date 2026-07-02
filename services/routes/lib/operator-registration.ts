@@ -178,6 +178,28 @@ async function updateRouterProfile(nodeId: string): Promise<void> {
   assertSuccess(result);
 }
 
+async function setCoordinatorEndpoint(publicUrl: string): Promise<void> {
+  const config = loadContractConfig();
+  const keypair = loadOperatorKeypair();
+  const c = client();
+  const tx = new Transaction();
+  tx.setSender(keypair.toSuiAddress());
+  tx.moveCall({
+    target: moveTarget("set_coordinator_endpoint"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      tx.object(config.registryObjectId),
+      tx.pure.vector("u8", metadataBytes(publicUrl)),
+    ],
+  });
+  const result = await c.signAndExecuteTransaction({
+    transaction: tx,
+    signer: keypair,
+    options: { showEffects: true },
+  });
+  assertSuccess(result);
+}
+
 async function currentMetadata(nodeId: string): Promise<string | null> {
   const config = loadContractConfig();
   const c = client();
@@ -336,6 +358,8 @@ export async function bootstrapOperator(): Promise<void> {
 
     _nodeId = nodeId;
     await updateRouterProfile(nodeId);
+    console.log("[routes] publishing coordinator_endpoint...");
+    await setCoordinatorEndpoint(requireEnv("ROUTES_PUBLIC_URL"));
     const intervalMs = Number(
       process.env.ROUTES_HEARTBEAT_INTERVAL_MS ?? 5 * 60 * 1000,
     );
