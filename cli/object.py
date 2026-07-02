@@ -175,6 +175,10 @@ def build_static_artifacts(object_type: str, env_name: str) -> int:
     env["NEXT_PUBLIC_PACKAGE_ID"] = values.get("CONTRACT_PACKAGE_ID", "")
     env["NEXT_PUBLIC_REGISTRY_OBJECT_ID"] = values.get("CONTRACT_REGISTRY_OBJECT_ID", "")
     env["NEXT_PUBLIC_SUI_NETWORK"] = env_name
+    # Explicit environment variables take priority over .env.local in Next.js's env
+    # loading order, so this overrides the dev-only ROUTES_URL committed there and
+    # keeps production builds on real on-chain route discovery.
+    env["NEXT_PUBLIC_ROUTES_URL"] = ""
     service_dir: Path = OBJECT_TYPES[object_type]
     print(f"Building static {object_type} from {service_dir}")
     return run(["pnpm", "build"], cwd=service_dir, env=env)

@@ -253,6 +253,8 @@ def frontend_contract_build_args() -> dict[str, str]:
         "NEXT_PUBLIC_PACKAGE_ID": values.get("CONTRACT_PACKAGE_ID", ""),
         "NEXT_PUBLIC_REGISTRY_OBJECT_ID": values.get("CONTRACT_REGISTRY_OBJECT_ID", ""),
         "NEXT_PUBLIC_SUI_NETWORK": env_name,
+        # Force real on-chain route discovery instead of the Dockerfile's stale "/api" default.
+        "NEXT_PUBLIC_ROUTES_URL": "",
     }
 
 

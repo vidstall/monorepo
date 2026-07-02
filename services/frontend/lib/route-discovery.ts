@@ -251,10 +251,10 @@ async function cachedCandidates(): Promise<RouteCandidate[]> {
 }
 
 function devFallbackEndpoint(): string | null {
+  if (process.env.NODE_ENV === "production") return null;
   const override = process.env.NEXT_PUBLIC_ROUTES_URL;
   if (override) return override;
-  if (process.env.NODE_ENV !== "production") return "http://localhost:3001/api";
-  return null;
+  return "http://localhost:3001/api";
 }
 
 export async function getWorkingRoute(exclude: Set<string> = new Set()): Promise<string> {
