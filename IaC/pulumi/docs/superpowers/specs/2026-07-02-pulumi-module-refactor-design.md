@@ -18,8 +18,8 @@ the entrypoint.
 
 ## Package Structure
 
-`__main__.py` becomes a minimal entrypoint that invokes `iac.program.run()`.
-The `iac` package is organized by domain:
+`__main__.py` becomes a minimal entrypoint that invokes `app.program.run()`.
+The `app` package is organized by domain:
 
 - `config.py`, `models.py`, and `topology.py` own paths, shared types, and topology
   loading.
