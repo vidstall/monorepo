@@ -105,6 +105,9 @@
       ROUTES_PUBLIC_URL: "{{ xaisen_routes_public_url if xaisen_service == 'routes' else omit }}"
       NODE_IP: "{{ ansible_host if xaisen_service == 'media' else omit }}"
       UDP_PORT: "{{ '50000-60000' if xaisen_service == 'media' else omit }}"
+      XAISEN_AUTO_CLUSTER_KEY: "{{ 'true' if xaisen_service == 'media' else omit }}"
+      XAISEN_BROKER_ADDR: "{{ ':7890' if xaisen_service == 'media' else omit }}"
+      XAISEN_MEDIA_KEY_PATH: "{{ (xaisen_services_root ~ '/runtime/media/x25519.key') if xaisen_service == 'media' else omit }}"
   when:
     - xaisen_images is defined and xaisen_service in xaisen_images
     - xaisen_tags is defined and xaisen_service in xaisen_tags
