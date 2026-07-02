@@ -1,14 +1,23 @@
 "use client";
 
 import { ConnectButton } from "@mysten/dapp-kit-react/ui";
-import { DAppKitProvider, useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
+import {
+  DAppKitProvider,
+  useCurrentAccount,
+  useDAppKit,
+} from "@mysten/dapp-kit-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { createContractTransaction } from "@/lib/contract-api";
 import { dAppKit } from "@/lib/sui-dapp-kit";
-import { fetchAllWorkers, selectOnChainRoute, SelectedRoute, WorkerRecord } from "@/lib/route-discovery";
+import {
+  fetchAllWorkers,
+  selectOnChainRoute,
+  SelectedRoute,
+  WorkerRecord,
+} from "@/lib/route-discovery";
 import styles from "../styles/Home.module.css";
 
 const ContractPanel = dynamic(() => import("./ContractPanel"), { ssr: false });
@@ -33,18 +42,32 @@ type RegistryStats = {
 };
 
 async function fetchRegistryStats(): Promise<RegistryStats> {
-  const network = (process.env.NEXT_PUBLIC_SUI_NETWORK ?? "devnet") as ContractNetwork;
+  const network = (process.env.NEXT_PUBLIC_SUI_NETWORK ??
+    "devnet") as ContractNetwork;
   const registryObjectId = process.env.NEXT_PUBLIC_REGISTRY_OBJECT_ID ?? "";
-  if (!registryObjectId) throw new Error("NEXT_PUBLIC_REGISTRY_OBJECT_ID not set");
-  if (!(network in GRPC_URLS)) throw new Error(`Unsupported contract network: ${network}`);
+  if (!registryObjectId)
+    throw new Error("NEXT_PUBLIC_REGISTRY_OBJECT_ID not set");
+  if (!(network in GRPC_URLS))
+    throw new Error(`Unsupported contract network: ${network}`);
   const client = new SuiGrpcClient({ network, baseUrl: GRPC_URLS[network] });
-  const obj = await client.getObject({ objectId: registryObjectId, include: { json: true } });
-  const fields = (obj.object as { json?: Record<string, string> } | null)?.json ?? null;
+  const obj = await client.getObject({
+    objectId: registryObjectId,
+    include: { json: true },
+  });
+  const fields =
+    (
+      obj.object as {
+        json?: {
+          workers?: Record<string, string>;
+          rentals?: Record<string, string>;
+        };
+      } | null
+    )?.json ?? null;
   if (!fields) throw new Error("Registry object not found on-chain");
   return {
-    nodeCount: BigInt(fields.node_count ?? 0),
-    activeWorkerCount: BigInt(fields.active_worker_count ?? 0),
-    nextRentalId: BigInt(fields.next_rental_id ?? 0),
+    nodeCount: BigInt(fields.workers?.node_count ?? 0),
+    activeWorkerCount: BigInt(fields.workers?.active_worker_count ?? 0),
+    nextRentalId: BigInt(fields.rentals?.next_rental_id ?? 0),
     packageId: process.env.NEXT_PUBLIC_PACKAGE_ID ?? "",
     registryObjectId,
     network,
@@ -63,8 +86,14 @@ function ContractStatusCard() {
 
   useEffect(() => {
     fetchRegistryStats()
-      .then((s) => { setStats(s); setLoading(false); })
-      .catch((e) => { setError(e instanceof Error ? e.message : "RPC error"); setLoading(false); });
+      .then((s) => {
+        setStats(s);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "RPC error");
+        setLoading(false);
+      });
   }, []);
 
   return (
@@ -74,7 +103,11 @@ function ContractStatusCard() {
       {loading ? (
         <div className={styles.statusRows}>
           {[45, 65, 55, 50, 40].map((w, i) => (
-            <div key={i} className={styles.skeleton} style={{ width: `${w}%` }} />
+            <div
+              key={i}
+              className={styles.skeleton}
+              style={{ width: `${w}%` }}
+            />
           ))}
         </div>
       ) : (
@@ -83,13 +116,18 @@ function ContractStatusCard() {
             <span className={styles.statusKey}>status</span>
             <span className={styles.statusDotRow}>
               <span className={styles.statusDot} data-live={String(!error)} />
-              <span className={styles.statusVal}>{error ? "offline" : "live"}</span>
+              <span className={styles.statusVal}>
+                {error ? "offline" : "live"}
+              </span>
             </span>
           </div>
 
           <div className={styles.statusRow}>
             <span className={styles.statusKey}>network</span>
-            <span className={styles.networkBadge} data-network={stats?.network ?? "unknown"}>
+            <span
+              className={styles.networkBadge}
+              data-network={stats?.network ?? "unknown"}
+            >
               {stats?.network ?? (loading ? "loading" : "unavailable")}
             </span>
           </div>
@@ -97,7 +135,10 @@ function ContractStatusCard() {
           {error ? (
             <div className={styles.statusRow}>
               <span className={styles.statusKey}>error</span>
-              <span className={styles.statusVal} style={{ color: "var(--xai-error)", fontSize: "0.65rem" }}>
+              <span
+                className={styles.statusVal}
+                style={{ color: "var(--xai-error)", fontSize: "0.65rem" }}
+              >
                 {error}
               </span>
             </div>
@@ -106,20 +147,31 @@ function ContractStatusCard() {
               <div className={styles.statusRow}>
                 <span className={styles.statusKey}>workers</span>
                 <span className={styles.statusVal}>
-                  {stats!.activeWorkerCount.toString()} active / {stats!.nodeCount.toString()} total
+                  {stats!.activeWorkerCount.toString()} active /{" "}
+                  {stats!.nodeCount.toString()} total
                 </span>
               </div>
               <div className={styles.statusRow}>
                 <span className={styles.statusKey}>rentals</span>
-                <span className={styles.statusVal}>{(stats!.nextRentalId - 1n < 0n ? 0n : stats!.nextRentalId - 1n).toString()} total</span>
+                <span className={styles.statusVal}>
+                  {(stats!.nextRentalId - 1n < 0n
+                    ? 0n
+                    : stats!.nextRentalId - 1n
+                  ).toString()}{" "}
+                  total
+                </span>
               </div>
               <div className={styles.statusRow}>
                 <span className={styles.statusKey}>package</span>
-                <span className={styles.statusVal}>{truncateAddr(stats!.packageId)}</span>
+                <span className={styles.statusVal}>
+                  {truncateAddr(stats!.packageId)}
+                </span>
               </div>
               <div className={styles.statusRow}>
                 <span className={styles.statusKey}>registry</span>
-                <span className={styles.statusVal}>{truncateAddr(stats!.registryObjectId)}</span>
+                <span className={styles.statusVal}>
+                  {truncateAddr(stats!.registryObjectId)}
+                </span>
               </div>
             </>
           )}
@@ -136,8 +188,14 @@ function CurrentRouteCard() {
 
   useEffect(() => {
     selectOnChainRoute()
-      .then((r) => { setRoute(r); setLoading(false); })
-      .catch((e) => { setError(e instanceof Error ? e.message : "RPC error"); setLoading(false); });
+      .then((r) => {
+        setRoute(r);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "RPC error");
+        setLoading(false);
+      });
   }, []);
 
   return (
@@ -147,13 +205,20 @@ function CurrentRouteCard() {
       {loading ? (
         <div className={styles.statusRows}>
           {[60, 75].map((w, i) => (
-            <div key={i} className={styles.skeleton} style={{ width: `${w}%` }} />
+            <div
+              key={i}
+              className={styles.skeleton}
+              style={{ width: `${w}%` }}
+            />
           ))}
         </div>
       ) : error ? (
         <div className={styles.statusRow}>
           <span className={styles.statusKey}>error</span>
-          <span className={styles.statusVal} style={{ color: "var(--xai-error)", fontSize: "0.65rem" }}>
+          <span
+            className={styles.statusVal}
+            style={{ color: "var(--xai-error)", fontSize: "0.65rem" }}
+          >
             {error}
           </span>
         </div>
@@ -186,8 +251,14 @@ function WorkerListCard() {
 
   useEffect(() => {
     fetchAllWorkers()
-      .then((w) => { setWorkers(w); setLoading(false); })
-      .catch((e) => { setError(e instanceof Error ? e.message : "RPC error"); setLoading(false); });
+      .then((w) => {
+        setWorkers(w);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "RPC error");
+        setLoading(false);
+      });
   }, []);
 
   return (
@@ -197,13 +268,20 @@ function WorkerListCard() {
       {loading ? (
         <div className={styles.statusRows}>
           {[70, 55, 60].map((w, i) => (
-            <div key={i} className={styles.skeleton} style={{ width: `${w}%` }} />
+            <div
+              key={i}
+              className={styles.skeleton}
+              style={{ width: `${w}%` }}
+            />
           ))}
         </div>
       ) : error ? (
         <div className={styles.statusRow}>
           <span className={styles.statusKey}>error</span>
-          <span className={styles.statusVal} style={{ color: "var(--xai-error)", fontSize: "0.65rem" }}>
+          <span
+            className={styles.statusVal}
+            style={{ color: "var(--xai-error)", fontSize: "0.65rem" }}
+          >
             {error}
           </span>
         </div>
@@ -283,9 +361,14 @@ function CreateRoomForm() {
       });
 
       setStatus("waiting for wallet signature…");
-      const result = await dKit.signAndExecuteTransaction({ transaction: tx.txBytes });
+      const result = await dKit.signAndExecuteTransaction({
+        transaction: tx.txBytes,
+      });
       if (result.FailedTransaction) {
-        throw new Error(result.FailedTransaction.status.error?.message ?? "Transaction failed");
+        throw new Error(
+          result.FailedTransaction.status.error?.message ??
+            "Transaction failed",
+        );
       }
 
       setStatus("room ordered — joining…");

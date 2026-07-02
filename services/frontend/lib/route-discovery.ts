@@ -53,11 +53,11 @@ function loadChainConfig(): ChainConfig {
 }
 
 const FUNCTION_MODULES: Record<string, string> = {
-  next_node_id: "worker_accessors",
-  node_exists: "worker_accessors",
-  worker_active: "worker_accessors",
-  worker_metadata_uri: "worker_accessors",
-  worker_updated_at_ms: "worker_accessors",
+  next_node_id: "workers",
+  node_exists: "workers",
+  worker_active: "workers",
+  worker_metadata_uri: "workers",
+  worker_updated_at_ms: "workers",
   has_worker_role: "role_governance",
   worker_role: "role_governance",
 };
@@ -323,18 +323,11 @@ async function cachedCandidates(): Promise<RouteCandidate[]> {
   return candidates;
 }
 
-function devFallbackEndpoint(): string | null {
-  if (process.env.NODE_ENV === "production") return null;
-  const override = process.env.NEXT_PUBLIC_ROUTES_URL;
-  if (override) return override;
-  return "http://localhost:3001/api";
-}
-
 export async function getWorkingRoute(
   exclude: Set<string> = new Set(),
 ): Promise<string> {
-  const fallback = devFallbackEndpoint();
-  if (fallback && !exclude.has(fallback)) return fallback;
+  const override = process.env.NEXT_PUBLIC_ROUTES_URL;
+  if (override && !exclude.has(override)) return override;
 
   let onChainCandidates: RouteCandidate[] = [];
   try {

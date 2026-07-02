@@ -43,7 +43,6 @@ let _routesEndpointCache: Promise<string> | null = null;
 export async function getRoutesEndpointAsync(): Promise<string> {
   const override = process.env.NEXT_PUBLIC_ROUTES_URL;
   if (override) return override;
-  if (process.env.NODE_ENV !== "production") return "http://localhost:3001/api";
 
   if (!_routesEndpointCache) {
     _routesEndpointCache = (async () => {
