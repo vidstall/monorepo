@@ -94,6 +94,7 @@
     content: "{{ xaisen_operator_wallet_json }}"
   when: xaisen_operator_wallet_json is defined
   no_log: true
+  register: xaisen_wallet_credentials_write
 
 - name: Run the service container
   community.docker.docker_container:
@@ -101,7 +102,7 @@
     image: "{{ xaisen_images[xaisen_service] }}:{{ xaisen_tags[xaisen_service] }}"
     restart_policy: unless-stopped
     state: "{{ 'started' if xaisen_desired_state == 'running' else 'stopped' }}"
-    restart: "{{ (xaisen_container_state | default('started')) == 'restarted' }}"
+    restart: "{{ (xaisen_container_state | default('started')) == 'restarted' or xaisen_wallet_credentials_write is changed }}"
     network_mode: "{{ 'host' if xaisen_service == 'media' else omit }}"
     ports: "{{ omit if xaisen_service in ['routes', 'media', 'frontend'] else ([xaisen_port ~ ':' ~ xaisen_port] if (xaisen_port | default(0) | int > 0) else []) }}"
     networks: "{{ [{'name': 'xaisen-' ~ xaisen_service}] if xaisen_service in ['routes', 'frontend'] else omit }}"
