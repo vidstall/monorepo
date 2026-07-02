@@ -2,7 +2,11 @@ import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { bcs } from "@mysten/sui/bcs";
 import { loadContractConfig } from "@/lib/contract-config";
-import { JSON_RPC_URLS, SUI_COIN_TYPE } from "@/lib/contract-move-shared";
+import {
+  JSON_RPC_URLS,
+  SUI_COIN_TYPE,
+  moveTarget,
+} from "@/lib/contract-move-shared";
 
 export async function queryRentalCapacity(
   rentalId: number,
@@ -15,7 +19,7 @@ export async function queryRentalCapacity(
     });
     const tx = new Transaction();
     tx.moveCall({
-      target: `${config.packageId}::node_registry::rental_capacity`,
+      target: moveTarget("rental_capacity"),
       typeArguments: [SUI_COIN_TYPE],
       arguments: [
         tx.object(config.registryObjectId),
@@ -48,7 +52,7 @@ export async function queryRentalPayment(
     });
     const tx = new Transaction();
     tx.moveCall({
-      target: `${config.packageId}::node_registry::rental_payment_amount`,
+      target: moveTarget("rental_payment_amount"),
       typeArguments: [SUI_COIN_TYPE],
       arguments: [tx.object(config.registryObjectId), tx.pure.u64(rentalId)],
     });
@@ -75,7 +79,7 @@ export async function queryRentalClient(
     });
     const tx = new Transaction();
     tx.moveCall({
-      target: `${config.packageId}::node_registry::rental_client`,
+      target: moveTarget("rental_client"),
       typeArguments: [SUI_COIN_TYPE],
       arguments: [tx.object(config.registryObjectId), tx.pure.u64(rentalId)],
     });
@@ -105,7 +109,7 @@ export async function queryRoutedAssignment(rentalId: bigint): Promise<{
     });
     const existsTx = new Transaction();
     existsTx.moveCall({
-      target: `${config.packageId}::node_registry::routed_assignment_exists`,
+      target: moveTarget("routed_assignment_exists"),
       typeArguments: [SUI_COIN_TYPE],
       arguments: [
         existsTx.object(config.registryObjectId),
@@ -127,7 +131,7 @@ export async function queryRoutedAssignment(rentalId: bigint): Promise<{
       "routed_assignment_revision",
     ]) {
       tx.moveCall({
-        target: `${config.packageId}::node_registry::${name}`,
+        target: moveTarget(name),
         typeArguments: [SUI_COIN_TYPE],
         arguments: [tx.object(config.registryObjectId), tx.pure.u64(rentalId)],
       });

@@ -40,7 +40,7 @@ function loadChainConfig(): ChainConfig {
 }
 
 function moveTarget(config: ChainConfig, functionName: string): string {
-  return `${config.packageId}::node_registry::${functionName}`;
+  return `${config.packageId}::role_governance::${functionName}`;
 }
 
 function client(config: ChainConfig): SuiJsonRpcClient {

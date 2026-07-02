@@ -82,7 +82,7 @@ async function registerWorker(): Promise<string> {
   assertSuccess(result);
 
   const event = result.events?.find((e) =>
-    e.type.endsWith("::node_registry::WorkerRegistered"),
+    e.type.endsWith("::worker_events::WorkerRegistered"),
   );
   const nodeId = (event?.parsedJson as Record<string, unknown> | undefined)
     ?.node_id;
