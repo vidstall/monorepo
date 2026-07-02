@@ -39,6 +39,17 @@
     xaisen_routes_public_url: "https://{{ ansible_host }}.sslip.io/api"
   when: xaisen_service in ["routes", "frontend"]
 
+# media has no Docker bridge network of its own (it runs on network_mode:host
+# for the large WebRTC UDP port range), so its public URL/health path/edge
+# proxy are derived and wired separately from the routes/frontend pattern
+# above rather than sharing xaisen_edge_upstream.
+- name: Derive sslip.io edge endpoint (media)
+  ansible.builtin.set_fact:
+    xaisen_edge_hostname: "{{ ansible_host }}.sslip.io"
+    xaisen_edge_health_path: "/xaisen/v1/health"
+    xaisen_media_public_url: "https://{{ ansible_host }}.sslip.io"
+  when: xaisen_service == "media"
+
 - name: Create edge proxy state directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -49,7 +60,7 @@
   loop:
     - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/caddy-data"
     - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/caddy-config"
-  when: xaisen_service in ["routes", "frontend"]
+  when: xaisen_service in ["routes", "frontend", "media"]
 
 - name: Write edge Caddy configuration
   ansible.builtin.copy:
@@ -62,6 +73,28 @@
         reverse_proxy {{ xaisen_edge_upstream }}
       }
   when: xaisen_service in ["routes", "frontend"]
+
+# media's Caddy runs on network_mode:host alongside the LiveKit/broker
+# container (see "Run edge HTTPS proxy" below), so upstreams are reached via
+# 127.0.0.1 rather than a Docker network alias. The xaisen broker's own HTTP
+# routes are all under /xaisen/*, so a simple path split is sufficient to
+# front both LiveKit's client-facing port and the broker with one hostname.
+- name: Write edge Caddy configuration (media)
+  ansible.builtin.copy:
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/Caddyfile"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {{ xaisen_edge_hostname }} {
+        handle /xaisen/* {
+          reverse_proxy 127.0.0.1:7890
+        }
+        handle {
+          reverse_proxy 127.0.0.1:7880
+        }
+      }
+  when: xaisen_service == "media"
 
 - name: Ensure private edge Docker network exists
   community.docker.docker_network:
@@ -105,6 +138,24 @@
   no_log: true
   register: xaisen_wallet_credentials_write
 
+- name: Check for an existing media broker key on the host
+  ansible.builtin.stat:
+    path: "{{ xaisen_services_root }}/runtime/media/x25519.key"
+  register: xaisen_existing_media_broker_key
+  when: xaisen_service == "media"
+
+- name: Write media broker key
+  ansible.builtin.copy:
+    dest: "{{ xaisen_services_root }}/runtime/media/x25519.key"
+    owner: root
+    group: root
+    mode: "0600"
+    content: "{{ xaisen_media_broker_key }}"
+  # Write once: this key's public half is what's published on-chain via
+  # set_node_profile during bootstrap, so it must stay stable across restarts.
+  when: xaisen_service == "media" and xaisen_media_broker_key is defined and not xaisen_existing_media_broker_key.stat.exists
+  no_log: true
+
 - name: Run the service container
   community.docker.docker_container:
     name: "xaisen-{{ xaisen_service }}"
@@ -130,9 +181,13 @@
       XAISEN_AUTO_CLUSTER_KEY: "{{ 'true' if xaisen_service == 'media' else omit }}"
       XAISEN_BROKER_ADDR: "{{ ':7890' if xaisen_service == 'media' else omit }}"
       XAISEN_MEDIA_KEY_PATH: "{{ (xaisen_services_root ~ '/runtime/media/x25519.key') if xaisen_service == 'media' else omit }}"
+      XAISEN_CLUSTER_ID: "{{ xaisen_cluster_id if xaisen_service == 'media' else omit }}"
+      XAISEN_LIVEKIT_URL: "{{ xaisen_media_public_url if xaisen_service == 'media' else omit }}"
+      LIVEKIT_KEYS: "{{ xaisen_livekit_keys if xaisen_service == 'media' else omit }}"
   when:
     - xaisen_images is defined and xaisen_service in xaisen_images
     - xaisen_tags is defined and xaisen_service in xaisen_tags
+  no_log: "{{ xaisen_service == 'media' }}"
 
 - name: Run edge HTTPS proxy
   community.docker.docker_container:
@@ -142,16 +197,17 @@
     restart_policy: unless-stopped
     state: "{{ 'started' if xaisen_desired_state == 'running' else 'stopped' }}"
     restart: "{{ (xaisen_container_state | default('started')) == 'restarted' }}"
-    ports:
-      - "80:80"
-      - "443:443"
-    networks:
-      - name: "xaisen-{{ xaisen_service }}"
+    # media's LiveKit/broker containers run on network_mode:host (needed for
+    # the large WebRTC UDP port range), so Caddy joins host networking too,
+    # reaching them via 127.0.0.1 instead of a Docker network alias.
+    network_mode: "{{ 'host' if xaisen_service == 'media' else omit }}"
+    ports: "{{ omit if xaisen_service == 'media' else ['80:80', '443:443'] }}"
+    networks: "{{ omit if xaisen_service == 'media' else [{'name': 'xaisen-' ~ xaisen_service}] }}"
     volumes:
       - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/Caddyfile:/etc/caddy/Caddyfile:ro"
       - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/caddy-data:/data"
       - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/caddy-config:/config"
-  when: xaisen_service in ["routes", "frontend"]
+  when: xaisen_service in ["routes", "frontend", "media"]
 
 - name: Wait for edge trusted HTTPS endpoint
   ansible.builtin.uri:
@@ -166,5 +222,5 @@
   retries: 60
   delay: 5
   when:
-    - xaisen_service in ["routes", "frontend"]
+    - xaisen_service in ["routes", "frontend", "media"]
     - xaisen_desired_state == "running"
