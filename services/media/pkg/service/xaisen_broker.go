@@ -390,10 +390,23 @@ type suiEventPage struct {
 	Error any `json:"error"`
 }
 
+// eventModules maps each Move event name to the module that owns it
+// post-modularization (the contract used to be a single `node_registry`
+// module; it was split into per-domain modules).
+var eventModules = map[string]string{
+	"WorkerRegistered":        "worker_events",
+	"RoleAssigned":            "governance_events",
+	"RoutedAssignmentUpdated": "media_events",
+}
+
 func queryMoveEvents(ctx context.Context, eventName string) ([]map[string]any, error) {
+	module, ok := eventModules[eventName]
+	if !ok {
+		return nil, fmt.Errorf("no module mapping for event %q", eventName)
+	}
 	payload := map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "suix_queryEvents",
-		"params": []any{map[string]any{"MoveEventType": os.Getenv("CONTRACT_PACKAGE_ID") + "::node_registry::" + eventName}, nil, 1000, false},
+		"params": []any{map[string]any{"MoveEventType": os.Getenv("CONTRACT_PACKAGE_ID") + "::" + module + "::" + eventName}, nil, 1000, false},
 	}
 	body, _ := json.Marshal(payload)
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, os.Getenv("SUI_RPC_URL"), strings.NewReader(string(body)))
