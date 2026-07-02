@@ -270,6 +270,57 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
     return extra_vars
 
 
+def bootstrap_media(name: str, env_name: str, wallet_entry: dict[str, Any]) -> dict[str, str]:
+    """Idempotently registers a media instance's operator wallet on-chain
+    (worker + ROLE_SFU + media cluster + node profile), then returns the
+    Ansible extra_vars needed to actually run it: XAISEN_CLUSTER_ID,
+    XAISEN_LIVEKIT_URL, LIVEKIT_KEYS, and the broker's own x25519 key file
+    content. No-ops the on-chain part if wallet_entry already has a
+    cluster_id from a previous run."""
+    from . import media_bootstrap, wallet
+
+    address = instance_address(name)
+    if not address:
+        raise RuntimeError(f"could not resolve public IP for {name}; run inventory first")
+    public_url = f"https://{address}.sslip.io"
+
+    contract_path = contract_env_path(env_name)
+    contract_values = read_env_file(contract_path)
+    package_id = contract_values.get("CONTRACT_PACKAGE_ID", "")
+    original_package_id = contract_values.get("CONTRACT_ORIGINAL_PACKAGE_ID", "") or package_id
+    registry_id = contract_values.get("CONTRACT_REGISTRY_OBJECT_ID", "")
+    if not package_id or not registry_id:
+        raise RuntimeError(f"{contract_path} is missing CONTRACT_PACKAGE_ID/CONTRACT_REGISTRY_OBJECT_ID")
+
+    # Re-fetch media's entry from a fresh read so the object we mutate below
+    # is the same one that gets persisted by write_wallets (wallet_entry, as
+    # passed in from control(), came from ensure_wallet()'s own separate
+    # read/write cycle and is not part of this `wallets` dict).
+    wallets = wallet.read_wallets()
+    media_entry = wallet.find_wallet(wallets, name, env_name)
+    if media_entry is None:
+        raise RuntimeError(f"wallet entry for {name} disappeared between ensure_wallet and bootstrap_media")
+    routes_entry = wallet.find_wallet_by_service(wallets, "routes", env_name)
+
+    try:
+        media_bootstrap.ensure_media_registered(
+            media_entry, routes_entry, env_name, package_id, original_package_id, registry_id, public_url,
+        )
+    finally:
+        # Persist whatever progress was made (e.g. node_id from a successful
+        # register_worker) even if a later step raised, so a retry can pick
+        # up where it left off instead of re-registering from scratch.
+        wallet.write_wallets(wallets)
+    wallet_entry.update(media_entry)
+
+    return {
+        "xaisen_cluster_id": str(media_entry["cluster_id"]),
+        "xaisen_media_public_url": public_url,
+        "xaisen_media_broker_key": wallet.media_broker_key_content(media_entry),
+        "xaisen_livekit_keys": wallet.livekit_keys_env_value(media_entry),
+    }
+
+
 def deploy(yes: bool) -> int:
     if not yes:
         message = "Refusing to deploy infrastructure without --yes."
@@ -427,6 +478,17 @@ def control(
                     if wallet_entry is not None
                     else None
                 )
+                if service == "media" and wallet_entry is not None:
+                    failed_stage = "media_bootstrap"
+                    try:
+                        media_vars = bootstrap_media(name, env_name, wallet_entry)
+                        configure_extra_vars = {**(configure_extra_vars or {}), **media_vars}
+                    except (RuntimeError, subprocess.CalledProcessError, OSError) as exc:
+                        message = f"Media on-chain bootstrap failed for {name}: {exc}"
+                        print(message, file=sys.stderr)
+                        record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+                        return 1
+                    failed_stage = "configure"
                 code = configure(host_limit=name, container_state=container_state, extra_vars=configure_extra_vars)
 
         if code == 0 and action != "kill":
@@ -562,6 +624,7 @@ def alibaba_vm_target_urns(
             [
                 ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-signal"),
                 ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-ice"),
+                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-broker"),
                 ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-rtc"),
             ]
         )
