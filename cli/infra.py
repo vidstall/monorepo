@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -28,11 +27,9 @@ from .context import (
 
 NETWORKS = ("devnet", "testnet", "mainnet")
 PROVIDERS = ("aws", "gcp", "azure", "alibaba", "digitalocean", "tencent", "cloudflare")
-OBJECT_STORAGE_SERVICE = "frontend"
 SERVICE_BACKENDS = {service: "vm" for service in DOCKER_SERVICES}
-SERVICE_BACKENDS[OBJECT_STORAGE_SERVICE] = "object_storage"
 REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "CONTRACT_REGISTRY_OBJECT_ID")
-SERVICE_PORTS = {"routes": 3001, "coordinator": 6379, "media": 7880}
+SERVICE_PORTS = {"routes": 3001, "coordinator": 6379, "media": 7880, "frontend": 3000}
 VM_INSTANCE_SIZES = {
     "aws": "t3.micro",
     "gcp": "e2-micro",
@@ -79,9 +76,7 @@ def apply(yes: bool) -> int:
         record_history("infra apply", env=stack, result_for_code=code, error=message)
         return code
 
-    code = prepare_running_frontend_artifacts(stack)
-    if code == 0:
-        code = pulumi_up(stack)
+    code = pulumi_up(stack)
     if code == 0:
         code = inventory()
     record_history("infra apply", env=stack, result_for_code=code)
@@ -258,13 +253,6 @@ def control(
             print(message, file=sys.stderr)
             record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
             return 1
-        if backend == "object_storage":
-            missing_provider_keys = missing_object_storage_provider_keys(provider)
-            if missing_provider_keys:
-                message = object_storage_provider_error(provider, missing_provider_keys)
-                print(message, file=sys.stderr)
-                record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
-                return 1
         if backend == "vm":
             if provider == "cloudflare":
                 message = "cloudflare has no compute/VM product; choose another --provider for vm-backed services."
@@ -304,28 +292,26 @@ def control(
     instance["last_operation"] = action
     instance["last_updated"] = timestamp()
     instance["contract_env"] = relative_contract_env(env_name)
-    if backend == "object_storage":
-        set_frontend_storage_defaults(instance, env_name)
-    elif backend == "vm" and action in {"start", "restart"}:
+    if backend == "vm" and action in {"start", "restart"}:
         set_vm_defaults(instance, topology, find_instance_type=find_instance_type)
     write_topology(topology)
 
     code = 0
     failed_stage = "pulumi"
-    if backend == "object_storage" and action in {"start", "restart"}:
-        failed_stage = "frontend build"
-        code = build_frontend_static(env_name)
     if code == 0:
         failed_stage = "pulumi"
-        if backend == "object_storage" and provider == "alibaba":
-            code = pulumi_up(env_name, parallel=4)
-        elif backend == "vm" and provider == "alibaba":
+        if backend == "vm" and provider == "alibaba":
             # An --all-region search may create ad-hoc region-probe provider
             # resources that aren't in the fixed target URN list, so fall back
-            # to an untargeted apply whenever that scan is in play.
+            # to an untargeted apply whenever that scan is in play. Likewise,
+            # `--target` only accepts URNs that already exist in the stack's
+            # state, so a brand-new instance (nothing created yet) must also
+            # go through an untargeted apply.
+            target_urns = alibaba_vm_target_urns(env_name, name, service, bool(instance.get("port")))
+            use_targets = not all_region and stack_has_urns(env_name, target_urns)
             code = pulumi_up(
                 env_name,
-                targets=None if all_region else alibaba_vm_target_urns(env_name, name, service, bool(instance.get("port"))),
+                targets=target_urns if use_targets else None,
                 extra_env={"ALIBABA_SCAN_ALL_REGIONS": "1" if all_region else "0"},
             )
         else:
@@ -361,7 +347,7 @@ def control(
         write_topology(topology)
 
     if code != 0:
-        if failed_stage in {"frontend build", "pulumi"}:
+        if failed_stage == "pulumi":
             instance["desired_state"] = previous
         instance["last_error"] = f"{failed_stage} failed with exit code {code}"
         write_topology(topology)
@@ -434,6 +420,20 @@ def pulumi_up(
     return run(args, cwd=PULUMI_DIR, env=env)
 
 
+def stack_has_urns(stack: str, urns: list[str]) -> bool:
+    try:
+        raw = subprocess.check_output(
+            ["pulumi", "stack", "export", "--stack", stack],
+            cwd=PULUMI_DIR,
+            env=command_env(),
+            text=True,
+        )
+        existing = {res.get("urn") for res in json.loads(raw).get("deployment", {}).get("resources", [])}
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        return False
+    return all(urn in existing for urn in urns)
+
+
 def alibaba_vm_target_urns(
     stack: str,
     name: str,
@@ -450,7 +450,7 @@ def alibaba_vm_target_urns(
         ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-ssh"),
         ("alicloud:ecs/instance:Instance", f"{name}-vm"),
     ]
-    if service == "routes":
+    if service in ("routes", "frontend"):
         resources.extend(
             [
                 ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-http"),
@@ -485,10 +485,9 @@ def ensure_topology(env_name: str) -> dict[str, Any]:
     for provider in PROVIDERS:
         topology["providers"].setdefault(provider, {"enabled": False})
     topology.setdefault("instances", [])
+    topology.setdefault("objects", [])
     for instance in topology["instances"]:
         instance.setdefault("backend", service_backend(str(instance.get("service", ""))))
-        if instance.get("service") == OBJECT_STORAGE_SERVICE:
-            set_frontend_storage_defaults(instance, str(instance.get("env", env_name)))
     write_topology(topology)
     return topology
 
@@ -496,6 +495,7 @@ def ensure_topology(env_name: str) -> dict[str, Any]:
 def read_topology() -> dict[str, Any]:
     data = tomllib.loads(RUNTIME_TOPOLOGY_TOML.read_text(encoding="utf-8"))
     data.setdefault("instances", [])
+    data.setdefault("objects", [])
     data.setdefault("providers", {provider: {"enabled": False} for provider in PROVIDERS})
     for provider in PROVIDERS:
         data["providers"].setdefault(provider, {"enabled": False})
@@ -519,6 +519,11 @@ def write_topology(topology: dict[str, Any]) -> None:
     for instance in topology.get("instances", []):
         lines.append("[[instances]]")
         for key, value in instance.items():
+            lines.append(f"{key} = {toml_value(value)}")
+        lines.append("")
+    for obj in topology.get("objects", []):
+        lines.append("[[objects]]")
+        for key, value in obj.items():
             lines.append(f"{key} = {toml_value(value)}")
         lines.append("")
     RUNTIME_TOPOLOGY_TOML.write_text("\n".join(lines), encoding="utf-8")
@@ -550,81 +555,17 @@ def find_pinned_alibaba_instance(topology: dict[str, Any], service: str, provide
 
 
 def new_instance(env_name: str, name: str, service: str, provider: str) -> dict[str, Any]:
-    instance = {
+    return {
         "name": name,
         "service": service,
         "provider": provider,
         "env": env_name,
         "backend": service_backend(service),
     }
-    if service == OBJECT_STORAGE_SERVICE:
-        set_frontend_storage_defaults(instance, env_name)
-    return instance
 
 
 def service_backend(service: str) -> str:
     return SERVICE_BACKENDS.get(service, "vm")
-
-
-def prepare_running_frontend_artifacts(env_name: str) -> int:
-    if not RUNTIME_TOPOLOGY_TOML.exists():
-        return 0
-    topology = read_topology()
-    for instance in topology.get("instances", []):
-        if (
-            instance.get("service") == OBJECT_STORAGE_SERVICE
-            and str(instance.get("env", env_name)) == env_name
-            and instance.get("desired_state") == "running"
-        ):
-            missing_keys = missing_contract_keys(contract_env_path(env_name))
-            if missing_keys:
-                message = (
-                    f"{contract_env_path(env_name)} is missing required contract keys: {', '.join(missing_keys)}. "
-                    f"Run ./vidctl contract publish --env {env_name} --yes first."
-                )
-                print(message, file=sys.stderr)
-                return 1
-            provider = str(instance.get("provider", ""))
-            missing_provider_keys = missing_object_storage_provider_keys(provider)
-            if missing_provider_keys:
-                print(object_storage_provider_error(provider, missing_provider_keys), file=sys.stderr)
-                return 1
-            return build_frontend_static(env_name)
-    return 0
-
-
-def missing_object_storage_provider_keys(provider: str) -> list[str]:
-    env = command_env()
-    required = {
-        "cloudflare": (
-            "CLOUDFLARE_API_TOKEN",
-            "CLOUDFLARE_ACCOUNT_ID",
-            "CLOUDFLARE_R2_ACCESS_KEY_ID",
-            "CLOUDFLARE_R2_SECRET_ACCESS_KEY",
-        ),
-        "aws": ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"),
-        "digitalocean": ("DIGITALOCEAN_TOKEN",),
-        "alibaba": ("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABA_CLOUD_ACCESS_KEY_SECRET", "ALIBABA_CLOUD_REGION"),
-        "gcp": (),
-        "azure": (),
-        "tencent": (),
-    }.get(provider, ())
-    return [key for key in required if not env.get(key)]
-
-
-def object_storage_provider_error(provider: str, missing_keys: list[str]) -> str:
-    secret_file = f"secrets/cloud/{provider}.env"
-    if provider == "cloudflare":
-        secret_file = "secrets/cloud/cloudflare.env"
-    if provider == "digitalocean":
-        secret_file = "secrets/cloud/digital-ocean.env"
-    if provider == "alibaba":
-        secret_file = "secrets/cloud/alibaba.env"
-    return (
-        f"{provider} frontend object storage is missing required credentials: "
-        + ", ".join(missing_keys)
-        + f". Add them to {secret_file} or export them before running ./vidctl infra."
-    )
 
 
 def missing_vm_provider_keys(provider: str) -> list[str]:
@@ -695,37 +636,6 @@ def set_vm_defaults(instance: dict[str, Any], topology: dict[str, Any], find_ins
     instance["ssh_key_dir"] = ensure_ssh_keypair(instance)
 
 
-def build_frontend_static(env_name: str) -> int:
-    contract_path = contract_env_path(env_name)
-    values = read_env_file(contract_path)
-    env = os.environ.copy()
-    env.update(command_env())
-    env["NEXT_PUBLIC_PACKAGE_ID"] = values.get("CONTRACT_PACKAGE_ID", "")
-    env["NEXT_PUBLIC_REGISTRY_OBJECT_ID"] = values.get("CONTRACT_REGISTRY_OBJECT_ID", "")
-    env["NEXT_PUBLIC_SUI_NETWORK"] = env_name
-    service_dir = DOCKER_SERVICES[OBJECT_STORAGE_SERVICE]
-    print(f"Building static frontend from {service_dir}")
-    return run(["pnpm", "build"], cwd=service_dir, env=env)
-
-
-def set_frontend_storage_defaults(instance: dict[str, Any], env_name: str) -> None:
-    bucket = str(instance.get("bucket") or storage_bucket_name(env_name, str(instance.get("name", "frontend")), str(instance.get("provider", ""))))
-    instance["backend"] = "object_storage"
-    instance["bucket"] = bucket
-    instance.setdefault("resource_id", bucket)
-    instance.setdefault("artifact_dir", "services/frontend/out")
-    if instance.get("provider") == "alibaba":
-        instance.setdefault("region", command_env().get("ALIBABA_FRONTEND_REGION", "ap-southeast-1"))
-
-
-def storage_bucket_name(env_name: str, name: str, provider: str) -> str:
-    raw = f"xaisen-{env_name}-{provider}-{name}".lower()
-    cleaned = "".join(char if char.isalnum() else "-" for char in raw)
-    while "--" in cleaned:
-        cleaned = cleaned.replace("--", "-")
-    return cleaned.strip("-")[:63]
-
-
 def missing_contract_keys(path: Path) -> list[str]:
     values = read_env_file(path)
     return [key for key in REQUIRED_CONTRACT_KEYS if not values.get(key)]
@@ -756,6 +666,7 @@ def default_topology(env_name: str) -> dict[str, Any]:
         "contract_env": relative_contract_env(env_name),
         "providers": {provider: {"enabled": False} for provider in PROVIDERS},
         "instances": [],
+        "objects": [],
     }
 
 
