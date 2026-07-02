@@ -6,18 +6,12 @@ from typing import Any
 import pulumi
 
 from ..common.regions import provider_region
-from ..config import OBJECT_STORAGE_SERVICE
 from ..models import TopologyInstance
 from .artifacts import artifact_files
 
 
-def frontend_instances(instances: list[TopologyInstance]) -> list[TopologyInstance]:
-    return [
-        instance
-        for instance in instances
-        if instance.get("service") == OBJECT_STORAGE_SERVICE
-        or instance.get("backend") == "object_storage"
-    ]
+def frontend_instances(objects: list[TopologyInstance]) -> list[TopologyInstance]:
+    return objects
 
 
 def frontend_bucket_name(instance: TopologyInstance) -> str:

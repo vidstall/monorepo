@@ -17,14 +17,15 @@ def run() -> None:
     hosts = cast(list[HostConfig], config.get_object("hosts") or [])
     topology = load_topology()
     instances = cast(list[TopologyInstance], topology.get("instances", []))
+    objects = cast(list[TopologyInstance], topology.get("objects", []))
     vm_resources = {
         str(instance.get("name")): create_vm_instance(instance)
         for instance in vm_instances(instances)
     }
     inventory = build_inventory(hosts, instances, vm_resources, topology)
     frontend_sites = {
-        str(instance.get("name", "frontend")): create_frontend_site(instance)
-        for instance in frontend_instances(instances)
+        str(obj.get("name", "frontend")): create_frontend_site(obj)
+        for obj in frontend_instances(objects)
     }
     pulumi.export("cloudCredentials", cloud_credentials())
     pulumi.export("topology", topology)

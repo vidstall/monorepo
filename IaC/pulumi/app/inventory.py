@@ -4,7 +4,7 @@ from typing import Any
 
 import pulumi
 
-from .config import OBJECT_STORAGE_SERVICE, ROOT
+from .config import ROOT
 from .models import HostConfig, TopologyInstance
 
 
@@ -37,11 +37,6 @@ def topology_host_entry(
 
 
 def should_include_ansible_host(instance: TopologyInstance) -> bool:
-    if (
-        instance.get("backend") == "object_storage"
-        or instance.get("service") == OBJECT_STORAGE_SERVICE
-    ):
-        return False
     if instance.get("desired_state") in {"deleted", "stopped"}:
         return False
     if instance.get("backend") == "vm":

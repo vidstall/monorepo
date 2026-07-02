@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from ..config import OBJECT_STORAGE_SERVICE
 from ..models import TopologyInstance
 from .ssh import read_ssh_public_key
 
@@ -11,12 +10,7 @@ VMAdapter = Callable[[TopologyInstance, str], VMResult]
 
 
 def vm_instances(instances: list[TopologyInstance]) -> list[TopologyInstance]:
-    return [
-        instance
-        for instance in instances
-        if instance.get("backend") == "vm"
-        and instance.get("service") != OBJECT_STORAGE_SERVICE
-    ]
+    return [instance for instance in instances if instance.get("backend") == "vm"]
 
 
 def adapter(provider: str) -> VMAdapter:
