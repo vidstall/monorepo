@@ -1,0 +1,1 @@
+"""Xaisen Pulumi application package."""
