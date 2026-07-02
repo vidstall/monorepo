@@ -12,7 +12,10 @@ type ContractTransactionAction =
   | "cast-room-vote"
   | "propose-role"
   | "cast-role-vote"
-  | "cancel-expired-order";
+  | "cancel-expired-order"
+  | "set-node-profile"
+  | "register-media-cluster"
+  | "add-media-cluster-member";
 
 export function options(request: NextRequest) {
   return new NextResponse(null, {

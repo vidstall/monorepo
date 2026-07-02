@@ -18,7 +18,10 @@ type TransactionAction =
   | "cast-room-vote"
   | "propose-role"
   | "cast-role-vote"
-  | "cancel-expired-order";
+  | "cancel-expired-order"
+  | "set-node-profile"
+  | "register-media-cluster"
+  | "add-media-cluster-member";
 
 type BuildResult = {
   network: string;
@@ -208,6 +211,64 @@ function addMoveCall(
         registry,
         tx.pure.u64(requireU64(body.rentalId, "rentalId")),
         clock,
+      ],
+    });
+    return;
+  }
+
+  if (action === "set-node-profile") {
+    const publicKey = Buffer.from(
+      requireString(body.x25519PublicKey, "x25519PublicKey"),
+      "base64",
+    );
+    if (publicKey.length !== 32)
+      throw new Error("x25519PublicKey must decode to 32 bytes");
+    tx.moveCall({
+      target: moveTarget("set_node_profile"),
+      typeArguments: [SUI_COIN_TYPE],
+      arguments: [
+        registry,
+        tx.pure.u64(requireU64(body.nodeId, "nodeId")),
+        tx.pure.vector("u8", Array.from(publicKey)),
+        tx.pure.vector(
+          "u8",
+          metadataBytes(requireString(body.brokerEndpoint, "brokerEndpoint")),
+        ),
+        tx.pure.vector(
+          "u8",
+          metadataBytes(requireString(body.region, "region")),
+        ),
+        tx.pure.u64(requireU64(body.clusterId ?? "0", "clusterId")),
+      ],
+    });
+    return;
+  }
+
+  if (action === "register-media-cluster") {
+    tx.moveCall({
+      target: moveTarget("register_media_cluster"),
+      typeArguments: [SUI_COIN_TYPE],
+      arguments: [
+        registry,
+        tx.pure.u64(requireU64(body.ownerNodeId, "ownerNodeId")),
+        tx.pure.vector(
+          "u8",
+          metadataBytes(requireString(body.clientUrl, "clientUrl")),
+        ),
+        tx.pure.u64(requireU64(body.pricePerRentalMist, "pricePerRentalMist")),
+      ],
+    });
+    return;
+  }
+
+  if (action === "add-media-cluster-member") {
+    tx.moveCall({
+      target: moveTarget("add_media_cluster_member"),
+      typeArguments: [SUI_COIN_TYPE],
+      arguments: [
+        registry,
+        tx.pure.u64(requireU64(body.clusterId, "clusterId")),
+        tx.pure.u64(requireU64(body.nodeId, "nodeId")),
       ],
     });
   }

@@ -14,6 +14,7 @@ import {
   getPersistedNodeId,
   loadOperatorKeypair,
   persistNodeId,
+  operatorX25519PublicKey,
 } from "@/lib/operator-keypair";
 
 const ROLE_ROUTER = 2;
@@ -146,6 +147,37 @@ async function setActive(nodeId: string, active: boolean): Promise<void> {
   assertSuccess(result);
 }
 
+async function updateRouterProfile(nodeId: string): Promise<void> {
+  const config = loadContractConfig();
+  const keypair = loadOperatorKeypair();
+  const publicUrl = requireEnv("ROUTES_PUBLIC_URL");
+  const brokerEndpoint = publicUrl.replace(/\/api\/?$/, "");
+  const c = client();
+  const tx = new Transaction();
+  tx.setSender(keypair.toSuiAddress());
+  tx.moveCall({
+    target: moveTarget("set_node_profile"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      tx.object(config.registryObjectId),
+      tx.pure.u64(BigInt(nodeId)),
+      tx.pure.vector("u8", Array.from(operatorX25519PublicKey())),
+      tx.pure.vector("u8", metadataBytes(brokerEndpoint)),
+      tx.pure.vector(
+        "u8",
+        metadataBytes(process.env.ROUTES_REGION ?? "global"),
+      ),
+      tx.pure.u64(0n),
+    ],
+  });
+  const result = await c.signAndExecuteTransaction({
+    transaction: tx,
+    signer: keypair,
+    options: { showEffects: true },
+  });
+  assertSuccess(result);
+}
+
 async function currentMetadata(nodeId: string): Promise<string | null> {
   const config = loadContractConfig();
   const c = client();
@@ -223,6 +255,54 @@ async function heartbeat(nodeId: string): Promise<void> {
   assertSuccess(result);
 }
 
+export async function assignRoutedOrder(
+  routerNodeId: string,
+  mediaNodeId: string,
+  clusterId: string,
+  rentalId: string,
+): Promise<{ digest: string; revision: number }> {
+  const config = loadContractConfig();
+  const keypair = loadOperatorKeypair();
+  const c = client();
+  const tx = new Transaction();
+  tx.setSender(keypair.toSuiAddress());
+  tx.moveCall({
+    target: moveTarget("assign_routed_order"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      tx.object(config.registryObjectId),
+      tx.pure.u64(BigInt(routerNodeId)),
+      tx.pure.u64(BigInt(mediaNodeId)),
+      tx.pure.u64(BigInt(clusterId)),
+      tx.pure.u64(BigInt(rentalId)),
+      tx.object(SUI_CLOCK_OBJECT_ID),
+    ],
+  });
+  const result = await c.signAndExecuteTransaction({
+    transaction: tx,
+    signer: keypair,
+    options: { showEffects: true },
+  });
+  assertSuccess(result);
+
+  const inspectTx = new Transaction();
+  inspectTx.moveCall({
+    target: moveTarget("routed_assignment_revision"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      inspectTx.object(config.registryObjectId),
+      inspectTx.pure.u64(BigInt(rentalId)),
+    ],
+  });
+  const inspected = await c.devInspectTransactionBlock({
+    transactionBlock: inspectTx,
+    sender: keypair.toSuiAddress(),
+  });
+  const raw = inspected.results?.[0]?.returnValues?.[0]?.[0];
+  const revision = raw ? Number(bcs.u64().parse(new Uint8Array(raw))) : 1;
+  return { digest: result.digest, revision };
+}
+
 let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let _nodeId: string | null = null;
 
@@ -255,6 +335,7 @@ export async function bootstrapOperator(): Promise<void> {
     }
 
     _nodeId = nodeId;
+    await updateRouterProfile(nodeId);
     const intervalMs = Number(
       process.env.ROUTES_HEARTBEAT_INTERVAL_MS ?? 5 * 60 * 1000,
     );
