@@ -11,6 +11,8 @@ def security_rules(instance: TopologyInstance) -> list[tuple[str, str, str]]:
         return [("tcp", "80/80", "http"), ("tcp", "443/443", "https")]
     if instance.get("service") == "media":
         return [
+            ("tcp", "80/80", "http"),
+            ("tcp", "443/443", "https"),
             ("tcp", "7880/7880", "signal"),
             ("tcp", "7881/7881", "ice"),
             ("tcp", "7890/7890", "broker"),

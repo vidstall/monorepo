@@ -196,13 +196,14 @@ def ensure_media_registered(
     gas_budget: str = DEFAULT_GAS_BUDGET,
 ) -> None:
     """Idempotently registers media_entry's wallet as an SFU worker, gets it
-    voted into ROLE_SFU, registers its media cluster, and publishes its node
-    profile on-chain. No-ops entirely if media_entry already has a cluster_id
-    (fully bootstrapped on a previous run). Mutates media_entry in place with
-    node_id/cluster_id; caller is responsible for persisting it to disk."""
-    if media_entry.get("cluster_id"):
-        return
-
+    voted into ROLE_SFU, and registers its media cluster (skipped entirely
+    once media_entry already has a cluster_id from a previous run, since
+    those on-chain actions are one-time). The node profile - broker
+    endpoint, region, x25519 key - is always (re)published, since public_url
+    can change across restarts (e.g. a VM recreate assigning a new IP) and
+    the contract is the only record clients use to reach the node. Mutates
+    media_entry in place with node_id/cluster_id; caller is responsible for
+    persisting it to disk."""
     from . import wallet as wallet_module
 
     sui_rpc_url = JSON_RPC_URLS[env_name]
@@ -221,34 +222,36 @@ def ensure_media_registered(
             raise RuntimeError("media register_worker failed")
     media_entry["node_id"] = node_id
 
-    print(f"[media-bootstrap] proposing node_id={node_id} for ROLE_SFU...")
-    proposal_id = propose_sfu_role(package_id, registry_id, node_id, gas_budget)
-    if not proposal_id:
-        raise RuntimeError("propose_role succeeded but proposal_id could not be determined")
-    if not routes_entry:
-        print("[media-bootstrap] no routes wallet found to cast a second vote; SFU role proposal left pending", file=sys.stderr)
-    else:
-        routes_node_id = routes_entry.get("node_id") or find_node_id_by_owner(
-            original_package_id, sui_rpc_url, routes_entry["address"],
-        )
-        if not routes_node_id:
-            print("[media-bootstrap] could not resolve routes operator's node_id; SFU role proposal left pending", file=sys.stderr)
-        else:
-            _import_key(routes_entry["secret_key"])
-            if not _switch_address(routes_entry["address"]):
-                print(f"[media-bootstrap] could not switch to routes address {routes_entry['address']}", file=sys.stderr)
-            else:
-                print(f"[media-bootstrap] casting second vote from routes node_id={routes_node_id}...")
-                if not cast_vote(package_id, registry_id, routes_node_id, proposal_id, gas_budget):
-                    print("[media-bootstrap] cast_role_vote failed; SFU role proposal may be left pending", file=sys.stderr)
-            _import_key(media_entry["secret_key"])
-            _switch_address(media_entry["address"])
-
-    print(f"[media-bootstrap] registering media cluster for node_id={node_id}...")
-    cluster_id = register_media_cluster(package_id, registry_id, node_id, public_url, gas_budget)
+    cluster_id = media_entry.get("cluster_id")
     if not cluster_id:
-        raise RuntimeError("register_media_cluster failed (likely ROLE_SFU vote did not finalize)")
-    media_entry["cluster_id"] = cluster_id
+        print(f"[media-bootstrap] proposing node_id={node_id} for ROLE_SFU...")
+        proposal_id = propose_sfu_role(package_id, registry_id, node_id, gas_budget)
+        if not proposal_id:
+            raise RuntimeError("propose_role succeeded but proposal_id could not be determined")
+        if not routes_entry:
+            print("[media-bootstrap] no routes wallet found to cast a second vote; SFU role proposal left pending", file=sys.stderr)
+        else:
+            routes_node_id = routes_entry.get("node_id") or find_node_id_by_owner(
+                original_package_id, sui_rpc_url, routes_entry["address"],
+            )
+            if not routes_node_id:
+                print("[media-bootstrap] could not resolve routes operator's node_id; SFU role proposal left pending", file=sys.stderr)
+            else:
+                _import_key(routes_entry["secret_key"])
+                if not _switch_address(routes_entry["address"]):
+                    print(f"[media-bootstrap] could not switch to routes address {routes_entry['address']}", file=sys.stderr)
+                else:
+                    print(f"[media-bootstrap] casting second vote from routes node_id={routes_node_id}...")
+                    if not cast_vote(package_id, registry_id, routes_node_id, proposal_id, gas_budget):
+                        print("[media-bootstrap] cast_role_vote failed; SFU role proposal may be left pending", file=sys.stderr)
+                _import_key(media_entry["secret_key"])
+                _switch_address(media_entry["address"])
+
+        print(f"[media-bootstrap] registering media cluster for node_id={node_id}...")
+        cluster_id = register_media_cluster(package_id, registry_id, node_id, public_url, gas_budget)
+        if not cluster_id:
+            raise RuntimeError("register_media_cluster failed (likely ROLE_SFU vote did not finalize)")
+        media_entry["cluster_id"] = cluster_id
 
     print(f"[media-bootstrap] publishing node profile (cluster_id={cluster_id})...")
     x25519_public_key = wallet_module.x25519_public_key_bytes(media_entry)
@@ -258,4 +261,4 @@ def ensure_media_registered(
     if not ok:
         raise RuntimeError("set_node_profile failed")
 
-    print(f"[media-bootstrap] {media_entry['name']} fully registered: node_id={node_id} cluster_id={cluster_id}")
+    print(f"[media-bootstrap] {media_entry['name']} node profile up to date: node_id={node_id} cluster_id={cluster_id}")

@@ -169,7 +169,25 @@ def instance_address(name: str) -> str:
         return ""
 
 
-def registry_status(name: str, service: str, address: str) -> str:
+def registry_status(name: str, service: str, address: str, env_name: str) -> str:
+    if service == "media":
+        # media's on-chain bootstrap runs on the orchestrator via
+        # media_bootstrap.py, not inside the container, so it never logs
+        # "operator address"/"node_id=" lines the way routes' own
+        # self-registration TypeScript does. Read wallet.toml instead.
+        from . import wallet as wallet_module
+
+        entry = wallet_module.find_wallet(wallet_module.read_wallets(), name, env_name)
+        if entry is None:
+            return "unknown (no wallet entry found)"
+        cluster_id = entry.get("cluster_id")
+        node_id = entry.get("node_id")
+        if cluster_id:
+            return f"registered (node_id={node_id} cluster_id={cluster_id})"
+        if node_id:
+            return f"not registered (node_id={node_id}, SFU role/cluster pending)"
+        return "not registered"
+
     key_path = SSH_KEY_ROOT / name / "id_ed25519"
     if not address or not key_path.exists():
         return "unknown (host unreachable)"
@@ -272,11 +290,12 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
 
 def bootstrap_media(name: str, env_name: str, wallet_entry: dict[str, Any]) -> dict[str, str]:
     """Idempotently registers a media instance's operator wallet on-chain
-    (worker + ROLE_SFU + media cluster + node profile), then returns the
-    Ansible extra_vars needed to actually run it: XAISEN_CLUSTER_ID,
-    XAISEN_LIVEKIT_URL, LIVEKIT_KEYS, and the broker's own x25519 key file
-    content. No-ops the on-chain part if wallet_entry already has a
-    cluster_id from a previous run."""
+    (worker + ROLE_SFU + media cluster), then returns the Ansible extra_vars
+    needed to actually run it: XAISEN_CLUSTER_ID, XAISEN_LIVEKIT_URL,
+    LIVEKIT_KEYS, and the broker's own x25519 key file content. The one-time
+    registration steps no-op if wallet_entry already has a cluster_id from a
+    previous run, but the on-chain node profile (broker endpoint/public_url)
+    is always republished, since it can change across restarts."""
     from . import media_bootstrap, wallet
 
     address = instance_address(name)
@@ -512,7 +531,7 @@ def control(
         print(f"IP:      {address or 'unknown'}")
         print(f"Wallet:  {wallet_address[:8]}...")
         print(f"Balance: {balance_mist / 1_000_000_000:.4f} SUI")
-        print(f"Registry: {registry_status(name, service, address)}")
+        print(f"Registry: {registry_status(name, service, address, env_name)}")
 
     record_history(
         action,
@@ -622,6 +641,8 @@ def alibaba_vm_target_urns(
     elif service == "media":
         resources.extend(
             [
+                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-http"),
+                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-https"),
                 ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-signal"),
                 ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-ice"),
                 ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-broker"),
