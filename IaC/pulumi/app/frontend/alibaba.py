@@ -29,11 +29,17 @@ def create_site(instance: TopologyInstance, bucket_name: str, desired_state: str
             replace_on_changes=["tags"],
         ),
     )
+    public_access_block = alicloud.oss.BucketPublicAccessBlock(
+        f"{instance['name']}-frontend-public-access-block",
+        bucket=bucket.bucket,
+        block_public_access=not public,
+        opts=pulumi.ResourceOptions(provider=provider, depends_on=[bucket]),
+    )
     bucket_acl = alicloud.oss.BucketAcl(
         f"{instance['name']}-frontend-acl",
         bucket=bucket.bucket,
         acl="public-read" if public else "private",
-        opts=pulumi.ResourceOptions(provider=provider),
+        opts=pulumi.ResourceOptions(provider=provider, depends_on=[public_access_block]),
     )
 
     def upload(key: str, path: Path, mime: str) -> None:
