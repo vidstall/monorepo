@@ -1,5 +1,7 @@
 module xaisen_contract::role_vote_store;
 
+use sui::dynamic_field;
+use sui::object::UID;
 use sui::table::{Self, Table};
 use sui::tx_context::TxContext;
 
@@ -46,6 +48,35 @@ public(package) fun assert_valid_role(role: u8) { assert!(role <= ROLE_ROUTER, E
 public(package) fun role_sfu(): u8 { ROLE_SFU }
 public(package) fun role_coordinator(): u8 { ROLE_COORDINATOR }
 public(package) fun role_router(): u8 { ROLE_ROUTER }
+
+// Tracked as a dynamic field on the Registry's UID (not a RoleVoteStore
+// struct field) so this can be added in a package upgrade without breaking
+// the struct layout of already-stored on-chain RoleVoteStore data.
+public struct ActiveRouterCountKey has copy, drop, store {}
+
+public(package) fun active_router_count(uid: &UID): u64 {
+    if (dynamic_field::exists(uid, ActiveRouterCountKey {})) {
+        *dynamic_field::borrow(uid, ActiveRouterCountKey {})
+    } else {
+        0
+    }
+}
+
+public(package) fun increment_active_router_count(uid: &mut UID) {
+    if (dynamic_field::exists(uid, ActiveRouterCountKey {})) {
+        let count = dynamic_field::borrow_mut<ActiveRouterCountKey, u64>(uid, ActiveRouterCountKey {});
+        *count = *count + 1;
+    } else {
+        dynamic_field::add(uid, ActiveRouterCountKey {}, 1u64);
+    };
+}
+
+public(package) fun decrement_active_router_count(uid: &mut UID) {
+    if (dynamic_field::exists(uid, ActiveRouterCountKey {})) {
+        let count = dynamic_field::borrow_mut<ActiveRouterCountKey, u64>(uid, ActiveRouterCountKey {});
+        if (*count > 0) { *count = *count - 1; };
+    };
+}
 
 public(package) fun next_role_proposal_id(store: &RoleVoteStore): u64 { store.next_role_proposal_id }
 
@@ -149,6 +180,21 @@ public fun role_sfu_for_testing(): u8 { ROLE_SFU }
 public fun role_coordinator_for_testing(): u8 { ROLE_COORDINATOR }
 #[test_only]
 public fun role_router_for_testing(): u8 { ROLE_ROUTER }
+#[test_only]
+public fun set_active_router_count_for_testing(uid: &mut UID, count: u64) {
+    if (dynamic_field::exists(uid, ActiveRouterCountKey {})) {
+        let existing = dynamic_field::borrow_mut<ActiveRouterCountKey, u64>(uid, ActiveRouterCountKey {});
+        *existing = count;
+    } else {
+        dynamic_field::add(uid, ActiveRouterCountKey {}, count);
+    };
+}
+#[test_only]
+public fun remove_active_router_count_for_testing(uid: &mut UID) {
+    if (dynamic_field::exists(uid, ActiveRouterCountKey {})) {
+        let _: u64 = dynamic_field::remove(uid, ActiveRouterCountKey {});
+    };
+}
 
 #[test_only]
 public fun remove_role_proposal_for_testing(store: &mut RoleVoteStore, proposal_id: u64) {

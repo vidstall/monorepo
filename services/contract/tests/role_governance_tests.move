@@ -50,11 +50,13 @@ fun role_proposal_accessors_report_pending_state() {
 
     clock::set_for_testing(&mut clock, 1000);
     let mut propose_ctx = test_fixtures::ctx(test_fixtures::owner(), 94_4);
-    role_governance::propose_role(&mut reg, 1, 2, role_vote_store::role_router_for_testing(), &clock, &mut propose_ctx);
+    // ROLE_COORDINATOR (not ROLE_ROUTER) so this proposal stays pending, since
+    // ROLE_ROUTER now has its own under-10 auto-pass rule tested separately.
+    role_governance::propose_role(&mut reg, 1, 2, role_vote_store::role_coordinator_for_testing(), &clock, &mut propose_ctx);
 
     assert!(role_vote_store::next_role_proposal_id(reg.role_votes()) == 2);
     assert!(role_vote_store::role_proposal_exists(reg.role_votes(), 1));
-    assert!(role_vote_store::role_proposal_role(reg.role_votes(), 1) == role_vote_store::role_router_for_testing());
+    assert!(role_vote_store::role_proposal_role(reg.role_votes(), 1) == role_vote_store::role_coordinator_for_testing());
     assert!(role_vote_store::role_proposal_nominee_node_id(reg.role_votes(), 1) == 2);
     assert!(role_vote_store::role_proposal_deadline_ms(reg.role_votes(), 1) == 1000 + room_vote_store::default_vote_deadline_ms_for_testing());
     assert!(!role_vote_store::role_proposal_finalized(reg.role_votes(), 1));
@@ -156,4 +158,86 @@ fun inactive_worker_cannot_vote_on_role() {
     worker_accessors::remove_worker_for_testing(reg.workers_mut(), 3, &mut wc_ctx);
     registry::destroy_registry_for_testing(reg);
     clock::destroy_for_testing(clock);
+}
+
+#[test]
+fun propose_router_role_auto_passes_under_ten() {
+    let mut owner_ctx = test_fixtures::ctx(test_fixtures::owner(), 110);
+    let clock = clock::create_for_testing(&mut owner_ctx);
+    let mut reg = registry::new_registry_for_testing<TEST_COIN>(&mut owner_ctx);
+
+    workers::register_worker(&mut reg, test_fixtures::uri(), test_fixtures::hash(1), test_fixtures::price(), test_fixtures::stake(&mut owner_ctx), &clock, &mut owner_ctx);
+    let mut wb_ctx = test_fixtures::ctx(test_fixtures::worker_b(), 111);
+    workers::register_worker(&mut reg, test_fixtures::uri(), test_fixtures::hash(1), test_fixtures::price(), test_fixtures::stake(&mut wb_ctx), &clock, &mut wb_ctx);
+    let mut wc_ctx = test_fixtures::ctx(test_fixtures::worker_c(), 112);
+    workers::register_worker(&mut reg, test_fixtures::uri(), test_fixtures::hash(1), test_fixtures::price(), test_fixtures::stake(&mut wc_ctx), &clock, &mut wc_ctx);
+
+    // active_count == 3 here, well above the existing `active_count <= 1` shortcut,
+    // so a router proposal only auto-passes if the new router-specific rule fires.
+    let mut propose_ctx = test_fixtures::ctx(test_fixtures::owner(), 113);
+    role_governance::propose_role(&mut reg, 1, 2, role_vote_store::role_router_for_testing(), &clock, &mut propose_ctx);
+
+    assert!(role_vote_store::role_proposal_finalized(reg.role_votes(), 1));
+    assert!(role_vote_store::worker_role(reg.role_votes(), 2) == role_vote_store::role_router_for_testing());
+    assert!(role_vote_store::active_router_count(reg.uid()) == 1);
+
+    role_vote_store::remove_role_proposal_for_testing(reg.role_votes_mut(), 1);
+    role_vote_store::remove_role_map_entry_for_testing(reg.role_votes_mut(), 2);
+    role_vote_store::remove_active_router_count_for_testing(reg.uid_mut());
+    worker_accessors::remove_worker_for_testing(reg.workers_mut(), 1, &mut owner_ctx);
+    worker_accessors::remove_worker_for_testing(reg.workers_mut(), 2, &mut wb_ctx);
+    worker_accessors::remove_worker_for_testing(reg.workers_mut(), 3, &mut wc_ctx);
+    registry::destroy_registry_for_testing(reg);
+    clock::destroy_for_testing(clock);
+}
+
+#[test]
+fun propose_router_role_requires_vote_at_ten() {
+    let mut owner_ctx = test_fixtures::ctx(test_fixtures::owner(), 120);
+    let clock = clock::create_for_testing(&mut owner_ctx);
+    let mut reg = registry::new_registry_for_testing<TEST_COIN>(&mut owner_ctx);
+
+    workers::register_worker(&mut reg, test_fixtures::uri(), test_fixtures::hash(1), test_fixtures::price(), test_fixtures::stake(&mut owner_ctx), &clock, &mut owner_ctx);
+    let mut wb_ctx = test_fixtures::ctx(test_fixtures::worker_b(), 121);
+    workers::register_worker(&mut reg, test_fixtures::uri(), test_fixtures::hash(1), test_fixtures::price(), test_fixtures::stake(&mut wb_ctx), &clock, &mut wb_ctx);
+    let mut wc_ctx = test_fixtures::ctx(test_fixtures::worker_c(), 122);
+    workers::register_worker(&mut reg, test_fixtures::uri(), test_fixtures::hash(1), test_fixtures::price(), test_fixtures::stake(&mut wc_ctx), &clock, &mut wc_ctx);
+
+    role_vote_store::set_active_router_count_for_testing(reg.uid_mut(), 10);
+
+    let mut propose_ctx = test_fixtures::ctx(test_fixtures::owner(), 123);
+    role_governance::propose_role(&mut reg, 1, 2, role_vote_store::role_router_for_testing(), &clock, &mut propose_ctx);
+
+    assert!(!role_vote_store::role_proposal_finalized(reg.role_votes(), 1));
+    assert!(!role_vote_store::has_worker_role(reg.role_votes(), 2));
+
+    let mut wb_vote_ctx = test_fixtures::ctx(test_fixtures::worker_b(), 124);
+    role_governance::cast_role_vote(&mut reg, 2, 1, &clock, &mut wb_vote_ctx);
+    assert!(role_vote_store::role_proposal_finalized(reg.role_votes(), 1));
+
+    role_vote_store::remove_role_proposal_for_testing(reg.role_votes_mut(), 1);
+    role_vote_store::remove_role_map_entry_for_testing(reg.role_votes_mut(), 2);
+    role_vote_store::remove_active_router_count_for_testing(reg.uid_mut());
+    worker_accessors::remove_worker_for_testing(reg.workers_mut(), 1, &mut owner_ctx);
+    worker_accessors::remove_worker_for_testing(reg.workers_mut(), 2, &mut wb_ctx);
+    worker_accessors::remove_worker_for_testing(reg.workers_mut(), 3, &mut wc_ctx);
+    registry::destroy_registry_for_testing(reg);
+    clock::destroy_for_testing(clock);
+}
+
+#[test]
+fun router_count_increments_and_decrements_directly() {
+    let mut ctx = test_fixtures::ctx(test_fixtures::owner(), 130);
+    let mut reg = registry::new_registry_for_testing<TEST_COIN>(&mut ctx);
+
+    assert!(role_vote_store::active_router_count(reg.uid()) == 0);
+
+    role_vote_store::increment_active_router_count(reg.uid_mut());
+    assert!(role_vote_store::active_router_count(reg.uid()) == 1);
+
+    role_vote_store::decrement_active_router_count(reg.uid_mut());
+    assert!(role_vote_store::active_router_count(reg.uid()) == 0);
+
+    role_vote_store::remove_active_router_count_for_testing(reg.uid_mut());
+    registry::destroy_registry_for_testing(reg);
 }

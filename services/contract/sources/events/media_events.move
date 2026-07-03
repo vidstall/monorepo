@@ -14,6 +14,11 @@ public struct MediaClusterRegistered has copy, drop {
     price_per_rental: u64,
 }
 
+public struct ClusterPriceUpdated has copy, drop {
+    cluster_id: u64,
+    price_per_rental: u64,
+}
+
 public struct RoutedAssignmentUpdated has copy, drop {
     rental_id: u64,
     router_node_id: u64,
@@ -36,6 +41,10 @@ public(package) fun emit_node_profile_updated(node_id: u64, cluster_id: u64) {
 
 public(package) fun emit_media_cluster_registered(cluster_id: u64, owner_node_id: u64, treasury: address, price_per_rental: u64) {
     event::emit(MediaClusterRegistered { cluster_id, owner_node_id, treasury, price_per_rental });
+}
+
+public(package) fun emit_cluster_price_updated(cluster_id: u64, price_per_rental: u64) {
+    event::emit(ClusterPriceUpdated { cluster_id, price_per_rental });
 }
 
 public(package) fun emit_routed_assignment_updated(

@@ -34,7 +34,8 @@ public entry fun propose_role<T>(
 
     let deadline_ms = timestamp_ms + room_vote_store::default_vote_deadline_ms();
     let active_count = worker_store::active_worker_count(registry.workers());
-    let auto_pass = active_count <= 1;
+    let auto_pass = active_count <= 1
+        || (role == role_vote_store::role_router() && role_vote_store::active_router_count(registry.uid()) < 10);
 
     let proposal_id = role_vote_store::insert(
         registry.role_votes_mut(), sender, nominee_node_id, role, deadline_ms, auto_pass, ctx,
@@ -43,7 +44,14 @@ public entry fun propose_role<T>(
     governance_events::emit_role_proposal_created(proposal_id, sender, nominee_node_id, role, deadline_ms, timestamp_ms);
 
     if (auto_pass) {
+        let already_router = role_vote_store::has_worker_role(registry.role_votes(), nominee_node_id)
+            && role_vote_store::worker_role(registry.role_votes(), nominee_node_id) == role_vote_store::role_router();
         role_vote_store::set_role(registry.role_votes_mut(), nominee_node_id, role);
+        if (role == role_vote_store::role_router() && !already_router) {
+            role_vote_store::increment_active_router_count(registry.uid_mut());
+        } else if (already_router && role != role_vote_store::role_router()) {
+            role_vote_store::decrement_active_router_count(registry.uid_mut());
+        };
         governance_events::emit_role_assigned(proposal_id, nominee_node_id, role, timestamp_ms);
     };
 }
@@ -80,7 +88,14 @@ public entry fun cast_role_vote<T>(
     if (vote_count * 2 > active_count) {
         let proposal = role_vote_store::borrow_mut(registry.role_votes_mut(), proposal_id);
         role_vote_store::finalize(proposal);
+        let already_router = role_vote_store::has_worker_role(registry.role_votes(), nominee_node_id)
+            && role_vote_store::worker_role(registry.role_votes(), nominee_node_id) == role_vote_store::role_router();
         role_vote_store::set_role(registry.role_votes_mut(), nominee_node_id, role);
+        if (role == role_vote_store::role_router() && !already_router) {
+            role_vote_store::increment_active_router_count(registry.uid_mut());
+        } else if (already_router && role != role_vote_store::role_router()) {
+            role_vote_store::decrement_active_router_count(registry.uid_mut());
+        };
         governance_events::emit_role_assigned(proposal_id, nominee_node_id, role, timestamp_ms);
     };
 }

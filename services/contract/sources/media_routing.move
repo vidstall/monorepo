@@ -63,6 +63,15 @@ public entry fun set_media_cluster_active<T>(registry: &mut Registry<T>, cluster
     media_store::set_cluster_active(media_store::borrow_cluster_mut(registry.uid_mut(), cluster_id), active);
 }
 
+public entry fun update_cluster_price<T>(registry: &mut Registry<T>, cluster_id: u64, price_per_rental: u64, ctx: &mut TxContext) {
+    let owner_node_id = media_store::cluster_owner_node_id(media_store::borrow_cluster(registry.uid(), cluster_id));
+    worker_store::assert_owner(
+        worker_store::owner(worker_store::borrow(registry.workers(), owner_node_id)), tx_context::sender(ctx),
+    );
+    media_store::set_cluster_price(media_store::borrow_cluster_mut(registry.uid_mut(), cluster_id), price_per_rental);
+    media_events::emit_cluster_price_updated(cluster_id, price_per_rental);
+}
+
 public entry fun assign_routed_order<T>(
     registry: &mut Registry<T>,
     router_node_id: u64,

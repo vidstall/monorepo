@@ -119,6 +119,10 @@ public(package) fun cluster_client_url(cluster: &MediaCluster): vector<u8> { clu
 public(package) fun cluster_price(cluster: &MediaCluster): u64 { cluster.price_per_rental }
 public(package) fun cluster_active(cluster: &MediaCluster): bool { cluster.active }
 public(package) fun set_cluster_active(cluster: &mut MediaCluster, active: bool) { cluster.active = active; }
+public(package) fun set_cluster_price(cluster: &mut MediaCluster, price_per_rental: u64) {
+    assert!(price_per_rental > 0, E_INVALID_PRICE);
+    cluster.price_per_rental = price_per_rental;
+}
 public(package) fun assert_cluster_active(cluster: &MediaCluster) { assert!(cluster.active, E_CLUSTER_INACTIVE); }
 
 public(package) fun media_cluster_exists(uid: &UID, cluster_id: u64): bool {
