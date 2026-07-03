@@ -178,14 +178,14 @@ async function updateRouterProfile(nodeId: string): Promise<void> {
   assertSuccess(result);
 }
 
-async function setCoordinatorEndpoint(publicUrl: string): Promise<void> {
+async function setRoutesEndpoint(publicUrl: string): Promise<void> {
   const config = loadContractConfig();
   const keypair = loadOperatorKeypair();
   const c = client();
   const tx = new Transaction();
   tx.setSender(keypair.toSuiAddress());
   tx.moveCall({
-    target: moveTarget("set_coordinator_endpoint"),
+    target: moveTarget("set_routes_endpoint"),
     typeArguments: [SUI_COIN_TYPE],
     arguments: [
       tx.object(config.registryObjectId),
@@ -406,8 +406,8 @@ export async function bootstrapOperator(): Promise<void> {
 
     _nodeId = nodeId;
     await updateRouterProfile(nodeId);
-    console.log("[routes] publishing coordinator_endpoint...");
-    await setCoordinatorEndpoint(requireEnv("ROUTES_PUBLIC_URL"));
+    console.log("[routes] publishing routes_endpoint...");
+    await setRoutesEndpoint(requireEnv("ROUTES_PUBLIC_URL"));
     const intervalMs = Number(
       process.env.ROUTES_HEARTBEAT_INTERVAL_MS ?? 5 * 60 * 1000,
     );

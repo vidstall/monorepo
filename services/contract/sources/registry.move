@@ -14,7 +14,7 @@ public struct Registry<phantom T> has key {
     rentals: RentalStore<T>,
     room_votes: RoomVoteStore,
     role_votes: RoleVoteStore,
-    coordinator_endpoint: vector<u8>,
+    routes_endpoint: vector<u8>,
 }
 
 fun new_registry<T>(ctx: &mut TxContext): Registry<T> {
@@ -24,7 +24,7 @@ fun new_registry<T>(ctx: &mut TxContext): Registry<T> {
         rentals: rental_store::new(ctx),
         room_votes: room_vote_store::new(ctx),
         role_votes: role_vote_store::new(ctx),
-        coordinator_endpoint: vector[],
+        routes_endpoint: vector[],
     }
 }
 
@@ -32,11 +32,11 @@ public entry fun create_registry<T>(ctx: &mut TxContext) {
     transfer::share_object(new_registry<T>(ctx));
 }
 
-public entry fun set_coordinator_endpoint<T>(registry: &mut Registry<T>, endpoint: vector<u8>, _ctx: &mut TxContext) {
-    registry.coordinator_endpoint = endpoint;
+public entry fun set_routes_endpoint<T>(registry: &mut Registry<T>, endpoint: vector<u8>, _ctx: &mut TxContext) {
+    registry.routes_endpoint = endpoint;
 }
 
-public fun coordinator_endpoint<T>(registry: &Registry<T>): vector<u8> { registry.coordinator_endpoint }
+public fun routes_endpoint<T>(registry: &Registry<T>): vector<u8> { registry.routes_endpoint }
 
 public(package) fun uid<T>(registry: &Registry<T>): &UID { &registry.id }
 public(package) fun uid_mut<T>(registry: &mut Registry<T>): &mut UID { &mut registry.id }
@@ -55,7 +55,7 @@ public fun new_registry_for_testing<T>(ctx: &mut TxContext): Registry<T> { new_r
 
 #[test_only]
 public fun destroy_registry_for_testing<T>(registry: Registry<T>) {
-    let Registry { id, workers, rentals, room_votes, role_votes, coordinator_endpoint: _ } = registry;
+    let Registry { id, workers, rentals, room_votes, role_votes, routes_endpoint: _ } = registry;
     id.delete();
     worker_store::destroy_empty(workers);
     rental_store::destroy_empty(rentals);

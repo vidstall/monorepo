@@ -76,8 +76,8 @@ export async function getRoutesEndpointAsync(): Promise<string> {
       });
       const fields =
         (obj.object as { json?: Record<string, string> } | null)?.json ?? null;
-      const endpoint = fields?.coordinator_endpoint;
-      if (!endpoint) throw new Error("coordinator_endpoint not set on-chain");
+      const endpoint = fields?.routes_endpoint;
+      if (!endpoint) throw new Error("routes_endpoint not set on-chain");
       return base64ToUtf8(endpoint);
     })();
   }

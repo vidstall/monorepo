@@ -14,8 +14,8 @@ export const JSON_RPC_URLS = {
 // per-domain modules and this map keeps the client in sync with that layout).
 const FUNCTION_MODULES: Record<string, string> = {
   create_registry: "registry",
-  set_coordinator_endpoint: "registry",
-  coordinator_endpoint: "registry",
+  set_routes_endpoint: "registry",
+  routes_endpoint: "registry",
 
   register_worker: "workers",
   update_worker_metadata: "workers",
