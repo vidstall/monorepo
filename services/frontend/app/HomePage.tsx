@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { createContractTransaction } from "@/lib/contract-api";
+import { suiToMist } from "@/lib/client-utils";
 import { dAppKit } from "@/lib/sui-dapp-kit";
 import {
   fetchAllWorkers,
@@ -356,7 +357,7 @@ function CreateRoomForm() {
       const tx = await createContractTransaction("order-room", {
         roomName: name,
         capacity: Number(capacity),
-        paymentMist: Number(budget),
+        paymentMist: suiToMist(budget).toString(),
         sender: account.address,
       });
 
@@ -371,8 +372,32 @@ function CreateRoomForm() {
         );
       }
 
+      setStatus("room ordered — locating rental…");
+      const network = (process.env.NEXT_PUBLIC_SUI_NETWORK ??
+        "devnet") as ContractNetwork;
+      const grpcClient = new SuiGrpcClient({
+        network,
+        baseUrl: GRPC_URLS[network],
+      });
+      const txResult = await grpcClient.getTransaction({
+        digest: result.Transaction.digest,
+        include: { events: true },
+      });
+      const event =
+        txResult.$kind === "Transaction"
+          ? txResult.Transaction.events?.find((e) =>
+              e.eventType.endsWith("::governance_events::RoomOrderCreated"),
+            )
+          : undefined;
+      const rentalId = event?.json?.rental_id as string | undefined;
+      if (!rentalId) {
+        throw new Error("Could not determine rental_id from order transaction");
+      }
+
       setStatus("room ordered — joining…");
-      router.push(`/rooms?roomName=${encodeURIComponent(name)}`);
+      router.push(
+        `/rooms?roomName=${encodeURIComponent(name)}&rentalId=${encodeURIComponent(rentalId)}`,
+      );
     } catch (err) {
       setStatus(null);
       setError(err instanceof Error ? err.message : "Failed to create room");
@@ -404,10 +429,11 @@ function CreateRoomForm() {
           onChange={(e) => setBudget(e.target.value)}
           placeholder="budget"
           type="number"
-          min={1}
+          step={0.01}
+          min={0.01}
           required
         />
-        <span className={styles.mistUnit}>MIST</span>
+        <span className={styles.mistUnit}>SUI</span>
       </div>
       <div className={styles.actions}>
         <ConnectButton />

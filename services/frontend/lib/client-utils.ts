@@ -1,3 +1,11 @@
+export const MIST_PER_SUI = 1_000_000_000n;
+
+export function suiToMist(sui: string): bigint {
+  const [whole, frac = ""] = sui.trim().split(".");
+  const fracPadded = (frac + "000000000").slice(0, 9);
+  return BigInt(whole || "0") * MIST_PER_SUI + BigInt(fracPadded || "0");
+}
+
 export function encodePassphrase(passphrase: string) {
   return encodeURIComponent(passphrase);
 }
@@ -34,6 +42,12 @@ const _GRPC_URLS: Record<string, string> = {
   mainnet: "https://fullnode.mainnet.sui.io:443",
 };
 
+function base64ToUtf8(base64: string): string {
+  const binary = atob(base64);
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
 export function getRoutesEndpoint(): string {
   return process.env.NEXT_PUBLIC_ROUTES_URL ?? "";
 }
@@ -64,7 +78,7 @@ export async function getRoutesEndpointAsync(): Promise<string> {
         (obj.object as { json?: Record<string, string> } | null)?.json ?? null;
       const endpoint = fields?.coordinator_endpoint;
       if (!endpoint) throw new Error("coordinator_endpoint not set on-chain");
-      return endpoint;
+      return base64ToUtf8(endpoint);
     })();
   }
   return _routesEndpointCache;
