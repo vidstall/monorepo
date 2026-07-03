@@ -6,23 +6,20 @@ import {
   queryRoutedAssignment,
 } from "@/lib/contract-queries";
 import { getCorsHeaders } from "@/lib/cors";
-import { getLiveKitURL } from "@/lib/getLiveKitURL";
-import { ConnectionDetails } from "@/lib/types";
-import {
-  AccessToken,
-  AccessTokenOptions,
-  VideoGrant,
-} from "livekit-server-sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { discoverMediaCandidates } from "@/lib/media-discovery";
 import { requestParticipantToken, selectBestMedia } from "@/lib/media-protocol";
 import { getPersistedNodeId } from "@/lib/operator-keypair";
-import { assignRoutedOrder } from "@/lib/operator-registration";
+import {
+  assignRoutedOrder,
+  orderRoomAsOperator,
+} from "@/lib/operator-registration";
 import { verifyWalletChallenge } from "@/lib/wallet-challenge";
 
-const API_KEY = process.env.LIVEKIT_API_KEY;
-const API_SECRET = process.env.LIVEKIT_API_SECRET;
-const LIVEKIT_URL = process.env.LIVEKIT_URL;
+// Capacity used for a free "Join a Room" order placed by routes' own
+// operator wallet (the free-join UI collects no capacity from the
+// participant, unlike "Order a Room").
+const FREE_JOIN_CAPACITY = 50;
 
 const COOKIE_KEY = "random-participant-postfix";
 
@@ -39,7 +36,6 @@ export async function GET(request: NextRequest) {
     const roomName = request.nextUrl.searchParams.get("roomName");
     const participantName = request.nextUrl.searchParams.get("participantName");
     const metadata = request.nextUrl.searchParams.get("metadata") ?? "";
-    const region = request.nextUrl.searchParams.get("region");
     let randomParticipantPostfix = request.cookies.get(COOKIE_KEY)?.value;
 
     if (typeof roomName !== "string") {
@@ -154,39 +150,46 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!LIVEKIT_URL) throw new Error("LIVEKIT_URL is not defined");
-    const livekitServerUrl = region
-      ? getLiveKitURL(LIVEKIT_URL, region)
-      : LIVEKIT_URL;
-    if (livekitServerUrl === undefined) throw new Error("Invalid region");
-
-    // Generate participant token
-    if (!randomParticipantPostfix) {
-      randomParticipantPostfix = randomString(4);
-    }
-    const participantToken = await createParticipantToken(
-      {
-        identity: `${participantName}__${randomParticipantPostfix}`,
-        name: participantName,
-        metadata,
-      },
+    // No rentalId: free "Join a Room". The media node's broker requires an
+    // on-chain-verified paid assignment for every token it issues (see
+    // verifyAssignment in xaisen_broker.go), so there is no way to skip
+    // payment entirely - routes' own operator wallet places a minimal real
+    // rental covering the discovered cluster's exact price, so no
+    // wallet/signature is needed from the participant.
+    const routerNodeId = getPersistedNodeId();
+    if (!routerNodeId) throw new Error("Router is not registered on-chain");
+    const candidates = await discoverMediaCandidates();
+    const selected = await selectBestMedia(candidates);
+    const freeRentalId = await orderRoomAsOperator(
       roomName,
+      FREE_JOIN_CAPACITY,
+      selected.priceMist,
     );
-
-    // Return connection details
-    const data: ConnectionDetails = {
-      serverUrl: livekitServerUrl,
-      roomName: roomName,
-      participantToken: participantToken,
-      participantName: participantName,
-    };
-    return new NextResponse(JSON.stringify(data), {
-      headers: {
-        "Content-Type": "application/json",
-        "Set-Cookie": buildCookieHeader(request, randomParticipantPostfix),
-        ...getCorsHeaders(request.headers.get("origin")),
-      },
+    const assignment = await assignRoutedOrder(
+      routerNodeId,
+      selected.nodeId,
+      selected.clusterId,
+      freeRentalId,
+    );
+    const identity = `${participantName}__${randomParticipantPostfix ?? randomString(4)}`;
+    const brokerResult = await requestParticipantToken(selected, routerNodeId, {
+      assignmentDigest: assignment.digest,
+      assignmentRevision: assignment.revision,
+      capacity: FREE_JOIN_CAPACITY,
+      identity,
+      metadata,
+      rentalId: freeRentalId,
+      roomName,
     });
+    return NextResponse.json(
+      {
+        serverUrl: brokerResult.serverUrl,
+        roomName,
+        participantToken: brokerResult.participantToken,
+        participantName,
+      },
+      { headers: getCorsHeaders(request.headers.get("origin")) },
+    );
   } catch (error) {
     if (error instanceof Error) {
       return new NextResponse(error.message, {
@@ -195,34 +198,4 @@ export async function GET(request: NextRequest) {
       });
     }
   }
-}
-
-function createParticipantToken(
-  userInfo: AccessTokenOptions,
-  roomName: string,
-) {
-  const at = new AccessToken(API_KEY, API_SECRET, userInfo);
-  at.ttl = "5m";
-  const grant: VideoGrant = {
-    room: roomName,
-    roomJoin: true,
-    canPublish: true,
-    canPublishData: true,
-    canSubscribe: true,
-  };
-  at.addGrant(grant);
-  return at.toJwt();
-}
-
-function getCookieExpirationTime(): string {
-  var now = new Date();
-  var time = now.getTime();
-  var expireTime = time + 60 * 120 * 1000;
-  now.setTime(expireTime);
-  return now.toUTCString();
-}
-
-function buildCookieHeader(request: NextRequest, value: string): string {
-  const secureFlag = request.nextUrl.protocol === "https:" ? "; Secure" : "";
-  return `${COOKIE_KEY}=${value}; Path=/; HttpOnly; SameSite=Strict${secureFlag}; Expires=${getCookieExpirationTime()}`;
 }

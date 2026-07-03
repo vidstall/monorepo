@@ -30,6 +30,8 @@ type BuildResult = {
   txBytes: string;
 };
 
+const MIN_ROOM_PAYMENT_MIST = 10_000_000n;
+
 function requireString(value: unknown, name: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`Missing ${name}`);
@@ -142,6 +144,10 @@ function addMoveCall(
   }
 
   if (action === "order-room") {
+    const paymentMist = requireU64(body.paymentMist, "paymentMist");
+    if (paymentMist < MIN_ROOM_PAYMENT_MIST) {
+      throw new Error(`paymentMist must be at least ${MIN_ROOM_PAYMENT_MIST}`);
+    }
     tx.moveCall({
       target: moveTarget("order_room"),
       typeArguments: [SUI_COIN_TYPE],
@@ -152,7 +158,7 @@ function addMoveCall(
           metadataBytes(requireString(body.roomName, "roomName")),
         ),
         tx.pure.u64(requireU64(body.capacity, "capacity")),
-        tx.coin({ balance: requireU64(body.paymentMist, "paymentMist") }),
+        tx.coin({ balance: paymentMist }),
         clock,
       ],
     });

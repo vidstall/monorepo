@@ -277,6 +277,54 @@ async function heartbeat(nodeId: string): Promise<void> {
   assertSuccess(result);
 }
 
+// Places a real (if minimal) on-chain room order paid for by routes' own
+// operator wallet, not the participant's. Used for free "Join a Room"
+// requests: the media node's broker hard-requires an on-chain-verified paid
+// assignment for every token it issues (see verifyAssignment in
+// xaisen_broker.go), so there is no way to skip payment entirely - routes
+// covers the discovered cluster's exact price on the participant's behalf
+// so no wallet/signature is needed from them.
+export async function orderRoomAsOperator(
+  roomName: string,
+  capacity: number,
+  paymentMist: bigint,
+): Promise<string> {
+  const config = loadContractConfig();
+  const keypair = loadOperatorKeypair();
+  const c = client();
+  const tx = new Transaction();
+  tx.setSender(keypair.toSuiAddress());
+  tx.moveCall({
+    target: moveTarget("order_room"),
+    typeArguments: [SUI_COIN_TYPE],
+    arguments: [
+      tx.object(config.registryObjectId),
+      tx.pure.vector("u8", metadataBytes(roomName)),
+      tx.pure.u64(BigInt(capacity)),
+      tx.coin({ balance: paymentMist }),
+      tx.object(SUI_CLOCK_OBJECT_ID),
+    ],
+  });
+  const result = await c.signAndExecuteTransaction({
+    transaction: tx,
+    signer: keypair,
+    options: { showEvents: true, showEffects: true },
+  });
+  assertSuccess(result);
+
+  const event = result.events?.find((e) =>
+    e.type.endsWith("::governance_events::RoomOrderCreated"),
+  );
+  const rentalId = (event?.parsedJson as Record<string, unknown> | undefined)
+    ?.rental_id;
+  if (rentalId === undefined || rentalId === null) {
+    throw new Error(
+      "order_room succeeded but rental_id could not be parsed from events",
+    );
+  }
+  return String(rentalId);
+}
+
 export async function assignRoutedOrder(
   routerNodeId: string,
   mediaNodeId: string,
