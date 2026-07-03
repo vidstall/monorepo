@@ -17,5 +17,33 @@ services:
       retries: 5
       start_period: 5s
 
+  operator:
+    build:
+      context: ./operator
+    image: xaisen-coordinator-operator:latest
+    container_name: xaisen-coordinator-operator
+    restart: unless-stopped
+    depends_on:
+      - redis
+    # Mounted at / so contract-config.ts's default relative resolution from
+    # /app (three levels up: /app -> / -> / -> /) lands on /runtime, matching
+    # this mount without needing CONTRACT_ENV_PATH/COORDINATOR_OPERATOR_KEY_PATH
+    # to be set explicitly for local dev.
+    volumes:
+      - ../../runtime:/runtime
+    environment:
+      CONTRACT_ENV_PATH:
+      CONTRACT_NETWORK:
+      CONTRACT_PACKAGE_ID:
+      CONTRACT_REGISTRY_OBJECT_ID:
+      COORDINATOR_INTERNAL_ADDRESS: "redis:6379"
+      COORDINATOR_OPERATOR_KEY_PATH:
+      COORDINATOR_INSTANCE_NAME:
+      COORDINATOR_HEARTBEAT_INTERVAL_MS:
+      COORDINATOR_REGION:
+      COORDINATOR_PRICE_PER_RENTAL_MIST:
+      COORDINATOR_STAKE_MIST:
+      COORDINATOR_DISABLE_SELF_REGISTRATION:
+
 volumes:
   coordinator-redis-data:

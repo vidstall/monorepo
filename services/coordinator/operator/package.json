@@ -1,0 +1,21 @@
+{
+  "name": "xaisen-coordinator-operator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mysten/sui": "2.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.4",
+    "tsx": "4.19.2",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
