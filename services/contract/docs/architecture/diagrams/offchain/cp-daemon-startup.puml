@@ -1,0 +1,42 @@
+@startuml
+' Generated: 2026-03-07 | Phase: 3 | Status: AS-BUILT
+title CP Daemon Startup
+
+participant "CP Daemon" as cp
+participant "Environment" as env
+participant "Sui RPC" as rpc
+
+cp -> env : loadNetworkConfig()
+env --> cp : config (packageId, registryIds, rpcUrl)
+
+cp -> env : loadKeypair('CP_KEYPAIR')
+env --> cp : Ed25519Keypair
+
+cp -> cp : ensureRegistered()
+activate cp
+
+cp -> env : check CP_CAP_ID
+alt CP_CAP_ID is set
+  env --> cp : cpCapId (skip registration)
+else CP_CAP_ID not set
+  note right of cp: See integration/auto-registration.puml
+  cp -> rpc : registration::register (Step 1)
+  rpc --> cp : ControlPlaneCap + StakePosition
+  cp -> rpc : control_plane_registry::register_cp (Step 2)
+  rpc --> cp : success
+end
+
+deactivate cp
+
+cp -> cp : startHeartbeat(interval=30s)
+cp -> cp : createEventHandler()
+cp -> cp : start 3 EventPollers\n(relay_registry, control_plane_registry, room_manager)
+
+note right of cp
+  Daemon now running:
+  - Heartbeat loop (30s)
+  - Event polling (5s)
+  - Graceful shutdown on SIGTERM/SIGINT
+end note
+
+@enduml

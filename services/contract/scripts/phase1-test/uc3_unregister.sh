@@ -1,0 +1,1 @@
+sui client call --package 0x16c291d29eafdf1c64581526d988f905b3c383af295e2f25eee307b4d6bb51c4 --module registration --function unregister --args 0x38de63c6c51b4aca59d1889264c89d1e6fc1a7d39dd1f461aea69937a0abd94b 0x597b1a7bbbf2f201bca59ee36d4f87f722f7f14500696c9d0387f03aa26a5431 --gas-budget 50000000

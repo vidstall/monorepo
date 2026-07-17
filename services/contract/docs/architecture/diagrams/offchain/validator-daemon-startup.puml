@@ -1,0 +1,44 @@
+@startuml
+' Generated: 2026-03-07 | Phase: 3 | Status: AS-BUILT
+title Validator Daemon Startup
+
+participant "Validator Daemon" as val
+participant "Environment" as env
+participant "Sui RPC" as rpc
+
+val -> env : loadNetworkConfig()
+env --> val : config
+
+val -> env : loadKeypair('SUI_PRIVATE_KEY')
+env --> val : mainKeypair
+
+val -> val : ensureRegistered()
+activate val
+
+val -> env : check VALIDATOR_CAP_ID
+alt VALIDATOR_CAP_ID is set
+  env --> val : validatorCapId (skip registration)
+else VALIDATOR_CAP_ID not set
+  note right of val: See integration/auto-registration.puml
+  val -> rpc : registration::register (Step 1)
+  rpc --> val : MinerCap + StakePosition
+  val -> rpc : validator_registry::register_validator (Step 2)
+  rpc --> val : success
+end
+
+deactivate val
+
+val -> val : generateSessionKeypair()
+note right: Fresh Ed25519 keypair\n(NOT derived from main wallet)
+
+val -> val : start measurement loop (60s)
+val -> val : start EventPoller\n(validator_registry events)
+
+note right of val
+  Daemon now running:
+  - Measurement + SessionProof cycle (60s)
+  - Event polling (10s)
+  - Graceful shutdown on SIGTERM/SIGINT
+end note
+
+@enduml

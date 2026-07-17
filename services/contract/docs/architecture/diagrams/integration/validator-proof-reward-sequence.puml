@@ -1,0 +1,115 @@
+@startuml Validator Proof & Reward Distribution
+!theme plain
+skinparam sequenceArrowThickness 1.5
+
+title DVConf — Validator: Session Proof & Reward Distribution
+
+participant "Validator\nDaemon" as Val
+participant "Relay\nDaemon" as Relay
+database "Sui Chain" as Chain
+actor "Room Creator" as User
+
+== Validator Discovery (Event-Driven) ==
+
+Val -> Chain : poll events
+Chain --> Val : EscrowCreated(escrow_id, room_id, amount)
+Val -> Val : escrowMap[room_id] = escrow_id
+
+Chain --> Val : RoomAssigned(room_id, relay_id)
+Val -> Val : activeRooms[room_id].relayMinerId = relay_id
+
+Val -> Chain : devInspect: lookup relay's\nStakePosition object ID
+Chain --> Val : stakePositionId
+Val -> Val : activeRooms[room_id].relayStakeId = stakePositionId
+
+== Measurement Cycle ==
+
+loop Every 60s per active room
+  Val -> Relay : GET /metrics?roomId=xxx
+  Relay --> Val : { uniquePeers, bytesForwarded,\n  packetsForwarded }
+
+  Val -> Val : collectMeasurements(relayMinerId)\n→ packets, bytes, latency,\n  loss_bps, jitter
+
+  Val -> Val : buildSessionProof(\n  room_id, relay_id, validator_id,\n  session_addr, measurement, epoch)
+
+  note over Val
+    **BCS Serialization (IC-2)**
+    120 bytes, strict field order:
+    room_id(32) | relay_id(32)
+    | packets(u64) | bytes(u64)
+    | peers(u64) | duration(u64)
+    | latency(u64) | loss_bps(u64)
+    | jitter(u64)
+  end note
+
+  Val -> Val : **Dual-Key Sign (IC-4)**\n  sig_public = sign(bcs, main_key)\n  sig_session = sign(bcs, session_key)
+
+  alt Escrow exists for room
+    Val -> Chain : economic_layer::submit_session_proof(\n  escrow, val_reg, relay_reg,\n  pubkey_public, pubkey_session,\n  sig_public, sig_session,\n  room_id, relay_id, packets,\n  bytes, peers, duration,\n  latency, loss_bps, jitter)
+
+    Chain -> Chain : Verify: derive addr(pubkey_public)\n  == registered validator
+    Chain -> Chain : Verify: derive addr(pubkey_session)\n  == tx sender
+    Chain -> Chain : Verify: ed25519(sig_public, bcs)
+    Chain -> Chain : Verify: ed25519(sig_session, bcs)
+    Chain -> Chain : Store proof in escrow.proofs
+    Chain -> Chain : relay_registry::update_rtt(\n  relay_id, avg_latency_ms)
+
+    Chain --> Val : SessionProofSubmitted event
+  else No escrow yet
+    Val -> Val : Log proof locally (skip submit)
+  end
+end
+
+== Room Close → Reward Distribution ==
+
+User -> Chain : room_manager::close_room(room_id)
+Chain --> Val : RoomClosed event
+
+Val -> Val : lookup escrowId from escrowMap
+Val -> Val : lookup relayStakeId from activeRooms
+
+loop Poll escrow every 5s (timeout 60s)
+  Val -> Chain : devInspect: escrow.proofs.length()
+  Chain --> Val : proof_count
+  Val -> Val : proof_count >= MIN_PROOFS?
+end
+
+Val -> Chain : economic_layer::distribute_rewards(\n  net_reg, room_mgr, escrow,\n  relay_stake)
+
+Chain -> Chain : median_bytes = median(proofs[].bytes)
+Chain -> Chain : median_loss = median(proofs[].loss_bps)
+
+alt loss ≤ 200 bps (2%)
+  Chain -> Chain : quality_multiplier = 10000\n(excellent)
+else loss ≤ 500 bps (5%)
+  Chain -> Chain : quality_multiplier = 8000\n(good)
+else loss ≤ 1000 bps (10%)
+  Chain -> Chain : quality_multiplier = 5000\n(acceptable)
+else loss > 1000 bps
+  Chain -> Chain : quality_multiplier = 0\n→ **SLASH relay stake 10%**
+end
+
+alt quality_multiplier > 0
+  Chain -> Chain : total = BASE_RATE × median_bytes\n  × multiplier / 10000
+  Chain -> Chain : relay_share = total × 70%
+  Chain -> Chain : validator_pool = total × 15%
+  Chain -> Chain : cp_pool = total × 15%
+
+  note over Chain
+    Validator pool split by **accuracy**:
+    accuracy[i] = 10000 - |bytes[i] - median|
+    Each validator gets proportional share
+  end note
+
+  Chain -> Relay : Transfer relay_share coin
+  Chain -> Val : Transfer validator_share coin(s)
+  Chain -> User : Transfer cp_pool + remainder
+else Slash
+  Chain -> Chain : slash_amount = relay_stake × 10%
+  Chain -> Chain : Return slash coin to caller
+end
+
+Chain --> Val : RewardsDistributed event
+Val -> Val : Remove room from activeRooms\n& escrowMap
+
+@enduml

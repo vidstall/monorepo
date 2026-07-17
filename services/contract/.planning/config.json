@@ -1,0 +1,11 @@
+{
+  "mode": "yolo",
+  "granularity": "coarse",
+  "parallelization": true,
+  "commit_docs": true,
+  "model_profile": "quality",
+  "note": "GSD workflow toggles removed — research, plan_check, verifier, nyquist handled by swarm agents (Architect, Verification, QC)",
+  "workflow": {
+    "research": true
+  }
+}

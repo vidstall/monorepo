@@ -1,0 +1,6 @@
+[submodule "services/client"]
+	path = services/client
+	url = https://github.com/vidstall/client.git
+[submodule "services/worker"]
+	path = services/worker
+	url = https://github.com/vidstall/worker.git

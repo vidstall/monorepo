@@ -1,0 +1,34 @@
+@startuml
+' Generated: 2026-03-07 | Phase: 3 | Status: AS-BUILT
+title CP Daemon Runtime Loop
+
+participant "CP Daemon" as cp
+participant "Sui RPC" as rpc
+participant "In-Memory\nRelay State" as state
+
+== Heartbeat (every 30s) ==
+
+cp -> rpc : control_plane_registry::heartbeat\n(networkRegistryId, cpRegistryId, cpCapId)
+rpc --> cp : success (via executeWithRetry)
+
+== Event Polling (every 5s) ==
+
+cp -> rpc : queryEvents(relay_registry)
+rpc --> cp : events[]
+
+loop for each event
+  alt RelayRegistered
+    cp -> state : add relay candidate\n(reputation=50%, rtt=0, load=0)
+  else RelayLoadUpdated
+    cp -> state : update relay.load
+  else RelayRTTUpdated
+    cp -> state : update relay.rtt
+  else RoomCreated
+    cp -> state : get all relay candidates
+    cp -> cp : scoreRelays(candidates, weights, region)
+    note right: Weighted formula:\nrep(30%) + rtt(30%) + load(20%)\n+ stake(10%) + region(10%)
+    cp -> cp : log ranked results\n(vote NOT submitted -- v2)
+  end
+end
+
+@enduml
