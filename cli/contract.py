@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -15,10 +16,14 @@ MOVE_TOML = CONTRACT_DIR / "Move.toml"
 
 
 def build(env: str) -> int:
+    if env == "devnet":
+        sync_devnet_chain_id()
     return run(["sui", "move", "--build-env", env, "build", "--path", CONTRACT_DIR])
 
 
 def test(env: str) -> int:
+    if env == "devnet":
+        sync_devnet_chain_id()
     return run(["sui", "move", "--build-env", env, "test", "--path", CONTRACT_DIR])
 
 
@@ -27,6 +32,50 @@ def check(env: str) -> int:
     if code != 0:
         return code
     return test(env)
+
+
+def sync_devnet_chain_id() -> None:
+    """Best-effort: refresh Move.toml's `devnet` chain identifier from the
+    live network before a devnet build, since devnet resets its genesis
+    (and therefore its chain identifier) periodically and vidctl has no
+    other mechanism to detect that drift. Never blocks the build — on any
+    failure (no network, sui not on PATH, etc.) it warns and leaves
+    Move.toml as-is, since the existing value might still be correct.
+    """
+    try:
+        result = subprocess.run(
+            ["sui", "client", "--client.env", "devnet", "chain-identifier", "--json"],
+            capture_output=True, text=True, check=False, timeout=15,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(f"Warning: could not refresh devnet chain-id ({exc}); using existing Move.toml value.", file=sys.stderr)
+        return
+    if result.returncode != 0:
+        print(
+            f"Warning: could not refresh devnet chain-id ({result.stderr.strip() or 'sui command failed'}); "
+            "using existing Move.toml value.",
+            file=sys.stderr,
+        )
+        return
+    try:
+        chain_id = json.loads(result.stdout.strip())
+    except json.JSONDecodeError:
+        print("Warning: could not parse devnet chain-id response; using existing Move.toml value.", file=sys.stderr)
+        return
+
+    if not MOVE_TOML.exists():
+        return
+    text = MOVE_TOML.read_text()
+    new_line = f'devnet = "{chain_id}"'
+    if re.search(r'(?m)^devnet\s*=\s*".*"$', text):
+        updated = re.sub(r'(?m)^devnet\s*=\s*".*"$', new_line, text)
+    elif "[environments]" in text:
+        updated = text.replace("[environments]", f"[environments]\n{new_line}", 1)
+    else:
+        return
+    if updated != text:
+        MOVE_TOML.write_text(updated)
+        print(f"Move.toml: devnet chain-id refreshed -> {chain_id}")
 
 
 def ensure_active_sui_env(env: str) -> int:
@@ -51,6 +100,9 @@ def publish(
     if not dry_run and not yes:
         print("Refusing to publish contract without --dry-run or --yes.", file=sys.stderr)
         return 2
+
+    if env == "devnet":
+        sync_devnet_chain_id()
 
     code = ensure_active_sui_env(env)
     if code != 0:
