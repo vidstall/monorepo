@@ -143,16 +143,7 @@ def publish(
     if dry_run:
         return 0
 
-    publish_code, publish_result, publish_error = run_sui_json(
-        [
-            "sui",
-            "client",
-            "publish",
-            CONTRACT_DIR,
-            "--json",
-            *(["--gas-budget", gas_budget] if gas_budget else []),
-        ]
-    )
+    publish_code, publish_result, publish_error = run_sui_json(real_publish_command(env, gas_budget))
     if publish_result is None:
         if publish_error:
             sys.stderr.write(publish_error)
@@ -184,6 +175,32 @@ def publish(
         },
     )
     return 0
+
+
+def real_publish_command(env: str, gas_budget: str | None) -> list[str]:
+    """The real (non-dry-run) publish transaction command for `env`.
+
+    devnet is ephemeral (Sui wipes it periodically) and the persistent
+    `sui client publish` path is broken for it in the currently available
+    Sui CLI ("the package does not define an `devnet` environment", even
+    though it does — Sui's own error message recommends `test-publish`
+    instead). `sui client test-publish` (without --dry-run) still executes
+    a real on-chain transaction, it just skips recording into
+    Published.toml, which is correct for an ephemeral network anyway.
+    testnet/mainnet are unaffected and keep using `sui client publish`.
+    """
+    if env == "devnet":
+        return [
+            "sui", "client", "test-publish", CONTRACT_DIR,
+            "--build-env", env,
+            "--pubfile-path", runtime_pubfile_path(env),
+            "--json",
+            *(["--gas-budget", gas_budget] if gas_budget else []),
+        ]
+    return [
+        "sui", "client", "publish", CONTRACT_DIR, "--json",
+        *(["--gas-budget", gas_budget] if gas_budget else []),
+    ]
 
 
 def upgrade_existing(
