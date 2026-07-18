@@ -62,20 +62,6 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                 destination_address_prefix="*",
             )
         )
-    if instance.get("service") == "media":
-        security_rules.append(
-            network.SecurityRuleArgs(
-                name="allow-media-broker",
-                priority=120,
-                direction="Inbound",
-                access="Allow",
-                protocol="Tcp",
-                source_port_range="*",
-                destination_port_range="7890",
-                source_address_prefix="*",
-                destination_address_prefix="*",
-            )
-        )
     nsg = network.NetworkSecurityGroup(
         f"{name}-vm-nsg",
         resource_group_name=resource_group.name,
