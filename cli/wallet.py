@@ -20,7 +20,6 @@ def ensure_wallet(name: str, service: str, env_name: str) -> tuple[dict[str, Any
     created = False
     if entry is None:
         address, secret_key = generate_sui_keypair()
-        livekit_key, livekit_secret = generate_livekit_keys()
         entry = {
             "name": name,
             "service": service,
@@ -29,9 +28,6 @@ def ensure_wallet(name: str, service: str, env_name: str) -> tuple[dict[str, Any
             "secret_key": secret_key,
             "x25519_secret": generate_x25519_secret(),
             "node_id": "",
-            "cluster_id": "",
-            "livekit_api_key": livekit_key,
-            "livekit_api_secret": livekit_secret,
             "created_at": _timestamp(),
             "last_balance_mist": 0,
             "last_faucet_at": "",
@@ -117,24 +113,6 @@ def x25519_public_key_bytes(entry: dict[str, Any]) -> bytes:
     return key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
 
 
-def media_broker_key_content(entry: dict[str, Any]) -> str:
-    """The x25519_secret re-encoded as unpadded base64 (RawStdEncoding), the
-    format services/media/pkg/service/xaisen_broker.go's loadOrCreateX25519Key
-    expects on disk. Same underlying 32-byte scalar as x25519_secret."""
-    raw_secret = base64.b64decode(entry["x25519_secret"])
-    return base64.b64encode(raw_secret).decode().rstrip("=")
-
-
-def generate_livekit_keys() -> tuple[str, str]:
-    import secrets
-
-    return f"xaisen{secrets.token_hex(6)}", secrets.token_urlsafe(32)
-
-
-def livekit_keys_env_value(entry: dict[str, Any]) -> str:
-    return f"{entry['livekit_api_key']}: {entry['livekit_api_secret']}"
-
-
 def current_balance_mist(address: str) -> int:
     result = subprocess.run(
         ["sui", "client", "balance", address, "--json"],
@@ -150,13 +128,6 @@ def current_balance_mist(address: str) -> int:
         if str(balance.get("coinType", "")).endswith("::sui::SUI"):
             total += int(balance.get("balance", 0))
     return total
-
-
-def find_wallet_by_service(wallets: dict[str, Any], service: str, env_name: str) -> dict[str, Any] | None:
-    for entry in wallets.get("wallets", []):
-        if entry.get("service") == service and entry.get("env", env_name) == env_name:
-            return entry
-    return None
 
 
 def operator_state_json(entry: dict[str, Any]) -> str:

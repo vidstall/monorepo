@@ -29,7 +29,10 @@ NETWORKS = ("devnet", "testnet", "mainnet")
 PROVIDERS = ("aws", "gcp", "azure", "alibaba", "digitalocean", "tencent", "cloudflare")
 SERVICE_BACKENDS = {service: "vm" for service in DOCKER_SERVICES}
 REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "CONTRACT_REGISTRY_OBJECT_ID")
-SERVICE_PORTS = {"routes": 3001, "coordinator": 6379, "media": 7880, "frontend": 3000}
+# cp-daemon/forensic-cli/validator-daemon have no externally-published port
+# (default 0 via SERVICE_PORTS.get(service, 0)) — they're chain-facing
+# daemons/CLIs, not client-facing servers.
+SERVICE_PORTS = {"signaling": 8080, "relay": 4000}
 VM_INSTANCE_SIZES = {
     "aws": "t3.micro",
     "gcp": "e2-micro",
@@ -169,25 +172,7 @@ def instance_address(name: str) -> str:
         return ""
 
 
-def registry_status(name: str, service: str, address: str, env_name: str) -> str:
-    if service == "media":
-        # media's on-chain bootstrap runs on the orchestrator via
-        # media_bootstrap.py, not inside the container, so it never logs
-        # "operator address"/"node_id=" lines the way routes' own
-        # self-registration TypeScript does. Read wallet.toml instead.
-        from . import wallet as wallet_module
-
-        entry = wallet_module.find_wallet(wallet_module.read_wallets(), name, env_name)
-        if entry is None:
-            return "unknown (no wallet entry found)"
-        cluster_id = entry.get("cluster_id")
-        node_id = entry.get("node_id")
-        if cluster_id:
-            return f"registered (node_id={node_id} cluster_id={cluster_id})"
-        if node_id:
-            return f"not registered (node_id={node_id}, SFU role/cluster pending)"
-        return "not registered"
-
+def registry_status(name: str, service: str, address: str) -> str:
     key_path = SSH_KEY_ROOT / name / "id_ed25519"
     if not address or not key_path.exists():
         return "unknown (host unreachable)"
@@ -286,58 +271,6 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
     extra_vars["xaisen_registry_username"] = config.username
     extra_vars["xaisen_registry_password"] = config.password
     return extra_vars
-
-
-def bootstrap_media(name: str, env_name: str, wallet_entry: dict[str, Any]) -> dict[str, str]:
-    """Idempotently registers a media instance's operator wallet on-chain
-    (worker + ROLE_SFU + media cluster), then returns the Ansible extra_vars
-    needed to actually run it: XAISEN_CLUSTER_ID, XAISEN_LIVEKIT_URL,
-    LIVEKIT_KEYS, and the broker's own x25519 key file content. The one-time
-    registration steps no-op if wallet_entry already has a cluster_id from a
-    previous run, but the on-chain node profile (broker endpoint/public_url)
-    is always republished, since it can change across restarts."""
-    from . import media_bootstrap, wallet
-
-    address = instance_address(name)
-    if not address:
-        raise RuntimeError(f"could not resolve public IP for {name}; run inventory first")
-    public_url = f"https://{address}.sslip.io"
-
-    contract_path = contract_env_path(env_name)
-    contract_values = read_env_file(contract_path)
-    package_id = contract_values.get("CONTRACT_PACKAGE_ID", "")
-    original_package_id = contract_values.get("CONTRACT_ORIGINAL_PACKAGE_ID", "") or package_id
-    registry_id = contract_values.get("CONTRACT_REGISTRY_OBJECT_ID", "")
-    if not package_id or not registry_id:
-        raise RuntimeError(f"{contract_path} is missing CONTRACT_PACKAGE_ID/CONTRACT_REGISTRY_OBJECT_ID")
-
-    # Re-fetch media's entry from a fresh read so the object we mutate below
-    # is the same one that gets persisted by write_wallets (wallet_entry, as
-    # passed in from control(), came from ensure_wallet()'s own separate
-    # read/write cycle and is not part of this `wallets` dict).
-    wallets = wallet.read_wallets()
-    media_entry = wallet.find_wallet(wallets, name, env_name)
-    if media_entry is None:
-        raise RuntimeError(f"wallet entry for {name} disappeared between ensure_wallet and bootstrap_media")
-    routes_entry = wallet.find_wallet_by_service(wallets, "routes", env_name)
-
-    try:
-        media_bootstrap.ensure_media_registered(
-            media_entry, routes_entry, env_name, package_id, original_package_id, registry_id, public_url,
-        )
-    finally:
-        # Persist whatever progress was made (e.g. node_id from a successful
-        # register_worker) even if a later step raised, so a retry can pick
-        # up where it left off instead of re-registering from scratch.
-        wallet.write_wallets(wallets)
-    wallet_entry.update(media_entry)
-
-    return {
-        "xaisen_cluster_id": str(media_entry["cluster_id"]),
-        "xaisen_media_public_url": public_url,
-        "xaisen_media_broker_key": wallet.media_broker_key_content(media_entry),
-        "xaisen_livekit_keys": wallet.livekit_keys_env_value(media_entry),
-    }
 
 
 def deploy(yes: bool) -> int:
@@ -497,17 +430,6 @@ def control(
                     if wallet_entry is not None
                     else None
                 )
-                if service == "media" and wallet_entry is not None:
-                    failed_stage = "media_bootstrap"
-                    try:
-                        media_vars = bootstrap_media(name, env_name, wallet_entry)
-                        configure_extra_vars = {**(configure_extra_vars or {}), **media_vars}
-                    except (RuntimeError, subprocess.CalledProcessError, OSError) as exc:
-                        message = f"Media on-chain bootstrap failed for {name}: {exc}"
-                        print(message, file=sys.stderr)
-                        record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
-                        return 1
-                    failed_stage = "configure"
                 code = configure(host_limit=name, container_state=container_state, extra_vars=configure_extra_vars)
 
         if code == 0 and action != "kill":
@@ -531,7 +453,7 @@ def control(
         print(f"IP:      {address or 'unknown'}")
         print(f"Wallet:  {wallet_address[:8]}...")
         print(f"Balance: {balance_mist / 1_000_000_000:.4f} SUI")
-        print(f"Registry: {registry_status(name, service, address, env_name)}")
+        print(f"Registry: {registry_status(name, service, address)}")
 
     record_history(
         action,
@@ -631,25 +553,12 @@ def alibaba_vm_target_urns(
         ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-ssh"),
         ("alicloud:ecs/instance:Instance", f"{name}-vm"),
     ]
-    if service in ("routes", "frontend"):
-        resources.extend(
-            [
-                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-http"),
-                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-https"),
-            ]
-        )
-    elif service == "media":
-        resources.extend(
-            [
-                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-http"),
-                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-https"),
-                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-signal"),
-                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-ice"),
-                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-broker"),
-                ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-rtc"),
-            ]
-        )
-    elif has_service_port:
+    # TODO: relay needs UDP security-group rules for its RTC/pipe port ranges
+    # (10000-10100, 40000-40100 — see services/worker/apps/relay/.env.example),
+    # which this single-TCP-port model doesn't express yet. Only the plain
+    # service port (e.g. relay's WS_PORT, signaling's SIGNALING_PORT) is
+    # opened below until that's designed.
+    if has_service_port:
         resources.append(("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-port"))
     return [f"{prefix}{resource_type}::{resource_name}" for resource_type, resource_name in resources]
 

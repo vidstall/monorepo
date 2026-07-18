@@ -8,10 +8,10 @@ from pathlib import Path
 from .context import (
     ANSIBLE_DIR,
     DOCKER_SERVICES,
+    DOCKERFILES,
     REGISTRY_SECRETS_DIR,
     RUNTIME_REGISTRY_TOML,
     command_env,
-    contract_env_path,
     git_short_sha,
     read_env_file,
     run,
@@ -228,9 +228,9 @@ def each_service(action: str, service: str | None, all_services: bool, tag: str 
         resolved_tag = tag or git_short_sha()
         for name in services:
             context = DOCKER_SERVICES[name]
+            dockerfile = DOCKERFILES[name]
             image = image_name(name, resolved_tag)
-            build_args = frontend_contract_build_args() if name == "frontend" else {}
-            code = run_docker_action(action, image, context, build_args)
+            code = run_docker_action(action, image, context, dockerfile)
             if code != 0:
                 return code
             if action == "push":
@@ -244,26 +244,15 @@ def each_service(action: str, service: str | None, all_services: bool, tag: str 
         return 2
 
 
-def frontend_contract_build_args() -> dict[str, str]:
-    from . import infra
-
-    env_name = infra.active_stack()
-    values = read_env_file(contract_env_path(env_name))
-    return {
-        "NEXT_PUBLIC_PACKAGE_ID": values.get("CONTRACT_PACKAGE_ID", ""),
-        "NEXT_PUBLIC_REGISTRY_OBJECT_ID": values.get("CONTRACT_REGISTRY_OBJECT_ID", ""),
-        "NEXT_PUBLIC_SUI_NETWORK": env_name,
-        # Force real on-chain route discovery instead of the Dockerfile's stale "/api" default.
-        "NEXT_PUBLIC_ROUTES_URL": "",
-    }
-
-
-def run_docker_action(action: str, image: str, context: Path, build_args: dict[str, str] | None = None) -> int:
+def run_docker_action(action: str, image: str, context: Path, dockerfile: Path) -> int:
     if action == "build":
-        args = ["docker", "buildx", "build", "--platform", TARGET_PLATFORM, "--load", "-t", image]
-        for key, value in (build_args or {}).items():
-            args.extend(["--build-arg", f"{key}={value}"])
-        args.append(str(context))
+        args = [
+            "docker", "buildx", "build",
+            "--platform", TARGET_PLATFORM,
+            "--load", "-t", image,
+            "-f", str(dockerfile),
+            str(context),
+        ]
         return run(args)
     if action == "push":
         return run(["docker", "push", image])

@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 
 from . import contract, doctor, infra, registry
-from . import object as object_cli
 from .context import DOCKER_SERVICES, bootstrap
 
 
@@ -29,7 +28,6 @@ def build_parser() -> argparse.ArgumentParser:
     add_contract_parser(subparsers)
     add_registry_parser(subparsers)
     add_infra_parser(subparsers)
-    add_object_parser(subparsers)
     return parser
 
 
@@ -192,21 +190,3 @@ def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.Argume
                 getattr(args, "all_region", False),
             )
         )
-
-
-def add_object_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    parser = subparsers.add_parser("object", help="Manage object-storage static sites (e.g. frontend).")
-    actions = parser.add_subparsers(dest="action", required=True)
-
-    publish = actions.add_parser("publish", help="Build and publish an object-storage site.")
-    publish.add_argument("--name", required=True, help="Object instance name.")
-    publish.add_argument("--object", required=True, choices=sorted(object_cli.OBJECT_TYPES), help="Object type to publish.")
-    publish.add_argument("--provider", required=True, choices=sorted(object_cli.PROVIDERS), help="Cloud provider.")
-    publish.set_defaults(handler=lambda args: object_cli.publish(args.name, args.object, args.provider))
-
-    delete = actions.add_parser("delete", help="Delete an object-storage site.")
-    delete.add_argument("--name", required=True, help="Object instance name.")
-    delete.add_argument("--object", required=True, choices=sorted(object_cli.OBJECT_TYPES), help="Object type to delete.")
-    delete.add_argument("--provider", required=True, choices=sorted(object_cli.PROVIDERS), help="Cloud provider.")
-    delete.add_argument("--yes", action="store_true", help="Confirm destructive object deletion.")
-    delete.set_defaults(handler=lambda args: object_cli.delete(args.name, args.object, args.provider, args.yes))

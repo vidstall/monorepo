@@ -26,13 +26,21 @@ PULUMI_STATE_DIR = ROOT / "secrets" / "pulumi-state"
 PULUMI_PASSPHRASE_FILE = ROOT / "secrets" / "pulumi-passphrase"
 GENERATED_INVENTORY = ANSIBLE_DIR / "inventory" / "hosts.generated.yml"
 
+WORKER_DIR = ROOT / "services" / "worker"
+
+# Every worker role's Dockerfile lives at services/worker/apps/<name>/Dockerfile,
+# but the Docker build *context* for all of them is the pnpm workspace root
+# (WORKER_DIR) so pnpm can resolve the full workspace dependency graph
+# (workspace:* deps symlink to sibling packages/*). See DOCKERFILES below for
+# the per-service Dockerfile path passed via `docker build -f`.
 DOCKER_SERVICES = {
-    "frontend": ROOT / "services" / "frontend",
-    "routes": ROOT / "services" / "routes",
-    "media": ROOT / "services" / "media",
-    "coordinator": ROOT / "services" / "coordinator",
-    "vclient": ROOT / "services" / "vclient",
+    "cp-daemon": WORKER_DIR,
+    "forensic-cli": WORKER_DIR,
+    "relay": WORKER_DIR,
+    "signaling": WORKER_DIR,
+    "validator-daemon": WORKER_DIR,
 }
+DOCKERFILES = {name: WORKER_DIR / "apps" / name / "Dockerfile" for name in DOCKER_SERVICES}
 
 
 def venv_bin(name: str) -> Path:
