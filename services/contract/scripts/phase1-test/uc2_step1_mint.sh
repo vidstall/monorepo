@@ -1,1 +1,0 @@
-sui client call --package 0x16c291d29eafdf1c64581526d988f905b3c383af295e2f25eee307b4d6bb51c4 --module token --function mint --args 0xbec5072d83dce1d4cbecdd26a8770efdb8a60d5fda9f2f3f640d0587a3425d8e 1000000000 0x3357c00f615f4cc1d89e0b580603ff9f474ee88bff89aecf587caf9075f5d306 --gas-budget 50000000

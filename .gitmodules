@@ -4,3 +4,6 @@
 [submodule "services/worker"]
 	path = services/worker
 	url = https://github.com/vidstall/worker.git
+[submodule "services/contract"]
+	path = services/contract
+	url = https://github.com/vidstall/contract.git

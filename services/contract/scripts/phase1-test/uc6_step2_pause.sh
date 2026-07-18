@@ -1,1 +1,0 @@
-sui client call --package 0x16c291d29eafdf1c64581526d988f905b3c383af295e2f25eee307b4d6bb51c4 --module network_registry --function set_paused --args 0xc04dd70241ea49a8d262c26f67a9937b521e7f25013db9088ea08209c1649553 0x717ba4fe9c00b131bf331bc50033a98d3e9daaec272026b06adfec1b5816438f true --gas-budget 50000000
