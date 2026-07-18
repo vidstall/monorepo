@@ -2,28 +2,46 @@ from __future__ import annotations
 
 import base64
 import json
+import random
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
-from .context import RUNTIME_WALLET_TOML, run
+from .context import RUNTIME_WALLET_TOML, WALLET_SECRETS_DIR, run, wallet_secrets_path
 
 MIN_GAS_MIST = 2_000_000_000  # 2 SUI
 FAUCET_NETWORKS = ("devnet", "testnet")
 
 
-def ensure_wallet(name: str, service: str, env_name: str) -> tuple[dict[str, Any], bool]:
-    wallets = read_wallets()
-    entry = find_wallet(wallets, name, env_name)
+def checkout_wallet(name: str, service: str, provider: str, env_name: str) -> tuple[dict[str, Any], bool]:
+    """Assign a free pooled wallet to (name, service, provider, env_name).
+
+    Idempotent: if this exact instance identity already holds an assignment
+    (e.g. a `restart` on an already-running instance), that wallet is reused
+    rather than checking out a second one. Otherwise a uniformly random free
+    wallet is picked; if the pool has none free, one is lazily generated and
+    assigned. Returns (entry, created).
+    """
+    pool = _read_pool(env_name)
+    wallets = pool.setdefault("wallets", [])
+
+    for entry in wallets:
+        if _matches(entry, name, service, provider):
+            faucet_if_needed(entry, env_name)
+            _write_pool(env_name, pool)
+            return entry, False
+
+    free = [entry for entry in wallets if not entry.get("assigned_name")]
     created = False
-    if entry is None:
+    if free:
+        entry = random.choice(free)
+    else:
         address, secret_key = generate_sui_keypair()
         entry = {
-            "name": name,
-            "service": service,
-            "env": env_name,
+            "id": uuid.uuid4().hex,
             "address": address,
             "secret_key": secret_key,
             "x25519_secret": generate_x25519_secret(),
@@ -31,15 +49,115 @@ def ensure_wallet(name: str, service: str, env_name: str) -> tuple[dict[str, Any
             "created_at": _timestamp(),
             "last_balance_mist": 0,
             "last_faucet_at": "",
+            "assigned_name": "",
+            "assigned_service": "",
+            "assigned_provider": "",
+            "assigned_at": "",
+            "released_at": "",
         }
-        wallets.setdefault("wallets", []).append(entry)
+        wallets.append(entry)
         created = True
-    else:
-        entry["service"] = service
+
+    entry["assigned_name"] = name
+    entry["assigned_service"] = service
+    entry["assigned_provider"] = provider
+    entry["assigned_at"] = _timestamp()
 
     faucet_if_needed(entry, env_name)
-    write_wallets(wallets)
+    _write_pool(env_name, pool)
     return entry, created
+
+
+def release_wallet(name: str, service: str, provider: str, env_name: str) -> dict[str, Any] | None:
+    """Return the wallet assigned to (name, service, provider, env_name) to
+    the free pool. Clears assignment fields only; the wallet record (address,
+    secret_key, x25519_secret) is kept for future reuse. Does not perform any
+    on-chain registry cleanup. Returns the released entry, or None if no
+    wallet was assigned to this instance."""
+    pool = _read_pool(env_name)
+    for entry in pool.get("wallets", []):
+        if _matches(entry, name, service, provider):
+            entry["assigned_name"] = ""
+            entry["assigned_service"] = ""
+            entry["assigned_provider"] = ""
+            entry["assigned_at"] = ""
+            entry["released_at"] = _timestamp()
+            _write_pool(env_name, pool)
+            return entry
+    return None
+
+
+def pool_status(env_name: str | None = None) -> dict[str, list[dict[str, Any]]]:
+    """Read-only listing for `vidctl wallet list`, secret fields stripped."""
+    envs = [env_name] if env_name else _all_pool_envs()
+    result: dict[str, list[dict[str, Any]]] = {}
+    for env in envs:
+        entries = _read_pool(env).get("wallets", [])
+        result[env] = [{k: v for k, v in entry.items() if k not in ("secret_key", "x25519_secret")} for entry in entries]
+    return result
+
+
+def gc_orphaned_assignments(topology: dict[str, Any]) -> list[dict[str, Any]]:
+    """Release wallets assigned to (name, service, provider, env) tuples that
+    no longer exist in the live topology. Returns the list of released
+    entries."""
+    live = {(i.get("name"), i.get("service"), i.get("provider"), i.get("env")) for i in topology.get("instances", [])}
+    released: list[dict[str, Any]] = []
+    for env_name in _all_pool_envs():
+        pool = _read_pool(env_name)
+        changed = False
+        for entry in pool.get("wallets", []):
+            if not entry.get("assigned_name"):
+                continue
+            key = (entry["assigned_name"], entry["assigned_service"], entry["assigned_provider"], env_name)
+            if key not in live:
+                entry["assigned_name"] = ""
+                entry["assigned_service"] = ""
+                entry["assigned_provider"] = ""
+                entry["assigned_at"] = ""
+                entry["released_at"] = _timestamp()
+                changed = True
+                released.append(entry)
+        if changed:
+            _write_pool(env_name, pool)
+    return released
+
+
+def list_pool(env_name: str | None) -> int:
+    status = pool_status(env_name)
+    if not any(status.values()):
+        print("No pooled wallets yet.")
+        return 0
+    for env, entries in status.items():
+        free = sum(1 for entry in entries if not entry.get("assigned_name"))
+        print(f"[{env}] {len(entries)} wallet(s), {free} free, {len(entries) - free} assigned")
+        for entry in entries:
+            if entry.get("assigned_name"):
+                state = f"assigned -> {entry['assigned_name']}/{entry['assigned_service']}/{entry['assigned_provider']}"
+            else:
+                state = "free"
+            print(f"  {entry['address']}  {state}")
+    return 0
+
+
+def gc() -> int:
+    from .context import RUNTIME_TOPOLOGY_TOML
+    from .infra import read_topology
+
+    topology = read_topology() if RUNTIME_TOPOLOGY_TOML.exists() else {"instances": []}
+    released = gc_orphaned_assignments(topology)
+    for entry in released:
+        print(f"Released {entry['address']}")
+    print(f"{len(released)} wallet(s) released.")
+    return 0
+
+
+def _matches(entry: dict[str, Any], name: str, service: str, provider: str) -> bool:
+    return (
+        entry.get("assigned_name") == name
+        and entry.get("assigned_service") == service
+        and entry.get("assigned_provider") == provider
+    )
 
 
 def faucet_if_needed(entry: dict[str, Any], env_name: str) -> None:
@@ -140,35 +258,74 @@ def operator_state_json(entry: dict[str, Any]) -> str:
     )
 
 
-def find_wallet(wallets: dict[str, Any], name: str, env_name: str) -> dict[str, Any] | None:
-    for entry in wallets.get("wallets", []):
-        if entry.get("name") == name and entry.get("env", env_name) == env_name:
-            return entry
-    return None
-
-
-def read_wallets() -> dict[str, Any]:
+def _read_pool(env_name: str) -> dict[str, Any]:
+    """Read secrets/wallets/<env>.toml (private store, has secrets)."""
     import tomllib
 
-    if not RUNTIME_WALLET_TOML.exists():
+    path = wallet_secrets_path(env_name)
+    if not path.exists():
         return {"wallets": []}
-    data = tomllib.loads(RUNTIME_WALLET_TOML.read_text(encoding="utf-8"))
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
     data.setdefault("wallets", [])
     return data
 
 
-def write_wallets(wallets: dict[str, Any]) -> None:
+def _write_pool(env_name: str, pool: dict[str, Any]) -> None:
+    """Write secrets/wallets/<env>.toml, chmod 0o600, then refresh the public view."""
     from .infra import toml_value
 
-    RUNTIME_WALLET_TOML.parent.mkdir(parents=True, exist_ok=True)
+    path = wallet_secrets_path(env_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
-    for entry in wallets.get("wallets", []):
+    for entry in pool.get("wallets", []):
         lines.append("[[wallets]]")
         for key, value in entry.items():
             lines.append(f"{key} = {toml_value(value)}")
         lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+    path.chmod(0o600)
+    _refresh_public_view()
+
+
+def _all_pool_envs() -> list[str]:
+    """Every env with a pool file on disk, e.g. for the public-view rebuild."""
+    if not WALLET_SECRETS_DIR.exists():
+        return []
+    return sorted(path.stem for path in WALLET_SECRETS_DIR.glob("*.toml"))
+
+
+def _refresh_public_view() -> None:
+    """Rebuild runtime/wallet.toml (no secrets) from every secrets/wallets/*.toml."""
+    from .infra import toml_value
+
+    lines: list[str] = []
+    stats: dict[str, dict[str, int]] = {}
+    for env_name in _all_pool_envs():
+        entries = _read_pool(env_name).get("wallets", [])
+        free = sum(1 for entry in entries if not entry.get("assigned_name"))
+        stats[env_name] = {"total": len(entries), "free": free, "assigned": len(entries) - free}
+        for entry in entries:
+            lines.append("[[wallets]]")
+            public_fields = {
+                "id": entry.get("id", ""),
+                "env": env_name,
+                "address": entry.get("address", ""),
+                "assigned_name": entry.get("assigned_name", ""),
+                "assigned_service": entry.get("assigned_service", ""),
+                "assigned_provider": entry.get("assigned_provider", ""),
+                "assigned_at": entry.get("assigned_at", ""),
+                "last_balance_mist": entry.get("last_balance_mist", 0),
+            }
+            for key, value in public_fields.items():
+                lines.append(f"{key} = {toml_value(value)}")
+            lines.append("")
+    for env_name, env_stats in stats.items():
+        lines.append(f"[stats.{env_name}]")
+        for key, value in env_stats.items():
+            lines.append(f"{key} = {toml_value(value)}")
+        lines.append("")
+    RUNTIME_WALLET_TOML.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_WALLET_TOML.write_text("\n".join(lines), encoding="utf-8")
-    RUNTIME_WALLET_TOML.chmod(0o600)
 
 
 def _timestamp() -> str:

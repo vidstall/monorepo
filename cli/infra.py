@@ -359,7 +359,7 @@ def control(
         from . import wallet
 
         try:
-            wallet_entry, wallet_created = wallet.ensure_wallet(name, service, env_name)
+            wallet_entry, wallet_created = wallet.checkout_wallet(name, service, provider, env_name)
         except (subprocess.CalledProcessError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
             message = f"Failed to create/load operator wallet for {name}: {exc}"
             print(message, file=sys.stderr)
@@ -417,6 +417,9 @@ def control(
             ]
             if backend == "vm":
                 shutil.rmtree(SSH_KEY_ROOT / name, ignore_errors=True)
+                from . import wallet
+
+                wallet.release_wallet(name, service, provider, env_name)
         elif backend == "vm" and action in {"start", "restart"}:
             failed_stage = "inventory"
             code = inventory()

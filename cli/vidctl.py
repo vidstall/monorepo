@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from . import contract, doctor, infra, registry
+from . import contract, doctor, infra, registry, wallet
 from .context import DOCKER_SERVICES, bootstrap
 
 
@@ -28,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_contract_parser(subparsers)
     add_registry_parser(subparsers)
     add_infra_parser(subparsers)
+    add_wallet_parser(subparsers)
     return parser
 
 
@@ -153,6 +154,26 @@ def add_infra_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     deploy.set_defaults(handler=lambda args: infra.deploy(args.yes))
 
     add_lifecycle_parsers(actions)
+
+
+def add_wallet_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = subparsers.add_parser("wallet", help="Inspect the operator-wallet pool (read-only; never prints secrets).")
+    actions = parser.add_subparsers(dest="action", required=True)
+
+    list_parser = actions.add_parser("list", help="List pooled wallets and free/assigned counts.")
+    list_parser.add_argument(
+        "--env",
+        choices=["devnet", "testnet", "mainnet"],
+        default=None,
+        help="Restrict to one Sui env. Default: all envs with a pool file.",
+    )
+    list_parser.set_defaults(handler=lambda args: wallet.list_pool(args.env))
+
+    gc_parser = actions.add_parser(
+        "gc",
+        help="Release wallets assigned to instances no longer present in the topology.",
+    )
+    gc_parser.set_defaults(handler=lambda _args: wallet.gc())
 
 
 def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

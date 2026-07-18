@@ -21,6 +21,7 @@ RUNTIME_HISTORY_TOML = RUNTIME_DIR / "history.toml"
 RUNTIME_WALLET_TOML = RUNTIME_DIR / "wallet.toml"
 SECRETS_DIR = ROOT / "secrets" / "cloud"
 REGISTRY_SECRETS_DIR = ROOT / "secrets" / "registry"
+WALLET_SECRETS_DIR = ROOT / "secrets" / "wallets"
 CONTRACT_RUNTIME_DIR = RUNTIME_DIR / "contract"
 PULUMI_STATE_DIR = ROOT / "secrets" / "pulumi-state"
 PULUMI_PASSPHRASE_FILE = ROOT / "secrets" / "pulumi-passphrase"
@@ -165,6 +166,10 @@ def git_short_sha() -> str:
 
 def contract_env_path(network: str) -> Path:
     return CONTRACT_RUNTIME_DIR / f"{network}.env"
+
+
+def wallet_secrets_path(env_name: str) -> Path:
+    return WALLET_SECRETS_DIR / f"{env_name}.toml"
 
 
 def write_kv_env_file(path: Path, values: dict[str, str]) -> None:
