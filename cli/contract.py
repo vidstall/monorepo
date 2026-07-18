@@ -10,7 +10,6 @@ import tomllib
 
 from .context import CONTRACT_DIR, RUNTIME_DIR, contract_env_path, read_env_file, run, write_kv_env_file
 
-SUI_COIN_TYPE = "0x2::sui::SUI"
 PUBLISHED_TOML = CONTRACT_DIR / "Published.toml"
 MOVE_TOML = CONTRACT_DIR / "Move.toml"
 
@@ -157,8 +156,19 @@ def publish(
         print("Could not determine published package ID.", file=sys.stderr)
         return 1
 
-    registry_object_id = create_registry(package_id, gas_budget)
-    if not registry_object_id:
+    # NetworkRegistry/MinerStore/RoleVoteBox/AdminCap are all created by their
+    # own modules' `init` functions, which run automatically in this same
+    # publish transaction -- no separate call needed, just parse them out.
+    admin_cap_id = parse_created_object_id(publish_result, "AdminCap")
+    network_registry_id = parse_created_object_id(publish_result, "NetworkRegistry")
+    miner_store_id = parse_created_object_id(publish_result, "MinerStore")
+    role_vote_box_id = parse_created_object_id(publish_result, "RoleVoteBox")
+    if not admin_cap_id:
+        print("Could not determine AdminCap object ID from publish.", file=sys.stderr)
+        return 1
+
+    registries = create_registries(package_id, admin_cap_id, gas_budget)
+    if registries is None:
         return 1
 
     write_kv_env_file(
@@ -168,10 +178,14 @@ def publish(
             "CONTRACT_CHAIN_ID": deployment.get("CONTRACT_CHAIN_ID", ""),
             "CONTRACT_PACKAGE_ID": package_id,
             "CONTRACT_ORIGINAL_PACKAGE_ID": package_id,
-            "CONTRACT_REGISTRY_OBJECT_ID": registry_object_id,
             "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id or "",
             "CONTRACT_DEPLOYER_ADDRESS": deployer_address or "",
             "CONTRACT_PUBLISH_TX_DIGEST": publish_tx_digest or "",
+            "CONTRACT_ADMIN_CAP_ID": admin_cap_id,
+            "NETWORK_REGISTRY_ID": network_registry_id or "",
+            "MINER_STORE_ID": miner_store_id or "",
+            "ROLE_VOTE_BOX_ID": role_vote_box_id or "",
+            **registries,
         },
     )
     return 0
@@ -212,13 +226,21 @@ def upgrade_existing(
 ) -> int:
     package_id = deployment["CONTRACT_PACKAGE_ID"]
     upgrade_cap_id = deployment["CONTRACT_UPGRADE_CAP_ID"]
-    registry_object_id = deployment.get("CONTRACT_REGISTRY_OBJECT_ID")
+    missing_registry_keys = [env_key for _, _, _, env_key in REGISTRY_CREATE_SPECS if not deployment.get(env_key)]
 
-    if not registry_object_id and not create_registry_if_missing:
+    if missing_registry_keys and not create_registry_if_missing:
         print(
-            f"Refusing to upgrade {env}: missing CONTRACT_REGISTRY_OBJECT_ID in {contract_env_path(env)}. "
-            "Add the existing registry object ID, or rerun with --create-registry-if-missing "
-            "to create a fresh shared registry.",
+            f"Refusing to upgrade {env}: missing {', '.join(missing_registry_keys)} in {contract_env_path(env)}. "
+            "Add the existing registry object IDs, or rerun with --create-registry-if-missing "
+            "to create fresh shared registries for whichever are missing.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if missing_registry_keys and not deployment.get("CONTRACT_ADMIN_CAP_ID"):
+        print(
+            f"Cannot create missing registries for {env}: no CONTRACT_ADMIN_CAP_ID recorded in "
+            f"{contract_env_path(env)}. Add the AdminCap object ID from the original publish.",
             file=sys.stderr,
         )
         return 1
@@ -253,10 +275,12 @@ def upgrade_existing(
     package_id = parse_published_package_id(upgrade_result) or package_id
     upgrade_tx_digest = parse_transaction_digest(upgrade_result)
 
-    if not registry_object_id:
-        registry_object_id = create_registry(package_id, gas_budget)
-        if not registry_object_id:
+    registries = {env_key: deployment[env_key] for _, _, _, env_key in REGISTRY_CREATE_SPECS if deployment.get(env_key)}
+    if missing_registry_keys:
+        created = create_registries(package_id, deployment["CONTRACT_ADMIN_CAP_ID"], gas_budget)
+        if created is None:
             return 1
+        registries.update(created)
 
     write_kv_env_file(
         contract_env_path(env),
@@ -265,11 +289,15 @@ def upgrade_existing(
             "CONTRACT_CHAIN_ID": deployment.get("CONTRACT_CHAIN_ID", ""),
             "CONTRACT_PACKAGE_ID": package_id,
             "CONTRACT_ORIGINAL_PACKAGE_ID": deployment.get("CONTRACT_ORIGINAL_PACKAGE_ID", deployment["CONTRACT_PACKAGE_ID"]),
-            "CONTRACT_REGISTRY_OBJECT_ID": registry_object_id,
             "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id,
             "CONTRACT_DEPLOYER_ADDRESS": deployment.get("CONTRACT_DEPLOYER_ADDRESS", ""),
             "CONTRACT_PUBLISH_TX_DIGEST": deployment.get("CONTRACT_PUBLISH_TX_DIGEST", ""),
             "CONTRACT_UPGRADE_TX_DIGEST": upgrade_tx_digest or "",
+            "CONTRACT_ADMIN_CAP_ID": deployment.get("CONTRACT_ADMIN_CAP_ID", ""),
+            "NETWORK_REGISTRY_ID": deployment.get("NETWORK_REGISTRY_ID", ""),
+            "MINER_STORE_ID": deployment.get("MINER_STORE_ID", ""),
+            "ROLE_VOTE_BOX_ID": deployment.get("ROLE_VOTE_BOX_ID", ""),
+            **registries,
         },
     )
     return 0
@@ -325,34 +353,59 @@ def test_upgrade(
     return result
 
 
-def create_registry(package_id: str, gas_budget: str | None) -> str | None:
-    registry_code, registry_result, registry_error = run_sui_json(
-        [
-            "sui",
-            "client",
-            "call",
-            "--package",
-            package_id,
-            "--module",
-            "registry",
-            "--function",
-            "create_registry",
-            "--type-args",
-            SUI_COIN_TYPE,
-            "--json",
-            *(["--gas-budget", gas_budget] if gas_budget else []),
-        ]
-    )
-    if registry_result is None:
-        if registry_error:
-            sys.stderr.write(registry_error)
-        return None
+# module, function, struct type fragment, env-var key -- one shared registry
+# object per role, each gated by the AdminCap minted in network_registry's
+# `init` (auto-created in the same transaction as publish, see publish()).
+# NetworkRegistry/MinerStore/RoleVoteBox are *also* auto-created via their own
+# module `init` functions at publish time -- they don't need a create() call.
+REGISTRY_CREATE_SPECS: list[tuple[str, str, str, str]] = [
+    ("control_plane_registry", "create", "ControlPlaneRegistry", "CP_REGISTRY_ID"),
+    ("relay_registry", "create", "RelayRegistry", "RELAY_REGISTRY_ID"),
+    ("signaling_registry", "create", "SignalingRegistry", "SIGNALING_REGISTRY_ID"),
+    ("validator_registry", "create", "ValidatorRegistry", "VALIDATOR_REGISTRY_ID"),
+    ("user_registry", "create", "UserRegistry", "USER_REGISTRY_ID"),
+    ("room_manager", "create", "RoomManager", "ROOM_MANAGER_ID"),
+    ("cp_quorum_sig", "create_config", "QuorumConfigState", "QUORUM_CONFIG_ID"),
+]
 
-    registry_object_id = parse_created_object_id(registry_result, "Registry<")
-    if not registry_object_id:
-        print("Could not determine registry object ID.", file=sys.stderr)
-        return None
-    return registry_object_id
+
+def create_registries(package_id: str, admin_cap_id: str, gas_budget: str | None) -> dict[str, str] | None:
+    """Create the 7 AdminCap-gated shared registries a fresh deployment
+    needs (control-plane/relay/signaling/validator/user registries, the
+    room manager, and the CP-quorum config). Returns env-var-key -> object-id,
+    or None (with an error already printed) if any single call fails --
+    fail-fast, since a partially-bootstrapped network isn't useful."""
+    object_ids: dict[str, str] = {}
+    for module, function, type_fragment, env_key in REGISTRY_CREATE_SPECS:
+        code, result, error = run_sui_json(
+            [
+                "sui",
+                "client",
+                "call",
+                "--package",
+                package_id,
+                "--module",
+                module,
+                "--function",
+                function,
+                "--args",
+                admin_cap_id,
+                "--json",
+                *(["--gas-budget", gas_budget] if gas_budget else []),
+            ]
+        )
+        if result is None:
+            if error:
+                sys.stderr.write(error)
+            print(f"Failed to create {module}::{function} (for {env_key}).", file=sys.stderr)
+            return None
+
+        object_id = parse_created_object_id(result, type_fragment)
+        if not object_id:
+            print(f"Could not determine object ID for {module}::{function} (for {env_key}).", file=sys.stderr)
+            return None
+        object_ids[env_key] = object_id
+    return object_ids
 
 
 def run_sui_json(args: list[str]) -> tuple[int, dict | None, str]:
