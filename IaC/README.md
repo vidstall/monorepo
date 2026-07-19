@@ -66,7 +66,7 @@ export S3_API_ENDPOINT="https://ACCOUNT_ID.r2.cloudflarestorage.com"
 
 Lifecycle commands update topology, run Pulumi from `IaC/pulumi`, and append an audit event to `runtime/history.toml`. VM services (`routes`, `media`, `coordinator`, `vclient`) continue through Pulumi inventory and Ansible. `frontend` uses object storage:
 
-- `start`: builds `services/frontend/out`, creates/updates object storage, uploads static files, and marks the site running.
+- `start`: builds `services/client/client/dist`, creates/updates object storage, uploads static files, and marks the site running.
 - `restart`: rebuilds and re-uploads static files while keeping the same bucket identity.
 - `pause`: keeps the bucket/files and marks the site stopped; provider adapters make the site private where supported.
 - `kill --yes`: deletes the managed object-storage resources.

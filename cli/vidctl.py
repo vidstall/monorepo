@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from . import contract, doctor, infra, registry, wallet
+from . import contract, doctor, infra, object as object_cmd, registry, wallet
 from .context import DOCKER_SERVICES, bootstrap
 
 
@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_registry_parser(subparsers)
     add_infra_parser(subparsers)
     add_wallet_parser(subparsers)
+    add_object_parser(subparsers)
     return parser
 
 
@@ -174,6 +175,26 @@ def add_wallet_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
         help="Release wallets assigned to instances no longer present in the topology.",
     )
     gc_parser.set_defaults(handler=lambda _args: wallet.gc())
+
+
+def add_object_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = subparsers.add_parser("object", help="Publish static sites (e.g. the frontend) to object storage.")
+    actions = parser.add_subparsers(dest="action", required=True)
+
+    publish = actions.add_parser("publish", help="Build and upload a static site to object storage.")
+    add_object_selection(publish)
+    publish.set_defaults(handler=lambda args: object_cmd.publish(args.name, args.object, args.provider))
+
+    delete = actions.add_parser("delete", help="Delete an object-storage site.")
+    add_object_selection(delete)
+    delete.add_argument("--yes", action="store_true", help="Confirm destructive object-storage deletion.")
+    delete.set_defaults(handler=lambda args: object_cmd.delete(args.name, args.object, args.provider, args.yes))
+
+
+def add_object_selection(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--name", required=True, help="Topology object name (e.g. bucket identity).")
+    parser.add_argument("--object", required=True, choices=sorted(object_cmd.OBJECT_TYPES), help="Object type to publish.")
+    parser.add_argument("--provider", required=True, choices=sorted(object_cmd.PROVIDERS), help="Object-storage provider.")
 
 
 def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

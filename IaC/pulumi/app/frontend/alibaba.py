@@ -29,6 +29,13 @@ def create_site(instance: TopologyInstance, bucket_name: str, desired_state: str
             provider=provider,
             delete_before_replace=True,
             replace_on_changes=["tags"],
+            # oss.Bucket's own (deprecated) `acl` field defaults to "private" whenever
+            # left unset, and the alicloud provider docs mandate ignore_changes here
+            # when a standalone oss.BucketAcl manages the real ACL below — without it,
+            # every subsequent `pulumi up` silently reconciles the bucket ACL back to
+            # "private", breaking anonymous website/root access while individual
+            # BucketObject reads (which carry their own ACL) keep working.
+            ignore_changes=["acl"],
         ),
     )
     public_access_block = alicloud.oss.BucketPublicAccessBlock(
