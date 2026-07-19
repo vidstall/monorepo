@@ -10,10 +10,35 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .context import RUNTIME_WALLET_TOML, WALLET_SECRETS_DIR, run, wallet_secrets_path
+from .context import (
+    RUNTIME_WALLET_TOML,
+    WALLET_SECRETS_DIR,
+    admin_wallet_secrets_path,
+    run,
+    wallet_secrets_path,
+)
 
 MIN_GAS_MIST = 2_000_000_000  # 2 SUI
 FAUCET_NETWORKS = ("devnet", "testnet")
+
+_ALIAS_ADJECTIVES = [
+    "affectionate", "amused", "brave", "calm", "clever", "cosmic", "curious",
+    "daring", "eager", "elegant", "fearless", "fierce", "gentle", "golden",
+    "graceful", "happy", "humble", "jolly", "keen", "lively", "lucky",
+    "mellow", "merry", "mighty", "noble", "nimble", "patient", "playful",
+    "proud", "quiet", "quick", "radiant", "serene", "sharp", "silent",
+    "silver", "sincere", "spirited", "steady", "sunny", "swift", "tender",
+    "tranquil", "vivid", "witty", "wise", "zealous", "bold", "bright", "cozy",
+]
+_ALIAS_NOUNS = [
+    "jet", "falcon", "otter", "harbor", "meadow", "canyon", "comet", "delta",
+    "ember", "fjord", "glacier", "grove", "horizon", "island", "lagoon",
+    "lantern", "maple", "meridian", "nebula", "orbit", "orchid", "panther",
+    "pebble", "phoenix", "prairie", "quartz", "raven", "reef", "ridge",
+    "river", "sable", "sequoia", "shore", "sparrow", "summit", "tundra",
+    "valley", "willow", "wren", "zephyr", "brook", "cedar", "cliff", "coral",
+    "dune", "forest", "glade", "hollow", "isle", "marsh",
+]
 
 
 def checkout_wallet(name: str, service: str, provider: str, env_name: str) -> tuple[dict[str, Any], bool]:
@@ -39,9 +64,11 @@ def checkout_wallet(name: str, service: str, provider: str, env_name: str) -> tu
     if free:
         entry = random.choice(free)
     else:
+        existing_aliases = {w.get("alias", "") for w in wallets if w.get("alias")}
         address, secret_key = generate_sui_keypair()
         entry = {
             "id": uuid.uuid4().hex,
+            "alias": _generate_alias(existing_aliases),
             "address": address,
             "secret_key": secret_key,
             "x25519_secret": generate_x25519_secret(),
@@ -136,7 +163,7 @@ def list_pool(env_name: str | None) -> int:
                 state = f"assigned -> {entry['assigned_name']}/{entry['assigned_service']}/{entry['assigned_provider']}"
             else:
                 state = "free"
-            print(f"  {entry['address']}  {state}")
+            print(f"  {entry.get('alias', '(no alias)')}  {entry['address']}  {state}")
     return 0
 
 
@@ -150,6 +177,23 @@ def gc() -> int:
         print(f"Released {entry['address']}")
     print(f"{len(released)} wallet(s) released.")
     return 0
+
+
+def _generate_alias(existing_aliases: set[str]) -> str:
+    """Adjective-noun alias, e.g. 'affectionate-jet', unique within existing_aliases."""
+    for _ in range(200):
+        candidate = f"{random.choice(_ALIAS_ADJECTIVES)}-{random.choice(_ALIAS_NOUNS)}"
+        if candidate not in existing_aliases:
+            return candidate
+    # Combinatorial space exhausted (very large pool) -- fall back to a
+    # suffixed variant, still guaranteed unique.
+    base = f"{random.choice(_ALIAS_ADJECTIVES)}-{random.choice(_ALIAS_NOUNS)}"
+    suffix = 2
+    candidate = f"{base}-{suffix}"
+    while candidate in existing_aliases:
+        suffix += 1
+        candidate = f"{base}-{suffix}"
+    return candidate
 
 
 def _matches(entry: dict[str, Any], name: str, service: str, provider: str) -> bool:
@@ -285,6 +329,7 @@ def _write_pool(env_name: str, pool: dict[str, Any]) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
     path.chmod(0o600)
     _refresh_public_view()
+    _refresh_admin_secrets_view(env_name)
 
 
 def _all_pool_envs() -> list[str]:
@@ -308,6 +353,7 @@ def _refresh_public_view() -> None:
             lines.append("[[wallets]]")
             public_fields = {
                 "id": entry.get("id", ""),
+                "alias": entry.get("alias", ""),
                 "env": env_name,
                 "address": entry.get("address", ""),
                 "assigned_name": entry.get("assigned_name", ""),
@@ -326,6 +372,26 @@ def _refresh_public_view() -> None:
         lines.append("")
     RUNTIME_WALLET_TOML.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_WALLET_TOML.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _refresh_admin_secrets_view(env_name: str) -> None:
+    """Sync the FULL (secret-including) wallet records for one env to
+    services/client/admin/public/.secrets/<env>.toml, so the admin SPA can
+    fetch and display them client-side. Testbed-only: private key material is
+    included deliberately. The output dir is gitignored."""
+    from .infra import toml_value
+
+    entries = _read_pool(env_name).get("wallets", [])
+    lines: list[str] = []
+    for entry in entries:
+        lines.append("[[wallets]]")
+        for key, value in entry.items():
+            lines.append(f"{key} = {toml_value(value)}")
+        lines.append("")
+    path = admin_wallet_secrets_path(env_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines), encoding="utf-8")
+    path.chmod(0o600)
 
 
 def _timestamp() -> str:

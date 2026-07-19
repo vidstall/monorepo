@@ -14,6 +14,9 @@ VENV_DIR = IAC_DIR / ".venv"
 PULUMI_DIR = IAC_DIR / "pulumi"
 ANSIBLE_DIR = IAC_DIR / "ansible"
 CONTRACT_DIR = ROOT / "services" / "contract"
+CLIENT_WEBUI_DIR = ROOT / "services" / "client"
+CLIENT_ENV_PATH = CLIENT_WEBUI_DIR / "client" / ".env"
+ADMIN_ENV_PATH = CLIENT_WEBUI_DIR / "admin" / ".env"
 RUNTIME_DIR = ROOT / "runtime"
 RUNTIME_REGISTRY_TOML = RUNTIME_DIR / "registry.toml"
 RUNTIME_TOPOLOGY_TOML = RUNTIME_DIR / "topology.toml"
@@ -22,6 +25,7 @@ RUNTIME_WALLET_TOML = RUNTIME_DIR / "wallet.toml"
 SECRETS_DIR = ROOT / "secrets" / "cloud"
 REGISTRY_SECRETS_DIR = ROOT / "secrets" / "registry"
 WALLET_SECRETS_DIR = ROOT / "secrets" / "wallets"
+ADMIN_WALLET_SECRETS_DIR = CLIENT_WEBUI_DIR / "admin" / "public" / ".secrets"
 CONTRACT_RUNTIME_DIR = RUNTIME_DIR / "contract"
 PULUMI_STATE_DIR = ROOT / "secrets" / "pulumi-state"
 PULUMI_PASSPHRASE_FILE = ROOT / "secrets" / "pulumi-passphrase"
@@ -172,7 +176,37 @@ def wallet_secrets_path(env_name: str) -> Path:
     return WALLET_SECRETS_DIR / f"{env_name}.toml"
 
 
+def admin_wallet_secrets_path(env_name: str) -> Path:
+    return ADMIN_WALLET_SECRETS_DIR / f"{env_name}.toml"
+
+
 def write_kv_env_file(path: Path, values: dict[str, str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"{key}={value}" for key, value in values.items() if value]
     path.write_text("\n".join(lines) + "\n")
+
+
+def sync_env_keys(path: Path, mapping: dict[str, str]) -> bool:
+    """Update matching KEY=value lines in an existing .env file in place,
+    preserving every other line (comments, unrelated settings) untouched.
+    Appends any mapped key not already present. Returns False without
+    writing anything if the file doesn't exist -- these frontend .env files
+    also carry manually-configured, non-contract settings (signaling URL,
+    poll intervals, ...) that vidctl has no source of truth for, so it never
+    creates one from scratch."""
+    if not path.exists():
+        return False
+    lines = path.read_text(encoding="utf-8").splitlines()
+    remaining = dict(mapping)
+    updated: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        key = stripped.split("=", 1)[0].strip() if "=" in stripped and not stripped.startswith("#") else None
+        if key and key in remaining:
+            updated.append(f"{key}={remaining.pop(key)}")
+        else:
+            updated.append(line)
+    for key, value in remaining.items():
+        updated.append(f"{key}={value}")
+    path.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    return True

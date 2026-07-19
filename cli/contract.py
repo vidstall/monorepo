@@ -8,10 +8,63 @@ from pathlib import Path
 
 import tomllib
 
-from .context import CONTRACT_DIR, RUNTIME_DIR, contract_env_path, read_env_file, run, write_kv_env_file
+from .context import (
+    ADMIN_ENV_PATH,
+    CLIENT_ENV_PATH,
+    CONTRACT_DIR,
+    RUNTIME_DIR,
+    contract_env_path,
+    read_env_file,
+    run,
+    sync_env_keys,
+    write_kv_env_file,
+)
 
 PUBLISHED_TOML = CONTRACT_DIR / "Published.toml"
 MOVE_TOML = CONTRACT_DIR / "Move.toml"
+
+# Maps runtime/contract/<env>.env keys to the VITE_* keys read by
+# services/client/{client,admin}/src/config.ts. Only keys the frontend apps
+# actually consume are included -- CONTRACT_CHAIN_ID, CONTRACT_UPGRADE_CAP_ID,
+# CONTRACT_ADMIN_CAP_ID, etc. are deploy-tooling-only and stay out of the sync.
+#
+# CONTRACT_NETWORK -> VITE_SUI_NETWORK is included for devnet/testnet: both
+# frontends' SuiClientProvider (main.tsx) now wires localnet/devnet/testnet.
+# mainnet is NOT wired into either app yet -- a mainnet publish will still
+# write VITE_SUI_NETWORK=mainnet, which SuiClientProvider will reject at
+# runtime. Add a mainnet network entry to both main.tsx files before
+# publishing to mainnet through vidctl.
+FRONTEND_ENV_KEY_MAP: dict[str, str] = {
+    "CONTRACT_NETWORK": "VITE_SUI_NETWORK",
+    "CONTRACT_PACKAGE_ID": "VITE_PACKAGE_ID",
+    "NETWORK_REGISTRY_ID": "VITE_NETWORK_REGISTRY_ID",
+    "MINER_STORE_ID": "VITE_MINER_STORE_ID",
+    "USER_REGISTRY_ID": "VITE_USER_REGISTRY_ID",
+    "RELAY_REGISTRY_ID": "VITE_RELAY_REGISTRY_ID",
+    "CP_REGISTRY_ID": "VITE_CONTROL_PLANE_REGISTRY_ID",
+    "VALIDATOR_REGISTRY_ID": "VITE_VALIDATOR_REGISTRY_ID",
+    "ROOM_MANAGER_ID": "VITE_ROOM_MANAGER_ID",
+    "SIGNALING_REGISTRY_ID": "VITE_SIGNALING_REGISTRY_ID",
+    "ROLE_VOTE_BOX_ID": "VITE_ROLE_VOTE_BOX_ID",
+}
+
+
+def sync_frontend_env(deployment: dict[str, str]) -> None:
+    """Push the just-published contract's package/registry object IDs into
+    services/client/{client,admin}/.env as VITE_* vars, leaving every other
+    line (signaling/relay URLs, poll intervals, region, ...) untouched."""
+    mapping = {vite_key: deployment.get(key, "") for key, vite_key in FRONTEND_ENV_KEY_MAP.items()}
+    mapping = {key: value for key, value in mapping.items() if value}
+    if not mapping:
+        return
+    for path in (CLIENT_ENV_PATH, ADMIN_ENV_PATH):
+        if sync_env_keys(path, mapping):
+            print(f"Synced contract object IDs -> {path}")
+        else:
+            print(
+                f"Note: {path} not found; skipping frontend env sync (copy {path.name}.example to {path.name} first).",
+                file=sys.stderr,
+            )
 
 
 def build(env: str) -> int:
@@ -171,23 +224,22 @@ def publish(
     if registries is None:
         return 1
 
-    write_kv_env_file(
-        contract_env_path(env),
-        {
-            "CONTRACT_NETWORK": env,
-            "CONTRACT_CHAIN_ID": deployment.get("CONTRACT_CHAIN_ID", ""),
-            "CONTRACT_PACKAGE_ID": package_id,
-            "CONTRACT_ORIGINAL_PACKAGE_ID": package_id,
-            "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id or "",
-            "CONTRACT_DEPLOYER_ADDRESS": deployer_address or "",
-            "CONTRACT_PUBLISH_TX_DIGEST": publish_tx_digest or "",
-            "CONTRACT_ADMIN_CAP_ID": admin_cap_id,
-            "NETWORK_REGISTRY_ID": network_registry_id or "",
-            "MINER_STORE_ID": miner_store_id or "",
-            "ROLE_VOTE_BOX_ID": role_vote_box_id or "",
-            **registries,
-        },
-    )
+    new_deployment = {
+        "CONTRACT_NETWORK": env,
+        "CONTRACT_CHAIN_ID": deployment.get("CONTRACT_CHAIN_ID", ""),
+        "CONTRACT_PACKAGE_ID": package_id,
+        "CONTRACT_ORIGINAL_PACKAGE_ID": package_id,
+        "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id or "",
+        "CONTRACT_DEPLOYER_ADDRESS": deployer_address or "",
+        "CONTRACT_PUBLISH_TX_DIGEST": publish_tx_digest or "",
+        "CONTRACT_ADMIN_CAP_ID": admin_cap_id,
+        "NETWORK_REGISTRY_ID": network_registry_id or "",
+        "MINER_STORE_ID": miner_store_id or "",
+        "ROLE_VOTE_BOX_ID": role_vote_box_id or "",
+        **registries,
+    }
+    write_kv_env_file(contract_env_path(env), new_deployment)
+    sync_frontend_env(new_deployment)
     return 0
 
 
@@ -282,24 +334,23 @@ def upgrade_existing(
             return 1
         registries.update(created)
 
-    write_kv_env_file(
-        contract_env_path(env),
-        {
-            "CONTRACT_NETWORK": env,
-            "CONTRACT_CHAIN_ID": deployment.get("CONTRACT_CHAIN_ID", ""),
-            "CONTRACT_PACKAGE_ID": package_id,
-            "CONTRACT_ORIGINAL_PACKAGE_ID": deployment.get("CONTRACT_ORIGINAL_PACKAGE_ID", deployment["CONTRACT_PACKAGE_ID"]),
-            "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id,
-            "CONTRACT_DEPLOYER_ADDRESS": deployment.get("CONTRACT_DEPLOYER_ADDRESS", ""),
-            "CONTRACT_PUBLISH_TX_DIGEST": deployment.get("CONTRACT_PUBLISH_TX_DIGEST", ""),
-            "CONTRACT_UPGRADE_TX_DIGEST": upgrade_tx_digest or "",
-            "CONTRACT_ADMIN_CAP_ID": deployment.get("CONTRACT_ADMIN_CAP_ID", ""),
-            "NETWORK_REGISTRY_ID": deployment.get("NETWORK_REGISTRY_ID", ""),
-            "MINER_STORE_ID": deployment.get("MINER_STORE_ID", ""),
-            "ROLE_VOTE_BOX_ID": deployment.get("ROLE_VOTE_BOX_ID", ""),
-            **registries,
-        },
-    )
+    new_deployment = {
+        "CONTRACT_NETWORK": env,
+        "CONTRACT_CHAIN_ID": deployment.get("CONTRACT_CHAIN_ID", ""),
+        "CONTRACT_PACKAGE_ID": package_id,
+        "CONTRACT_ORIGINAL_PACKAGE_ID": deployment.get("CONTRACT_ORIGINAL_PACKAGE_ID", deployment["CONTRACT_PACKAGE_ID"]),
+        "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id,
+        "CONTRACT_DEPLOYER_ADDRESS": deployment.get("CONTRACT_DEPLOYER_ADDRESS", ""),
+        "CONTRACT_PUBLISH_TX_DIGEST": deployment.get("CONTRACT_PUBLISH_TX_DIGEST", ""),
+        "CONTRACT_UPGRADE_TX_DIGEST": upgrade_tx_digest or "",
+        "CONTRACT_ADMIN_CAP_ID": deployment.get("CONTRACT_ADMIN_CAP_ID", ""),
+        "NETWORK_REGISTRY_ID": deployment.get("NETWORK_REGISTRY_ID", ""),
+        "MINER_STORE_ID": deployment.get("MINER_STORE_ID", ""),
+        "ROLE_VOTE_BOX_ID": deployment.get("ROLE_VOTE_BOX_ID", ""),
+        **registries,
+    }
+    write_kv_env_file(contract_env_path(env), new_deployment)
+    sync_frontend_env(new_deployment)
     return 0
 
 
