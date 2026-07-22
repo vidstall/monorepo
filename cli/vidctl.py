@@ -4,7 +4,7 @@ import argparse
 import re
 import sys
 
-from . import contract, doctor, infra, object as object_cmd, registry, wallet
+from . import contract, doctor, infra, object as object_cmd, registry, scenario, wallet
 from .context import DOCKER_SERVICES, bootstrap
 
 
@@ -32,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_infra_parser(subparsers)
     add_wallet_parser(subparsers)
     add_object_parser(subparsers)
+    add_scenario_parser(subparsers)
     return parser
 
 
@@ -128,35 +129,113 @@ def add_registry_provider(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _infra_init(args: argparse.Namespace) -> int:
+    guard_code = scenario.guard_manual_infra("init")
+    if guard_code is not None:
+        return guard_code
+    return infra.init(args.env)
+
+
+def _infra_preview(_args: argparse.Namespace) -> int:
+    guard_code = scenario.guard_manual_infra("preview")
+    if guard_code is not None:
+        return guard_code
+    return infra.preview()
+
+
+def _infra_apply(args: argparse.Namespace) -> int:
+    guard_code = scenario.guard_manual_infra("apply")
+    if guard_code is not None:
+        return guard_code
+    return infra.apply(args.yes)
+
+
+def _infra_inventory(_args: argparse.Namespace) -> int:
+    guard_code = scenario.guard_manual_infra("inventory")
+    if guard_code is not None:
+        return guard_code
+    return infra.inventory()
+
+
+def _infra_ping(_args: argparse.Namespace) -> int:
+    guard_code = scenario.guard_manual_infra("ping")
+    if guard_code is not None:
+        return guard_code
+    return infra.ping()
+
+
+def _infra_configure(_args: argparse.Namespace) -> int:
+    guard_code = scenario.guard_manual_infra("configure")
+    if guard_code is not None:
+        return guard_code
+    return infra.configure()
+
+
+def _infra_deploy(args: argparse.Namespace) -> int:
+    guard_code = scenario.guard_manual_infra("deploy")
+    if guard_code is not None:
+        return guard_code
+    return infra.deploy(args.yes)
+
+
 def add_infra_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser("infra", help="Manage Pulumi infrastructure, topology, and Ansible host configuration.")
     actions = parser.add_subparsers(dest="action", required=True)
 
     init = actions.add_parser("init", help="Create or update runtime topology and ensure the Pulumi stack exists.")
     add_contract_env(init)
-    init.set_defaults(handler=lambda args: infra.init(args.env))
+    init.set_defaults(handler=_infra_init)
 
     preview = actions.add_parser("preview", help="Preview infrastructure changes.")
-    preview.set_defaults(handler=lambda _args: infra.preview())
+    preview.set_defaults(handler=_infra_preview)
 
     apply_parser = actions.add_parser("apply", help="Apply infrastructure changes and regenerate inventory.")
     apply_parser.add_argument("--yes", action="store_true", help="Confirm infrastructure changes.")
-    apply_parser.set_defaults(handler=lambda args: infra.apply(args.yes))
+    apply_parser.set_defaults(handler=_infra_apply)
 
     inventory = actions.add_parser("inventory", help="Generate Ansible inventory from Pulumi outputs.")
-    inventory.set_defaults(handler=lambda _args: infra.inventory())
+    inventory.set_defaults(handler=_infra_inventory)
 
     ping = actions.add_parser("ping", help="Run the Ansible connectivity playbook.")
-    ping.set_defaults(handler=lambda _args: infra.ping())
+    ping.set_defaults(handler=_infra_ping)
 
     configure = actions.add_parser("configure", help="Run the Ansible site configuration playbook.")
-    configure.set_defaults(handler=lambda _args: infra.configure())
+    configure.set_defaults(handler=_infra_configure)
 
     deploy = actions.add_parser("deploy", help="Apply infrastructure and configure hosts.")
     deploy.add_argument("--yes", action="store_true", help="Confirm infrastructure deployment.")
-    deploy.set_defaults(handler=lambda args: infra.deploy(args.yes))
+    deploy.set_defaults(handler=_infra_deploy)
 
     add_lifecycle_parsers(actions)
+
+
+def add_scenario_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    parser = subparsers.add_parser(
+        "scenario",
+        help="Declaratively manage a full compute topology from a TOML scenario file.",
+    )
+    actions = parser.add_subparsers(dest="action", required=True)
+
+    apply_parser = actions.add_parser(
+        "apply",
+        help="Publish contract+images and reconcile instances to match a scenario file.",
+    )
+    apply_parser.add_argument("path", help="Path to a scenario TOML file (e.g. scenario/example.toml).")
+    apply_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm the scenario apply (contract publish, image publish, instance reconcile).",
+    )
+    apply_parser.set_defaults(handler=lambda args: scenario.apply(args.path, args.yes))
+
+    status_parser = actions.add_parser("status", help="Show the active scenario lock and its instances' current state.")
+    status_parser.set_defaults(handler=lambda args: scenario.status(args))
+
+    destroy_parser = actions.add_parser(
+        "destroy",
+        help="Kill every instance owned by the active scenario and release the lock.",
+    )
+    destroy_parser.set_defaults(handler=lambda args: scenario.destroy(args))
 
 
 def add_wallet_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -252,6 +331,9 @@ def run_lifecycle_action(action: str, args: argparse.Namespace) -> int:
     a shorthand for) separate single-service/single-instance calls sharing
     the same --name, which is what actually colocates them on one instance
     (see program.py's group-by-name merge)."""
+    guard_code = scenario.guard_manual_infra(action)
+    if guard_code is not None:
+        return guard_code
     pairs = parse_service_tokens(args.service)
     if pairs is None:
         return 2
