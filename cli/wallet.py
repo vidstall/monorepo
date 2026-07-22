@@ -130,6 +130,7 @@ def checkout_wallet(
             "released_at": "",
             "registered_role": "",
             "cap_id": "",
+            "cap_id_package": "",
         }
         wallets.append(entry)
         created = True
@@ -303,16 +304,52 @@ def resolve_cap_id(entry: dict[str, Any], service: str, env_name: str) -> None:
     registered on-chain but the pool has no record of it yet (e.g. it
     registered on a prior run before this field existed, or the pool file
     was recreated). A wallet only ever registers once for its lifetime (see
-    checkout_wallet's docstring), so once cap_id is cached there is nothing
-    left to look up on subsequent checkouts.
+    checkout_wallet's docstring), so once cap_id is cached for the CURRENTLY
+    deployed package there is nothing left to look up on subsequent checkouts.
+
+    A cached cap_id is only trustworthy for the DEPLOYMENT it was minted
+    under (tracked in entry['cap_id_package'], keyed on
+    CONTRACT_ORIGINAL_PACKAGE_ID -- NOT CONTRACT_PACKAGE_ID). Sui pins a
+    struct's fully-qualified type to the package that first defined it: a
+    routine `contract upgrade` bumps CONTRACT_PACKAGE_ID (the latest
+    bytecode version) but keeps the SAME MinerStore/registries and the SAME
+    CONTRACT_ORIGINAL_PACKAGE_ID, so an existing MinerCap/StakePosition
+    stays perfectly valid across upgrades -- keying staleness on
+    CONTRACT_PACKAGE_ID would wrongly invalidate it after every upgrade and
+    send the daemon to re-run register(), which aborts with
+    E_ALREADY_REGISTERED since this miner_id already has a profile in that
+    (unchanged) MinerStore.
+
+    A genuinely NEW deployment (contract.publish()'s force-republish on a
+    devnet chain-id mismatch) mints a brand-new ORIGINAL package with its
+    own fresh MinerStore/registries/staking module -- THAT is what actually
+    orphans a cap_id (and its StakePosition), since it belongs to a
+    completely different, unrelated deployment lineage. If the currently
+    deployed original package has moved on (or cap_id_package was never
+    recorded, e.g. an older pool entry), drop the stale cap_id so the daemon
+    re-runs full Step-1 registration (fresh stake, fresh cap) against the
+    current deployment instead of crash-looping on a cap it can never use.
 
     Best-effort: any lookup failure just leaves cap_id unresolved, and the
     daemon falls through to its normal auto-registration path (which will
     itself fail loudly with E_ALREADY_REGISTERED if that assumption turns
     out to be wrong -- better than silently deploying a wrong/stale cap id).
     """
+    from . import contract
+
+    deployment = contract.load_deployment(env_name)
+    original_package_id = deployment.get("CONTRACT_ORIGINAL_PACKAGE_ID", "") or deployment.get("CONTRACT_PACKAGE_ID", "")
     if entry.get("cap_id"):
-        return
+        if original_package_id and entry.get("cap_id_package") == original_package_id:
+            return
+        print(
+            f"Warning: cached cap_id {entry['cap_id']} for wallet {entry['address']} was minted "
+            f"under a previous contract deployment; dropping it so this instance re-registers fresh "
+            "against the current deployment.",
+            file=sys.stderr,
+        )
+        entry["cap_id"] = ""
+        entry["cap_id_package"] = ""
     try:
         found = find_cap_id(entry["address"], env_name)
     except (subprocess.CalledProcessError, RuntimeError) as exc:
@@ -342,6 +379,7 @@ def resolve_cap_id(entry: dict[str, Any], service: str, env_name: str) -> None:
         entry["role_mismatch"] = struct_name
         return
     entry["cap_id"] = object_id
+    entry["cap_id_package"] = original_package_id
 
 
 def find_cap_id(address: str, env_name: str) -> tuple[str, str] | None:
@@ -350,12 +388,21 @@ def find_cap_id(address: str, env_name: str) -> tuple[str, str] | None:
     and under which role. Returns (struct_name, object_id), or None for a
     fresh/never-registered wallet.
 
-    Only matches caps minted by the CURRENTLY deployed package -- a bare
-    struct-name suffix match (no package check) previously let a stale cap
-    from a prior `contract publish --force` (new package + new registries)
-    get cached and injected forever, since cap_id is only ever resolved
-    once (see resolve_cap_id). That stale object may no longer even exist
-    on-chain, permanently wedging the daemon's registration."""
+    Only matches caps minted by the CURRENTLY deployed ORIGINAL package --
+    a bare struct-name suffix match (no package check) previously let a
+    stale cap from a prior `contract publish --force` (new original package
+    + new registries) get cached and injected forever, since cap_id is only
+    ever resolved once (see resolve_cap_id). That stale object may no
+    longer even exist on-chain, permanently wedging the daemon's
+    registration.
+
+    Deliberately compares against CONTRACT_ORIGINAL_PACKAGE_ID, not
+    CONTRACT_PACKAGE_ID: Sui pins a struct's fully-qualified type to the
+    package that first defined it, so a cap minted before a routine
+    `contract upgrade` still reports its ORIGINAL package id in
+    objectType, not the latest one. Comparing against the latest package id
+    would make this permanently fail to match right after every upgrade
+    even though the cap is still perfectly valid."""
     from . import contract
 
     code = contract.ensure_active_sui_env(env_name)
@@ -363,7 +410,7 @@ def find_cap_id(address: str, env_name: str) -> tuple[str, str] | None:
         raise RuntimeError(f"could not switch sui client to {env_name}")
 
     deployment = contract.load_deployment(env_name)
-    package_id = deployment.get("CONTRACT_PACKAGE_ID", "")
+    original_package_id = deployment.get("CONTRACT_ORIGINAL_PACKAGE_ID", "") or deployment.get("CONTRACT_PACKAGE_ID", "")
 
     result = subprocess.run(
         ["sui", "client", "objects", address],
@@ -377,7 +424,7 @@ def find_cap_id(address: str, env_name: str) -> tuple[str, str] | None:
         for struct_name in ("ControlPlaneCap", "MinerCap"):
             if not object_type.endswith(f"::caps::{struct_name}"):
                 continue
-            if package_id and not object_type.startswith(f"{package_id}::"):
+            if original_package_id and not object_type.startswith(f"{original_package_id}::"):
                 continue
             return struct_name, object_id
     return None

@@ -10,7 +10,12 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     name = instance["name"]
     port = int(instance.get("port") or 0)
     zone = provider_zone(instance)
+    instance["zone"] = zone
     tag = f"xaisen-{name}"
+    # gcloud commands identify instances by name (not a separate numeric
+    # ID), and `tag` here already *is* that name -- persisted via
+    # persist_vm_resolution() for image_bake.bake().
+    instance["resource_id"] = tag
     allows = [gcp.compute.FirewallAllowArgs(protocol="tcp", ports=["22"])]
     if port:
         allows.append(gcp.compute.FirewallAllowArgs(protocol="tcp", ports=[str(port)]))
@@ -31,7 +36,7 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         tags=[tag],
         boot_disk=gcp.compute.InstanceBootDiskArgs(
             initialize_params=gcp.compute.InstanceBootDiskInitializeParamsArgs(
-                image="ubuntu-os-cloud/ubuntu-2204-lts",
+                image=instance.get("image") or "ubuntu-os-cloud/ubuntu-2204-lts",
             ),
         ),
         network_interfaces=[

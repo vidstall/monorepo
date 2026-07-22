@@ -7,7 +7,7 @@ from typing import Any
 
 import tomllib
 
-from . import contract, infra, registry
+from . import contract, image_bake, infra, registry
 from . import object as object_cmd
 from .context import ROOT, RUNTIME_SCENARIO_LOCK, contract_env_path
 
@@ -57,6 +57,7 @@ def load_scenario(path: Path) -> dict[str, Any]:
                 "provider": provider,
                 "instance_index": instance_index,
                 "size": row.get("size") or None,
+                "region": row.get("region") or None,
             }
         )
 
@@ -313,26 +314,78 @@ def apply(path_str: str, yes: bool) -> int:
             )
             return code
 
+    # Bake a golden image for any (provider, region) among the instances
+    # about to start that doesn't have one yet -- set_vm_defaults() then
+    # picks it up automatically for every infra.control("start", ...) call
+    # below, same as if it had been baked ahead of time. Only providers
+    # image_bake.SUPPORTED_PROVIDERS supports do anything here; others are a
+    # no-op and keep today's stock-image behavior.
+    needed_regions: dict[tuple[str, str | None], None] = {}
     for key in to_start:
         row = wanted[key]
-        name, service, provider, instance_index = row["name"], row["service"], row["provider"], row["instance_index"]
-        code = infra.control(
-            "start",
-            name,
-            service,
-            provider,
-            yes=True,
-            size=row.get("size"),
-            instance_index=instance_index,
-        )
-        if code != 0:
+        needed_regions[(row["provider"], row.get("region"))] = None
+    for provider, region in needed_regions:
+        ok, error_message = image_bake.ensure_image(provider, region)
+        if not ok:
             write_lock(scenario_path_display, scenario_hash, env, "failed")
-            print(
-                f"Scenario apply failed starting instance {name}/{service}/{provider}"
-                f"#{instance_index} (exit {code}).",
-                file=sys.stderr,
+            print(f"Scenario apply failed ensuring a golden image: {error_message}", file=sys.stderr)
+            return 1
+
+    # Group by (name, provider): colocated services on the same host go
+    # through infra.control_many() -- one pulumi_up()+inventory()+configure()
+    # pass for the whole host instead of one full pass per service (see
+    # control_many's docstring). Singleton hosts and non-colocation-capable
+    # providers keep using infra.control() one row at a time, unchanged.
+    host_groups: dict[tuple[str, str], list[InstanceKey]] = {}
+    for key in to_start:
+        row = wanted[key]
+        host_groups.setdefault((row["name"], row["provider"]), []).append(key)
+
+    COLOCATE_PROVIDERS = {"digitalocean", "upcloud", "akamai"}
+    for (host_name, host_provider), keys in host_groups.items():
+        if len(keys) > 1 and host_provider in COLOCATE_PROVIDERS and all(
+            infra.service_backend(wanted[key]["service"]) == "vm" for key in keys
+        ):
+            batch_rows = [
+                {
+                    "service": wanted[key]["service"],
+                    "size": wanted[key].get("size"),
+                    "instance_index": wanted[key]["instance_index"],
+                    "region": wanted[key].get("region"),
+                }
+                for key in keys
+            ]
+            code = infra.control_many("start", host_name, host_provider, batch_rows, yes=True)
+            if code != 0:
+                write_lock(scenario_path_display, scenario_hash, env, "failed")
+                print(
+                    f"Scenario apply failed starting host {host_name}@{host_provider} (exit {code}).",
+                    file=sys.stderr,
+                )
+                return code
+            continue
+
+        for key in keys:
+            row = wanted[key]
+            name, service, provider, instance_index = row["name"], row["service"], row["provider"], row["instance_index"]
+            code = infra.control(
+                "start",
+                name,
+                service,
+                provider,
+                yes=True,
+                size=row.get("size"),
+                instance_index=instance_index,
+                region=row.get("region"),
             )
-            return code
+            if code != 0:
+                write_lock(scenario_path_display, scenario_hash, env, "failed")
+                print(
+                    f"Scenario apply failed starting instance {name}/{service}/{provider}"
+                    f"#{instance_index} (exit {code}).",
+                    file=sys.stderr,
+                )
+                return code
 
     write_lock(scenario_path_display, scenario_hash, env, "active")
     print(f"Scenario '{scenario['name']}' applied: {len(to_kill)} removed, {len(to_start)} reconciled.")

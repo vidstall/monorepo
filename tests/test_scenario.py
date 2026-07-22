@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cli import contract, infra, registry, scenario
+from cli import contract, image_bake, infra, registry, scenario
 from cli import object as object_cmd
 from cli.registry import RegistryState
 
@@ -71,6 +71,9 @@ class ScenarioTestCase(unittest.TestCase):
             patch.object(infra, "pulumi_up", return_value=0),
             patch.object(infra, "inventory", return_value=0),
             patch.object(infra, "configure", return_value=0),
+            patch.object(infra, "persist_vm_resolution", return_value=None),
+            patch.object(infra, "GENERATED_INVENTORY", self.root / "runtime" / "hosts.generated.yml"),
+            patch.object(image_bake, "ensure_image", return_value=(True, "")),
             patch("cli.wallet.checkout_wallet", return_value=(dict(FAKE_WALLET), False)),
             patch("cli.wallet.release_wallet", return_value=None),
             patch.object(contract, "publish", return_value=0),
@@ -230,6 +233,49 @@ class DiffInstancesTests(unittest.TestCase):
 
 
 class ApplyTests(ScenarioTestCase):
+    def test_apply_ensures_image_before_starting_instances(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(image_bake, "ensure_image", return_value=(True, "")) as ensure_image:
+            code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        # SCENARIO_TOML has two digitalocean instances with no explicit
+        # region -- ensure_image should be called once per unique
+        # (provider, region) pair, not once per instance.
+        ensure_image.assert_called_once_with("digitalocean", None)
+
+    def test_apply_fails_when_image_bake_fails(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(image_bake, "ensure_image", return_value=(False, "bake blew up")):
+            code = scenario.apply(str(path), True)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(scenario.read_lock()["status"], "failed")
+        # Nothing should have been started.
+        topology = self.read_topology()
+        self.assertEqual(topology.get("instances", []), [])
+
+    def test_apply_passes_explicit_region_through_to_control(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML.replace(
+                '[[instances]]\nname = "node-1"\nservice = "signaling"',
+                '[[instances]]\nname = "node-1"\nservice = "signaling"\nregion = "sfo3"',
+            ),
+        )
+        with (
+            patch.object(image_bake, "ensure_image", return_value=(True, "")) as ensure_image,
+            patch.object(infra, "control_many", wraps=infra.control_many) as control_many_spy,
+        ):
+            code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        ensure_image.assert_any_call("digitalocean", "sfo3")
+        # Both instances are colocated on node-1@digitalocean, so apply()
+        # batches them through control_many() (see control_many's docstring)
+        # instead of calling control() once per service.
+        call_args, _call_kwargs = control_many_spy.call_args
+        rows = call_args[3]
+        signaling_row = next(r for r in rows if r["service"] == "signaling")
+        self.assertEqual(signaling_row.get("region"), "sfo3")
+
     def test_apply_creates_instances_and_locks(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         code = scenario.apply(str(path), True)

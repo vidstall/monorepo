@@ -75,11 +75,13 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
             protocol="icmp", destination_addresses=destinations
         ),
     ]
+    region = provider_region("digitalocean", instance)
+    instance["region"] = region
     droplet = digitalocean.Droplet(
         f"{name}-vm",
         name=f"xaisen-{name}",
-        image="ubuntu-22-04-x64",
-        region=provider_region("digitalocean", instance),
+        image=instance.get("image") or "ubuntu-22-04-x64",
+        region=region,
         size=instance.get("size") or "s-1vcpu-1gb",
         ssh_keys=[key.fingerprint],
     )
@@ -90,4 +92,8 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         inbound_rules=inbound_rules,
         outbound_rules=outbound_rules,
     )
+    # Numeric droplet ID, as doctl's `--droplet-id`-style args expect (not
+    # our internal `name`) -- persisted via persist_vm_resolution() so
+    # image_bake.bake() can drive doctl against the right resource.
+    instance["resource_id"] = droplet.id
     return {"address": droplet.ipv4_address, "user": "root"}

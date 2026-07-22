@@ -63,12 +63,23 @@ class ContractPublishTests(unittest.TestCase):
         self.path_patch = patch.object(contract, "contract_env_path", lambda _env: self.env_path)
         self.pubfile_patch = patch.object(contract, "PUBLISHED_TOML", self.published_toml)
         self.runtime_patch = patch.object(contract, "RUNTIME_DIR", self.runtime_dir)
+        # publish()/upgrade_existing() call sync_frontend_env(), which writes
+        # to these two module-level constants unconditionally -- without
+        # patching them to a temp path, every test run here clobbers the
+        # REAL services/client/{client,admin}/.env files with fake test
+        # fixture values (e.g. "0xupgraded").
+        self.client_env_patch = patch.object(contract, "CLIENT_ENV_PATH", self.root / "client.env")
+        self.admin_env_patch = patch.object(contract, "ADMIN_ENV_PATH", self.root / "admin.env")
         self.path_patch.start()
         self.pubfile_patch.start()
         self.runtime_patch.start()
+        self.client_env_patch.start()
+        self.admin_env_patch.start()
         self.addCleanup(self.path_patch.stop)
         self.addCleanup(self.pubfile_patch.stop)
         self.addCleanup(self.runtime_patch.stop)
+        self.addCleanup(self.client_env_patch.stop)
+        self.addCleanup(self.admin_env_patch.stop)
 
     def fake_sui(self, args: list[object], cwd: Path | None = None) -> tuple[int, dict | None, str]:
         command = [str(arg) for arg in args]
@@ -277,14 +288,26 @@ class ContractPublishTests(unittest.TestCase):
             }
         )
 
+        def fake_sui_devnet_upgrade(args: list[object], cwd: Path | None = None) -> tuple[int, dict | None, str]:
+            # devnet's real (non-dry-run) upgrade also goes through
+            # "test-upgrade" now (see real_upgrade_command) -- distinguish
+            # preview vs real by --dry-run presence, same as the fresh-
+            # publish fake above.
+            command = [str(arg) for arg in args]
+            self.commands.append(command)
+            action = command[2]
+            if action == "test-upgrade":
+                return (0, {"effects": {}}, "") if "--dry-run" in command else (0, upgrade_payload(), "")
+            self.fail(f"Unexpected Sui action: {action}")
+
         with (
-            patch.object(contract, "run_sui_json", self.fake_sui),
+            patch.object(contract, "run_sui_json", fake_sui_devnet_upgrade),
             patch.object(contract, "sync_devnet_chain_id", return_value="same-chain-id"),
         ):
             code = contract.publish("devnet", dry_run=False, yes=True, gas_budget="1000")
 
         self.assertEqual(code, 0)
-        self.assertEqual([command[2] for command in self.commands], ["test-upgrade", "upgrade"])
+        self.assertEqual([command[2] for command in self.commands], ["test-upgrade", "test-upgrade"])
         values = parse_env(self.env_path)
         self.assertEqual(values["CONTRACT_PACKAGE_ID"], "0xupgraded")
 

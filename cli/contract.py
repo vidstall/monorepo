@@ -114,9 +114,24 @@ def sync_devnet_chain_id() -> str | None:
         )
         return None
     try:
-        chain_id = json.loads(result.stdout.strip())
+        parsed = json.loads(result.stdout.strip())
     except json.JSONDecodeError:
         print("Warning: could not parse devnet chain-id response; using existing Move.toml value.", file=sys.stderr)
+        return None
+
+    # Newer `sui` CLI versions return an object ({"base58": ..., "hex": ...})
+    # instead of a bare JSON string -- normalize to the hex form Move.toml's
+    # [environments] table expects either way.
+    if isinstance(parsed, dict):
+        chain_id = parsed.get("hex") or parsed.get("base58")
+    else:
+        chain_id = parsed
+    if not isinstance(chain_id, str) or not chain_id:
+        print(
+            f"Warning: unrecognized devnet chain-id response shape ({parsed!r}); "
+            "using existing Move.toml value.",
+            file=sys.stderr,
+        )
         return None
 
     if not MOVE_TOML.exists():
@@ -300,6 +315,38 @@ def real_publish_command(env: str, gas_budget: str | None) -> list[str]:
     ]
 
 
+def real_upgrade_command(env: str, upgrade_cap_id: str, gas_budget: str | None, pubfile_path: str) -> list[str]:
+    """The real (non-dry-run) upgrade transaction command for `env`.
+
+    Same devnet special-case as real_publish_command(): the persistent
+    `sui client upgrade` path relies on Move.lock's per-environment publish
+    record, which devnet publishes never get (they go through test-publish/
+    test-upgrade specifically to skip that ephemeral-network bookkeeping) --
+    so `sui client upgrade` on devnet fails with the same "package does not
+    define a devnet environment" error `real_publish_command` already works
+    around. `sui client test-upgrade` (without --dry-run) executes a real
+    on-chain upgrade the same way test-publish does for a fresh publish.
+    testnet/mainnet are unaffected and keep using `sui client upgrade`.
+    """
+    if env == "devnet":
+        return [
+            "sui", "client", "test-upgrade",
+            "--upgrade-capability", upgrade_cap_id,
+            "--build-env", env,
+            "--pubfile-path", pubfile_path,
+            "--json",
+            *(["--gas-budget", gas_budget] if gas_budget else []),
+            CONTRACT_DIR,
+        ]
+    return [
+        "sui", "client", "upgrade",
+        "--upgrade-capability", upgrade_cap_id,
+        "--json",
+        *(["--gas-budget", gas_budget] if gas_budget else []),
+        CONTRACT_DIR,
+    ]
+
+
 def upgrade_existing(
     env: str,
     deployment: dict[str, str],
@@ -339,16 +386,7 @@ def upgrade_existing(
         return 0
 
     upgrade_code, upgrade_result, upgrade_error = run_sui_json(
-        [
-            "sui",
-            "client",
-            "upgrade",
-            "--upgrade-capability",
-            upgrade_cap_id,
-            "--json",
-            *(["--gas-budget", gas_budget] if gas_budget else []),
-            CONTRACT_DIR,
-        ]
+        real_upgrade_command(env, upgrade_cap_id, gas_budget, pubfile_path)
     )
     if upgrade_result is None:
         if upgrade_error:

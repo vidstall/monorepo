@@ -51,12 +51,17 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         public_key=public_key,
         opts=opts,
     )
-    images = alicloud.ecs.get_images(
-        name_regex="^ubuntu_22_04_x64.*",
-        most_recent=True,
-        owners="system",
-        opts=pulumi.InvokeOptions(provider=provider),
-    )
+    baked_image = instance.get("image")
+    if baked_image:
+        image_id = baked_image
+    else:
+        images = alicloud.ecs.get_images(
+            name_regex="^ubuntu_22_04_x64.*",
+            most_recent=True,
+            owners="system",
+            opts=pulumi.InvokeOptions(provider=provider),
+        )
+        image_id = images.images[0].id
     vm = alicloud.ecs.Instance(
         f"{name}-vm",
         instance_name=f"xaisen-{name}",
@@ -64,7 +69,7 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         instance_charge_type="PostPaid",
         spot_strategy="SpotAsPriceGo",
         availability_zone=zone,
-        image_id=images.images[0].id,
+        image_id=image_id,
         vswitch_id=vswitch.id,
         security_groups=[security_group.id],
         key_name=key.key_pair_name,
@@ -74,4 +79,7 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         stopped_mode="KeepCharging",
         opts=opts,
     )
+    # ECS instance ID, as `aliyun ecs ...` commands expect -- persisted via
+    # persist_vm_resolution() for image_bake.bake().
+    instance["resource_id"] = vm.id
     return {"address": vm.public_ip, "user": "root"}

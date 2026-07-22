@@ -133,17 +133,23 @@ def inventory() -> int:
     return 0
 
 
-def persist_alibaba_vm_resolution(
+def persist_vm_resolution(
     topology: dict[str, Any],
     env_name: str,
     name: str,
     service: str,
     provider: str,
 ) -> None:
-    """Copy the region/size Pulumi resolved for this VM back into topology.toml.
+    """Copy the region/zone/size Pulumi resolved for this VM back into
+    topology.toml.
 
-    Best-effort: a failure here shouldn't fail an otherwise-successful deploy,
-    it just means the next run re-searches instead of reusing the pin.
+    Originally alibaba-only (spot-search can land on a different region/size
+    than requested); generalized to every provider so runtime/images.toml's
+    per-(provider, region) golden-image lookup in set_vm_defaults() has a
+    real region to key off after the first deploy, for providers whose
+    compute module doesn't otherwise persist one. Best-effort: a failure here
+    shouldn't fail an otherwise-successful deploy, it just means the next run
+    re-resolves the default instead of reusing what got recorded.
     """
     try:
         raw = subprocess.check_output(
@@ -167,8 +173,12 @@ def persist_alibaba_vm_resolution(
             if local_instance is not None:
                 if remote_instance.get("region"):
                     local_instance["region"] = remote_instance["region"]
+                if remote_instance.get("zone"):
+                    local_instance["zone"] = remote_instance["zone"]
                 if remote_instance.get("size"):
                     local_instance["size"] = remote_instance["size"]
+                if remote_instance.get("resource_id"):
+                    local_instance["resource_id"] = remote_instance["resource_id"]
             return
 
 
@@ -344,6 +354,7 @@ def control(
     all_region: bool = False,
     size: str | None = None,
     instance_index: int = 1,
+    region: str | None = None,
 ) -> int:
     if service not in DOCKER_SERVICES:
         print(f"Unknown service: {service}", file=sys.stderr)
@@ -459,7 +470,7 @@ def control(
     instance["last_updated"] = timestamp()
     instance["contract_env"] = relative_contract_env(env_name)
     if backend == "vm" and action in {"start", "restart"}:
-        set_vm_defaults(instance, topology, find_instance_type=find_instance_type, size=size, instance_index=instance_index)
+        set_vm_defaults(instance, topology, find_instance_type=find_instance_type, size=size, region=region, instance_index=instance_index)
     write_topology(topology)
 
     code = 0
@@ -518,8 +529,8 @@ def control(
         elif backend == "vm" and action in {"start", "restart"}:
             failed_stage = "inventory"
             code = inventory()
-            if code == 0 and provider == "alibaba":
-                persist_alibaba_vm_resolution(topology, env_name, name, service, provider)
+            if code == 0:
+                persist_vm_resolution(topology, env_name, name, service, provider)
             if code == 0:
                 failed_stage = "configure"
                 container_state = "restarted" if action == "restart" else "started"
@@ -565,6 +576,197 @@ def control(
         result_for_code=code,
         error=str(instance.get("last_error", "")),
     )
+    return code
+
+
+def control_many(
+    action: str,
+    name: str,
+    provider: str,
+    rows: list[dict[str, Any]],
+    yes: bool = False,
+) -> int:
+    """Batched variant of control() for multiple vm-backed services
+    colocated on ONE host (same name+provider). control() does a full
+    pulumi_up()+inventory()+configure() pass per (name, service) row -- fine
+    for a single service, but wasteful when many services share a host
+    (e.g. a scenario colocating 8 services on one DigitalOcean droplet):
+    the same host would get a full pulumi apply and a full Ansible
+    playbook run 8 times in a row, each one re-walking every
+    already-configured service on that host again before doing anything
+    new. This runs the per-row bookkeeping (wallet checkout, topology
+    update) for every row, then ONE pulumi_up()+inventory()+configure()
+    pass covering the whole batch.
+
+    Each row is a dict with keys: service, size (optional), instance_index
+    (optional, default 1), region (optional). Only supports action in
+    {"start", "restart"} -- kill/pause aren't batched since they're not the
+    slow path this exists to fix.
+
+    Callers are responsible for only grouping rows that are safe to batch:
+    all vm-backed, and (if more than one row) on a colocation-capable
+    provider -- this mirrors control()'s own colocation gate but doesn't
+    repeat every one of its checks (e.g. it assumes the caller already
+    filtered out cloudflare/tencent).
+    """
+    if action not in {"start", "restart"}:
+        raise ValueError("control_many only supports action in {'start', 'restart'}")
+    if not rows:
+        return 0
+    if provider not in PROVIDERS:
+        print(f"Unknown provider: {provider}", file=sys.stderr)
+        return 2
+    if len(rows) > 1 and provider not in {"digitalocean", "upcloud", "akamai"}:
+        message = (
+            f"Colocating multiple service instances on one --name is only supported for "
+            f"--provider digitalocean, --provider upcloud, or --provider akamai (got --provider "
+            f"{provider})."
+        )
+        print(message, file=sys.stderr)
+        return 1
+
+    topology = read_topology()
+    env_name = validate_network(str(topology.get("active_env", "devnet")))
+    contract_path = contract_env_path(env_name)
+
+    missing_keys = missing_contract_keys(contract_path)
+    if missing_keys:
+        message = (
+            f"{contract_path} is missing required contract keys: {', '.join(missing_keys)}. "
+            f"Run ./vidctl contract publish --env {env_name} --yes first."
+        )
+        print(message, file=sys.stderr)
+        for row in rows:
+            record_history(action, env=env_name, name=name, service=str(row["service"]), provider=provider, result_for_code=1, error=message)
+        return 1
+
+    missing_provider_keys = missing_vm_provider_keys(provider)
+    if missing_provider_keys:
+        message = vm_provider_error(provider, missing_provider_keys)
+        print(message, file=sys.stderr)
+        for row in rows:
+            record_history(action, env=env_name, name=name, service=str(row["service"]), provider=provider, result_for_code=1, error=message)
+        return 1
+
+    from . import wallet
+
+    prepared: list[dict[str, Any]] = []
+    for row in rows:
+        service = str(row["service"])
+        instance_index = int(row.get("instance_index") or 1)
+        instance_key = service if instance_index == 1 else f"{service}-{instance_index}"
+        if service not in DOCKER_SERVICES:
+            print(f"Unknown service: {service}", file=sys.stderr)
+            return 2
+        if service_backend(service) != "vm":
+            print(f"control_many only supports vm-backed services (got '{service}')", file=sys.stderr)
+            return 2
+
+        try:
+            wallet_entry, _created = wallet.checkout_wallet(name, service, provider, env_name, instance_index)
+        except (subprocess.CalledProcessError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
+            message = f"Failed to create/load operator wallet for {name}: {exc}"
+            print(message, file=sys.stderr)
+            record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
+            return 1
+
+        instance = find_instance(topology, env_name, name, service, provider, instance_index)
+        if instance is None:
+            instance = new_instance(env_name, name, service, provider, instance_index)
+            topology.setdefault("instances", []).append(instance)
+
+        previous = str(instance.get("desired_state", instance.get("last_status", "unknown")))
+        next_state = desired_state_for(action)
+        instance["backend"] = "vm"
+        instance["desired_state"] = next_state
+        instance["last_operation"] = action
+        instance["last_updated"] = timestamp()
+        instance["contract_env"] = relative_contract_env(env_name)
+        set_vm_defaults(
+            instance,
+            topology,
+            find_instance_type=False,
+            size=row.get("size"),
+            region=row.get("region"),
+            instance_index=instance_index,
+        )
+        prepared.append(
+            {
+                "service": service,
+                "instance_index": instance_index,
+                "instance_key": instance_key,
+                "instance": instance,
+                "previous": previous,
+                "next_state": next_state,
+                "wallet_entry": wallet_entry,
+            }
+        )
+
+    write_topology(topology)
+
+    failed_stage = "pulumi"
+    code = pulumi_up(env_name)
+
+    if code == 0:
+        failed_stage = "inventory"
+        code = inventory()
+        if code == 0:
+            for item in prepared:
+                persist_vm_resolution(topology, env_name, name, item["service"], provider)
+        if code == 0:
+            failed_stage = "configure"
+            container_state = "restarted" if action == "restart" else "started"
+            extra_vars = {
+                "xaisen_operator_wallets": {
+                    item["instance_key"]: wallet.operator_state_json(item["wallet_entry"])
+                    for item in prepared
+                    if item["wallet_entry"] is not None
+                }
+            }
+            code = configure(host_limit=name, container_state=container_state, extra_vars=extra_vars)
+
+    for item in prepared:
+        instance = item["instance"]
+        if code == 0:
+            instance["last_status"] = item["next_state"]
+            instance["last_error"] = ""
+        else:
+            if failed_stage == "pulumi":
+                instance["desired_state"] = item["previous"]
+            instance["last_error"] = f"{failed_stage} failed with exit code {code}"
+    write_topology(topology)
+
+    if code == 0:
+        address = instance_address(name)
+        for item in prepared:
+            wallet_entry = item["wallet_entry"]
+            if wallet_entry is None:
+                continue
+            wallet_address = str(wallet_entry.get("address", ""))
+            try:
+                balance_mist = wallet.current_balance_mist(wallet_address)
+            except (subprocess.CalledProcessError, json.JSONDecodeError):
+                balance_mist = int(wallet_entry.get("last_balance_mist", 0))
+            print(f"IP:      {address or 'unknown'}")
+            print(f"Wallet:  {wallet_address[:8]}...")
+            print(f"Balance: {balance_mist / 1_000_000_000:.4f} SUI")
+            print(f"Registry: {registry_status(name, item['instance_key'], address)}")
+
+    for item in prepared:
+        instance = item["instance"]
+        record_history(
+            action,
+            env=env_name,
+            name=name,
+            service=item["instance_key"],
+            provider=str(instance.get("provider", "")),
+            resource_id=str(instance.get("resource_id", "")),
+            previous_status=item["previous"],
+            next_status=str(instance.get("desired_state", "")),
+            result_for_code=code,
+            error=str(instance.get("last_error", "")),
+        )
+
     return code
 
 
@@ -817,6 +1019,7 @@ def set_vm_defaults(
     topology: dict[str, Any],
     find_instance_type: bool = False,
     size: str | None = None,
+    region: str | None = None,
     instance_index: int = 1,
 ) -> None:
     service = str(instance.get("service", ""))
@@ -841,6 +1044,14 @@ def set_vm_defaults(
         # that name must agree (enforced by program.py's merge step).
         instance["size"] = size
 
+    if region:
+        # Same "explicit always wins, persists on the topology row" shape as
+        # size above -- lets a scenario file's declared region actually
+        # steer the real deploy, not just which region image_bake bakes
+        # into for it (cli/scenario.py's ensure_image()/DEFAULT_BAKE_REGIONS
+        # would otherwise pick a bake target this VM never actually uses).
+        instance["region"] = region
+
     if provider == "alibaba":
         if find_instance_type:
             instance.pop("region", None)
@@ -853,6 +1064,15 @@ def set_vm_defaults(
     else:
         default_size = VM_INSTANCE_SIZE_OVERRIDES.get((provider, service), VM_INSTANCE_SIZES.get(provider, ""))
         instance.setdefault("size", default_size)
+
+    if not instance.get("image"):
+        from . import image_bake
+
+        region = str(instance.get("region") or instance.get("zone") or "")
+        if region:
+            baked = image_bake.lookup_image(provider, region)
+            if baked:
+                instance["image"] = baked
 
     instance["ssh_key_dir"] = ensure_ssh_keypair(instance)
 

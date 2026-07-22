@@ -31,6 +31,21 @@ def run() -> int:
     for name, ok in checks.items():
         print(f"{name}: {'ok' if ok else 'missing'}")
 
+    # Provider CLIs used only by `vidctl utils image-bake` -- optional,
+    # never gate the overall doctor exit code, since most workflows never
+    # bake a golden image.
+    optional_checks = {
+        "aws_cli (image-bake)": shutil.which("aws") is not None,
+        "gcloud_cli (image-bake)": shutil.which("gcloud") is not None,
+        "az_cli (image-bake)": shutil.which("az") is not None,
+        "aliyun_cli (image-bake)": shutil.which("aliyun") is not None,
+        "doctl_cli (image-bake)": shutil.which("doctl") is not None,
+        "upctl_cli (image-bake)": shutil.which("upctl") is not None,
+        "linode_cli (image-bake)": shutil.which("linode-cli") is not None,
+    }
+    for name, ok in optional_checks.items():
+        print(f"{name}: {'ok' if ok else 'missing'}")
+
     if venv_bin("python").exists():
         imports = (
             "import ansible, ansible_mitogen, pulumi, pulumi_alicloud, "

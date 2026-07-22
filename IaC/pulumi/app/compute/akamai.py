@@ -52,12 +52,14 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                 linode.FirewallInboundArgs(action="ACCEPT", label=label, protocol="TCP", ports=str(port))
             )
 
+    region = provider_region("akamai", instance)
+    instance["region"] = region
     server = linode.Instance(
         f"{name}-vm",
         label=f"xaisen-{name}",
-        region=provider_region("akamai", instance),
+        region=region,
         type=instance.get("size") or "g6-nanode-1",
-        image="linode/ubuntu22.04",
+        image=instance.get("image") or "linode/ubuntu22.04",
         authorized_keys=[public_key],
         # Pause/restart lifecycle: `booted` is Linode's in-place power-state
         # toggle (mirrors alicloud.ecs.Instance's `status` field in
@@ -75,4 +77,7 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         inbounds=inbounds,
         linodes=[server.id.apply(lambda value: int(value))],
     )
+    # Numeric Linode ID, as `linode-cli linodes ...` commands expect --
+    # persisted via persist_vm_resolution() for image_bake.bake().
+    instance["resource_id"] = server.id
     return {"address": server.ip_address, "user": "root"}

@@ -31,6 +31,15 @@ class InfraTopologyTests(unittest.TestCase):
             patch.object(infra, "RUNTIME_TOPOLOGY_TOML", self.topology),
             patch.object(infra, "RUNTIME_HISTORY_TOML", self.history),
             patch.object(infra, "contract_env_path", lambda _env: self.contract),
+            # persist_vm_resolution shells out to `pulumi stack output` for
+            # every provider now (generalized from alibaba-only); no test
+            # here exercises its real behavior, so mock it out uniformly.
+            patch.object(infra, "persist_vm_resolution", return_value=None),
+            # Isolate from any real generated inventory left on disk by a
+            # manual `vidctl` run -- without this, instance_address()/
+            # registry_status() can pick up a real stale IP and attempt a
+            # real (slow, timing-out) SSH connection.
+            patch.object(infra, "GENERATED_INVENTORY", self.root / "runtime" / "hosts.generated.yml"),
         ]
         for item in self.patches:
             item.start()

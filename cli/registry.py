@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import sys
+import threading
 import tomllib
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +27,14 @@ DEFAULT_PROVIDER = "alibaba"
 # so images built on arm64 dev machines (e.g. Apple Silicon) still run on the
 # deployed hosts instead of crash-looping with "exec format error".
 TARGET_PLATFORM = "linux/amd64"
+
+# Each service's build/push is independent (own Dockerfile, own context, own
+# registry path) -- run them concurrently instead of one-at-a-time. Capped
+# rather than unbounded so a full `--all` build doesn't try to run every
+# service's docker build simultaneously and thrash a laptop's CPU/disk.
+MAX_PARALLEL_DOCKER_JOBS = 4
+
+_deployed_tag_write_lock = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -130,6 +140,15 @@ def write_runtime_registry(config: RegistryConfig) -> None:
 
 
 def write_deployed_tag(service: str, tag: str) -> None:
+    # Guards the shared runtime/registry.toml + deployed_tags.generated.yml
+    # read-modify-write against concurrent callers (each_service() now runs
+    # per-service push jobs in a thread pool) -- without this, two threads
+    # racing the read-modify-write would clobber each other's tag entry.
+    with _deployed_tag_write_lock:
+        _write_deployed_tag_locked(service, tag)
+
+
+def _write_deployed_tag_locked(service: str, tag: str) -> None:
     deployed = existing_deployed_tags()
     deployed[service] = tag
 
@@ -226,22 +245,35 @@ def each_service(action: str, service: str | None, all_services: bool, tag: str 
     try:
         services = selected_services(service, all_services)
         resolved_tag = tag or git_short_sha()
-        for name in services:
-            context = DOCKER_SERVICES[name]
-            dockerfile = DOCKERFILES[name]
-            image = image_name(name, resolved_tag)
-            code = run_docker_action(action, image, context, dockerfile)
-            if code != 0:
-                return code
-            if action == "push":
-                write_deployed_tag(name, resolved_tag)
-        return 0
+        # Resolve image names up front (single-threaded) since image_name()
+        # itself reads shared registry state; each_service_job() below then
+        # only touches its own service's independent build/push.
+        images = {name: image_name(name, resolved_tag) for name in services}
     except KeyError as exc:
         print(f"Unknown service: {exc.args[0]}", file=sys.stderr)
         return 2
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+
+    def run_one(name: str) -> tuple[str, int]:
+        code = run_docker_action(action, images[name], DOCKER_SERVICES[name], DOCKERFILES[name])
+        if code == 0 and action == "push":
+            write_deployed_tag(name, resolved_tag)
+        return name, code
+
+    max_workers = max(1, min(len(services), MAX_PARALLEL_DOCKER_JOBS))
+    failures: list[tuple[str, int]] = []
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        for name, code in pool.map(run_one, services):
+            if code != 0:
+                failures.append((name, code))
+
+    if failures:
+        for name, code in failures:
+            print(f"{action} failed for service {name} (exit {code}).", file=sys.stderr)
+        return failures[0][1]
+    return 0
 
 
 def run_docker_action(action: str, image: str, context: Path, dockerfile: Path) -> int:

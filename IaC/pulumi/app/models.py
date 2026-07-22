@@ -48,6 +48,11 @@ class TopologyInstance(TypedDict, total=False):
     zone: str
     ssh_key_dir: str
     size: str
+    # Baked golden-image id/reference for this (provider, region), populated
+    # by cli/infra.py's set_vm_defaults() from runtime/images.toml. Absent
+    # means "no golden image yet" -- each compute module falls back to its
+    # stock-image lookup.
+    image: str
     # 1-based; see ServicePort.index above. Always present on real topology
     # rows (cli/infra.py's new_instance always sets it, default 1).
     instance_index: int

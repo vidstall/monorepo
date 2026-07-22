@@ -79,14 +79,16 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                 )
             )
 
+    zone = provider_region("upcloud", instance)
+    instance["region"] = zone
     server = upcloud.Server(
         f"{name}-vm",
         hostname=f"xaisen-{name}",
-        zone=provider_region("upcloud", instance),
+        zone=zone,
         plan=instance.get("size") or "1xCPU-1GB",
         login=upcloud.ServerLoginArgs(user="root", keys=[public_key], create_password=False),
         network_interfaces=[upcloud.ServerNetworkInterfaceArgs(type="public")],
-        template=upcloud.ServerTemplateArgs(storage="Ubuntu Server 22.04 LTS", size=25),
+        template=upcloud.ServerTemplateArgs(storage=instance.get("image") or "Ubuntu Server 22.04 LTS", size=25),
     )
     # FirewallRuleset is per-server (server_uuid), unlike DigitalOcean's
     # shared Firewall+droplet_ids resource -- still exactly one resource per
@@ -101,4 +103,7 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     address = server.network_interfaces.apply(
         lambda nics: nics[0].ip_address if nics else None
     )
+    # Server UUID, as `upctl server ...` commands expect -- persisted via
+    # persist_vm_resolution() for image_bake.bake().
+    instance["resource_id"] = server.id
     return {"address": address, "user": "root"}

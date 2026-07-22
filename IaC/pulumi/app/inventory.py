@@ -109,6 +109,14 @@ def build_inventory(
         host_name = instance.get("name")
         if not host_name:
             continue
+        # Golden-image bake VMs (cli/image_bake.py, service="__bake__") are
+        # provisioned through the normal topology-driven pulumi up and DO
+        # stay in this inventory -- image_bake.bake() needs their resolved
+        # address from here (via infra.instance_address()) to SSH in and
+        # bootstrap them itself. They're still harmless if ever swept into a
+        # real `vidctl infra configure` run: docker_service's first task
+        # (`end_host` when xaisen_services is undefined/empty) no-ops for
+        # them immediately, since a bake row never gets services assigned.
         if instance.get("backend") != "vm":
             if not should_include_ansible_host(instance):
                 continue
