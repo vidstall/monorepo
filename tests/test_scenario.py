@@ -73,6 +73,14 @@ class ScenarioTestCase(unittest.TestCase):
             patch.object(infra, "configure", return_value=0),
             patch.object(infra, "persist_vm_resolution", return_value=None),
             patch.object(infra, "GENERATED_INVENTORY", self.root / "runtime" / "hosts.generated.yml"),
+            # set_vm_defaults()'s ensure_ssh_keypair() does real ssh-keygen
+            # file I/O against SSH_KEY_ROOT regardless of the pulumi_up/
+            # inventory/configure mocks above -- these scenarios use instance
+            # name "node-1", which collides with a real deployed instance
+            # name. Without this, running this suite regenerates the REAL
+            # runtime/ssh_key/node-1 keypair, orphaning SSH access to an
+            # actually-running droplet.
+            patch.object(infra, "SSH_KEY_ROOT", self.root / "runtime" / "ssh_key"),
             patch.object(image_bake, "ensure_image", return_value=(True, "")),
             patch("cli.wallet.checkout_wallet", return_value=(dict(FAKE_WALLET), False)),
             patch("cli.wallet.release_wallet", return_value=None),

@@ -40,6 +40,13 @@ class InfraTopologyTests(unittest.TestCase):
             # registry_status() can pick up a real stale IP and attempt a
             # real (slow, timing-out) SSH connection.
             patch.object(infra, "GENERATED_INVENTORY", self.root / "runtime" / "hosts.generated.yml"),
+            # ensure_ssh_keypair()/control()'s kill path do real filesystem
+            # I/O (ssh-keygen, shutil.rmtree) against SSH_KEY_ROOT -- several
+            # tests here use instance name "node-1", which collides with a
+            # real deployed instance name. Without this patch, running this
+            # suite deletes/regenerates the REAL runtime/ssh_key/node-1
+            # keypair, orphaning SSH access to an actually-running droplet.
+            patch.object(infra, "SSH_KEY_ROOT", self.root / "runtime" / "ssh_key"),
         ]
         for item in self.patches:
             item.start()
