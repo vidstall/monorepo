@@ -1,9 +1,12 @@
 [submodule "services/client"]
 	path = services/client
 	url = https://github.com/vidstall/client.git
+	branch = qvanle
 [submodule "services/worker"]
 	path = services/worker
 	url = https://github.com/vidstall/worker.git
+	branch = qvanle
 [submodule "services/contract"]
 	path = services/contract
 	url = https://github.com/vidstall/contract.git
+	branch = qvanle
