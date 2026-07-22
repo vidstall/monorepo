@@ -16,6 +16,8 @@ def run() -> int:
         "gcp_credentials": bool(env.get("GOOGLE_CREDENTIALS") or env.get("GOOGLE_APPLICATION_CREDENTIALS")),
         "azure_credentials": bool(env.get("ARM_CLIENT_ID") or env.get("AZURE_CLIENT_ID")),
         "digitalocean_token": bool(env.get("DIGITALOCEAN_TOKEN")),
+        "upcloud_credentials": bool(env.get("UPCLOUD_TOKEN")),
+        "akamai_credentials": bool(env.get("LINODE_TOKEN")),
         "alibaba_access_key": bool(env.get("ALIBABA_CLOUD_ACCESS_KEY_ID")),
         "alibaba_secret_key": bool(env.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET")),
         "alibaba_region": bool(env.get("ALIBABA_CLOUD_REGION")),
@@ -33,7 +35,7 @@ def run() -> int:
         imports = (
             "import ansible, ansible_mitogen, pulumi, pulumi_alicloud, "
             "pulumi_aws, pulumi_azure_native, pulumi_digitalocean, pulumi_gcp, "
-            "pulumi_tencentcloud, yaml"
+            "pulumi_tencentcloud, pulumi_upcloud, pulumi_linode, yaml"
         )
         checks["python_dependencies"] = subprocess.call([str(venv_bin("python")), "-c", imports], cwd=ROOT, env=env) == 0
     else:

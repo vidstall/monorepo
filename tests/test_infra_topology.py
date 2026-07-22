@@ -93,6 +93,216 @@ class InfraTopologyTests(unittest.TestCase):
         self.assertEqual(instance["desired_state"], "running")
         self.assertEqual(instance["last_status"], "running")
 
+    def test_upcloud_vm_start_runs_pulumi_inventory_and_configure(self) -> None:
+        self.contract.write_text(
+            "CONTRACT_PACKAGE_ID=0xpackage\nNETWORK_REGISTRY_ID=0xregistry\n",
+            encoding="utf-8",
+        )
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [],
+            }
+        )
+
+        with (
+            patch("cli.wallet.checkout_wallet", return_value=({"secret_key": "k", "node_id": None, "x25519_secret": "x", "cap_id": None}, False)),
+            patch.object(infra, "command_env", return_value={"UPCLOUD_TOKEN": "token"}),
+            patch.object(infra, "pulumi_up", return_value=0) as pulumi_up,
+            patch.object(infra, "inventory", return_value=0) as inventory,
+            patch.object(infra, "configure", return_value=0) as configure,
+        ):
+            code = infra.control("start", "node-1", "signaling", "upcloud")
+
+        self.assertEqual(code, 0)
+        pulumi_up.assert_called_once_with("devnet")
+        inventory.assert_called_once()
+        self.assertEqual(configure.call_args.kwargs["host_limit"], "node-1")
+        self.assertEqual(configure.call_args.kwargs["container_state"], "started")
+        instance = self.read_topology()["instances"][0]
+        self.assertEqual(instance["backend"], "vm")
+        self.assertEqual(instance["desired_state"], "running")
+
+    def test_upcloud_colocation_is_accepted_like_digitalocean(self) -> None:
+        self.contract.write_text(
+            "CONTRACT_PACKAGE_ID=0xpackage\nNETWORK_REGISTRY_ID=0xregistry\n",
+            encoding="utf-8",
+        )
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [
+                    {
+                        "name": "node-1",
+                        "service": "signaling",
+                        "provider": "upcloud",
+                        "backend": "vm",
+                        "instance_index": 1,
+                        "desired_state": "running",
+                    }
+                ],
+            }
+        )
+
+        with (
+            patch("cli.wallet.checkout_wallet", return_value=({"secret_key": "k", "node_id": None, "x25519_secret": "x", "cap_id": None}, False)),
+            patch.object(infra, "command_env", return_value={"UPCLOUD_TOKEN": "token"}),
+            patch.object(infra, "pulumi_up", return_value=0),
+            patch.object(infra, "inventory", return_value=0),
+            patch.object(infra, "configure", return_value=0),
+        ):
+            code = infra.control("start", "node-1", "relay", "upcloud")
+
+        # A second, different service colocated on the same --name must be
+        # accepted for upcloud (mirrors digitalocean), not rejected with the
+        # "Colocating ... only supported for --provider digitalocean" error.
+        self.assertEqual(code, 0)
+
+    def test_akamai_vm_start_runs_pulumi_inventory_and_configure(self) -> None:
+        self.contract.write_text(
+            "CONTRACT_PACKAGE_ID=0xpackage\nNETWORK_REGISTRY_ID=0xregistry\n",
+            encoding="utf-8",
+        )
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [],
+            }
+        )
+
+        with (
+            patch("cli.wallet.checkout_wallet", return_value=({"secret_key": "k", "node_id": None, "x25519_secret": "x", "cap_id": None}, False)),
+            patch.object(infra, "command_env", return_value={"LINODE_TOKEN": "token"}),
+            patch.object(infra, "pulumi_up", return_value=0) as pulumi_up,
+            patch.object(infra, "inventory", return_value=0) as inventory,
+            patch.object(infra, "configure", return_value=0) as configure,
+        ):
+            code = infra.control("start", "node-1", "signaling", "akamai")
+
+        self.assertEqual(code, 0)
+        pulumi_up.assert_called_once_with("devnet")
+        inventory.assert_called_once()
+        self.assertEqual(configure.call_args.kwargs["host_limit"], "node-1")
+        self.assertEqual(configure.call_args.kwargs["container_state"], "started")
+        instance = self.read_topology()["instances"][0]
+        self.assertEqual(instance["backend"], "vm")
+        self.assertEqual(instance["desired_state"], "running")
+
+    def test_akamai_colocation_is_accepted_like_digitalocean(self) -> None:
+        self.contract.write_text(
+            "CONTRACT_PACKAGE_ID=0xpackage\nNETWORK_REGISTRY_ID=0xregistry\n",
+            encoding="utf-8",
+        )
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [
+                    {
+                        "name": "node-1",
+                        "service": "signaling",
+                        "provider": "akamai",
+                        "backend": "vm",
+                        "instance_index": 1,
+                        "desired_state": "running",
+                    }
+                ],
+            }
+        )
+
+        with (
+            patch("cli.wallet.checkout_wallet", return_value=({"secret_key": "k", "node_id": None, "x25519_secret": "x", "cap_id": None}, False)),
+            patch.object(infra, "command_env", return_value={"LINODE_TOKEN": "token"}),
+            patch.object(infra, "pulumi_up", return_value=0),
+            patch.object(infra, "inventory", return_value=0),
+            patch.object(infra, "configure", return_value=0),
+        ):
+            code = infra.control("start", "node-1", "relay", "akamai")
+
+        # A second, different service colocated on the same --name must be
+        # accepted for akamai (mirrors digitalocean/upcloud), not rejected
+        # with the "Colocating ... only supported for" error.
+        self.assertEqual(code, 0)
+
+    def test_akamai_pause_powers_off_without_ansible(self) -> None:
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [
+                    {
+                        "name": "node-1",
+                        "service": "signaling",
+                        "provider": "akamai",
+                        "backend": "vm",
+                        "desired_state": "running",
+                    }
+                ],
+            }
+        )
+
+        with (
+            patch.object(infra, "command_env", return_value={"LINODE_TOKEN": "token"}),
+            patch.object(infra, "pulumi_up", return_value=0) as pulumi_up,
+            patch.object(infra, "inventory", return_value=0) as inventory,
+            patch.object(infra, "configure", return_value=0) as configure,
+        ):
+            code = infra.control("pause", "node-1", "signaling", "akamai")
+
+        self.assertEqual(code, 0)
+        # Unlike alibaba, akamai has no targeted-apply machinery -- pause
+        # goes through the plain untargeted pulumi_up(env_name) call.
+        pulumi_up.assert_called_once_with("devnet")
+        inventory.assert_not_called()
+        configure.assert_not_called()
+        instance = self.read_topology()["instances"][0]
+        self.assertEqual(instance["desired_state"], "stopped")
+        self.assertEqual(instance["last_status"], "stopped")
+
+    def test_akamai_restart_reconfigures_and_restarts_container(self) -> None:
+        self.contract.write_text(
+            "CONTRACT_PACKAGE_ID=0xpackage\nNETWORK_REGISTRY_ID=0xregistry\n",
+            encoding="utf-8",
+        )
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "instances": [
+                    {
+                        "name": "node-1",
+                        "service": "signaling",
+                        "provider": "akamai",
+                        "backend": "vm",
+                        "desired_state": "stopped",
+                    }
+                ],
+            }
+        )
+
+        with (
+            patch("cli.wallet.checkout_wallet", return_value=({"secret_key": "k", "node_id": None, "x25519_secret": "x", "cap_id": None}, False)),
+            patch.object(infra, "command_env", return_value={"LINODE_TOKEN": "token"}),
+            patch.object(infra, "pulumi_up", return_value=0),
+            patch.object(infra, "inventory", return_value=0),
+            patch.object(infra, "configure", return_value=0) as configure,
+        ):
+            code = infra.control("restart", "node-1", "signaling", "akamai")
+
+        self.assertEqual(code, 0)
+        self.assertEqual(configure.call_args.kwargs["host_limit"], "node-1")
+        self.assertEqual(configure.call_args.kwargs["container_state"], "restarted")
+        self.assertEqual(self.read_topology()["instances"][0]["last_status"], "running")
+
     def test_alibaba_pause_powers_off_without_ansible(self) -> None:
         infra.write_topology(
             {

@@ -17,19 +17,20 @@ def _group_vm_instances(
 ) -> tuple[dict[str, TopologyInstance], dict[str, TopologyInstance]]:
     """Merge topology rows sharing a VM `name` into one instance per name.
 
-    DigitalOcean-only: multiple topology rows can share a `name` to colocate
-    several services on one droplet (each `vidctl infra start --name X
-    --service Y` call writes its own row). Calling create_vm_instance() once
-    per raw row would create duplicate Pulumi resource URNs (`{name}-vm`,
-    `{name}-vm-key`, `{name}-vm-fw`) and crash -- this merges them into one
-    synthetic instance carrying a `services` list before provisioning.
+    Colocation-capable providers only (currently digitalocean, upcloud, and
+    akamai): multiple topology rows can share a `name` to colocate several
+    services on one VM (each `vidctl infra start --name X --service Y` call writes its
+    own row). Calling create_vm_instance() once per raw row would create
+    duplicate Pulumi resource URNs (`{name}-vm`, `{name}-vm-key`,
+    `{name}-vm-fw`) and crash -- this merges them into one synthetic instance
+    carrying a `services` list before provisioning.
 
     Every other provider keeps the exact 1-row-per-VM behavior unchanged.
 
     Returns (name -> instance to pass to create_vm_instance, name -> merged
-    instance for inventory/host_vars -- the same object for the
-    digitalocean-merged case, but kept as two dicts since the non-merged
-    case still needs create_vm_instance called once per raw row).
+    instance for inventory/host_vars -- the same object for the merged case,
+    but kept as two dicts since the non-merged case still needs
+    create_vm_instance called once per raw row).
     """
     to_provision: dict[str, TopologyInstance] = {}
     merged_for_inventory: dict[str, TopologyInstance] = {}
@@ -38,7 +39,7 @@ def _group_vm_instances(
         groups.setdefault(str(instance.get("name")), []).append(instance)
 
     for name, rows in groups.items():
-        if len(rows) == 1 or rows[0].get("provider") != "digitalocean":
+        if len(rows) == 1 or rows[0].get("provider") not in ("digitalocean", "upcloud", "akamai"):
             # Original behavior, preserved exactly: one create_vm_instance
             # call per row (out of scope for this fix to change).
             for index, row in enumerate(rows):

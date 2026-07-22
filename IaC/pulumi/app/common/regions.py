@@ -12,6 +12,8 @@ _DEFAULTS = {
     "digitalocean": "nyc3",
     "tencent": "ap-guangzhou",
     "cloudflare": "apac",
+    "upcloud": "fi-hel1",
+    "akamai": "us-east",
 }
 _ENV_KEYS = {
     "aws": "AWS_REGION",
@@ -21,6 +23,8 @@ _ENV_KEYS = {
     "digitalocean": "DIGITALOCEAN_REGION",
     "tencent": "TENCENTCLOUD_REGION",
     "cloudflare": "CLOUDFLARE_R2_LOCATION",
+    "upcloud": "UPCLOUD_ZONE",
+    "akamai": "AKAMAI_REGION",
 }
 
 

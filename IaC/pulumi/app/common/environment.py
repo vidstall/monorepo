@@ -18,6 +18,8 @@ def cloud_credentials() -> dict[str, object]:
         "gcp": bool(os.getenv("GOOGLE_CREDENTIALS") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")),
         "azure": bool(os.getenv("ARM_CLIENT_ID") or os.getenv("AZURE_CLIENT_ID")),
         "digitalOcean": bool(os.getenv("DIGITALOCEAN_TOKEN")),
+        "upcloud": bool(os.getenv("UPCLOUD_TOKEN")),
+        "akamai": bool(os.getenv("LINODE_TOKEN")),
         "alibabaCloud": bool(
             os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")
             and os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")

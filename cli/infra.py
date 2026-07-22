@@ -27,7 +27,7 @@ from .context import (
 )
 
 NETWORKS = ("devnet", "testnet", "mainnet")
-PROVIDERS = ("aws", "gcp", "azure", "alibaba", "digitalocean", "tencent", "cloudflare")
+PROVIDERS = ("aws", "gcp", "azure", "alibaba", "digitalocean", "upcloud", "akamai", "tencent", "cloudflare")
 SERVICE_BACKENDS = {service: "vm" for service in DOCKER_SERVICES}
 REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "NETWORK_REGISTRY_ID")
 # cp-daemon/validator-daemon have no externally-published port
@@ -48,6 +48,8 @@ VM_INSTANCE_SIZES = {
     "alibaba": "ecs.t6-c1m1.large",
     "digitalocean": "s-1vcpu-1gb",
     "tencent": "S5.SMALL1",
+    "upcloud": "1xCPU-1GB",
+    "akamai": "g6-nanode-1",
 }
 # Per-(provider, service) override, for cases where a role needs more
 # headroom than the provider's cheapest default (e.g. relay/mediasoup under
@@ -364,16 +366,16 @@ def control(
     # keyed on the bare `service` string.
     instance_key = service if instance_index == 1 else f"{service}-{instance_index}"
 
-    if backend == "vm" and action in {"pause", "restart"} and provider != "alibaba":
+    if backend == "vm" and action in {"pause", "restart"} and provider not in {"alibaba", "akamai"}:
         message = (
             f"{action} is not yet supported for {provider} VM services; "
-            "powered lifecycle support currently requires --provider alibaba."
+            "powered lifecycle support currently requires --provider alibaba or --provider akamai."
         )
         print(message, file=sys.stderr)
         record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
         return 1
 
-    if backend == "vm" and action in {"start", "restart"} and provider != "digitalocean":
+    if backend == "vm" and action in {"start", "restart"} and provider not in {"digitalocean", "upcloud", "akamai"}:
         other_active = any(
             item.get("name") == name
             and item.get("provider") == provider
@@ -386,8 +388,9 @@ def control(
         if instance_index > 1 or other_active:
             message = (
                 f"Colocating multiple service instances on one --name is only supported for "
-                f"--provider digitalocean (got --provider {provider}). Use a separate --name per "
-                "instance, or redeploy this instance with --provider digitalocean."
+                f"--provider digitalocean, --provider upcloud, or --provider akamai (got --provider "
+                f"{provider}). Use a separate --name per instance, or redeploy this instance with "
+                "--provider digitalocean, upcloud, or akamai."
             )
             print(message, file=sys.stderr)
             record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
@@ -767,6 +770,8 @@ def missing_vm_provider_keys(provider: str) -> list[str]:
         "azure": ("ARM_CLIENT_ID", "ARM_CLIENT_SECRET", "ARM_SUBSCRIPTION_ID", "ARM_TENANT_ID"),
         "alibaba": ("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABA_CLOUD_ACCESS_KEY_SECRET", "ALIBABA_CLOUD_REGION"),
         "digitalocean": ("DIGITALOCEAN_TOKEN",),
+        "upcloud": ("UPCLOUD_TOKEN",),
+        "akamai": ("LINODE_TOKEN",),
         "tencent": ("TENCENTCLOUD_SECRET_ID", "TENCENTCLOUD_SECRET_KEY", "TENCENTCLOUD_REGION"),
     }.get(provider, ())
     return [key for key in required if not env.get(key)]

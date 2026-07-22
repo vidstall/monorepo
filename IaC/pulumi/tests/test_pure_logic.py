@@ -31,6 +31,8 @@ class RegionTests(unittest.TestCase):
     def test_region_and_zone_defaults(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             self.assertEqual(provider_region("digitalocean"), "nyc3")
+            self.assertEqual(provider_region("upcloud"), "fi-hel1")
+            self.assertEqual(provider_region("akamai"), "us-east")
             self.assertEqual(provider_zone(), "us-central1-a")
 
 

@@ -24,6 +24,10 @@ def adapter(provider: str) -> VMAdapter:
         from .azure import create_vm
     elif provider == "alibaba":
         from .alibaba import create_vm
+    elif provider == "upcloud":
+        from .upcloud import create_vm
+    elif provider == "akamai":
+        from .akamai import create_vm
     elif provider == "tencent":
         raise ValueError(
             "tencent VM provisioning is not yet supported (no working Pulumi Python SDK path was "
