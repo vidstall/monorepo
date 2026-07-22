@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import re
+import sys
 
 from . import contract, doctor, infra, object as object_cmd, registry, wallet
 from .context import DOCKER_SERVICES, bootstrap
@@ -197,6 +199,82 @@ def add_object_selection(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--provider", required=True, choices=sorted(object_cmd.PROVIDERS), help="Object-storage provider.")
 
 
+MAX_SERVICE_COUNT = 25
+
+_SERVICE_TOKEN_RE = re.compile(r"^(?P<count>[0-9]*)(?P<service>[a-zA-Z][a-zA-Z0-9-]*)$")
+
+
+def parse_service_tokens(raw: str) -> list[tuple[str, int]] | None:
+    """Parse a comma-separated --service string into an ordered list of
+    (service, instance_index) pairs, expanding an optional leading integer
+    count prefix per token (e.g. "5cp-daemon" -> 5 instances of cp-daemon,
+    indices 1..5; no prefix defaults to a single instance, index 1).
+
+    Returns None (after printing an error to stderr) on any malformed token,
+    unknown service, zero count, or a count above MAX_SERVICE_COUNT (a typo
+    guard -- e.g. "50cp-daemon" instead of "5cp-daemon,..." would otherwise
+    silently provision 50 real cloud instances)."""
+    pairs: list[tuple[str, int]] = []
+    for token in (t.strip() for t in raw.split(",")):
+        if not token:
+            continue
+        match = _SERVICE_TOKEN_RE.match(token)
+        if not match:
+            print(f"Malformed --service token: '{token}'", file=sys.stderr)
+            return None
+        count_str, service = match.group("count"), match.group("service")
+        count = int(count_str) if count_str else 1
+        if count == 0:
+            print(f"Service count must be at least 1: '{token}'", file=sys.stderr)
+            return None
+        if count > MAX_SERVICE_COUNT:
+            print(
+                f"Service count {count} in '{token}' exceeds the safety limit of "
+                f"{MAX_SERVICE_COUNT} (likely a typo, e.g. '50cp-daemon' instead of "
+                "'5cp-daemon,...'). Pass a smaller count if this is intentional.",
+                file=sys.stderr,
+            )
+            return None
+        if service not in DOCKER_SERVICES:
+            print(f"Unknown service(s): {service}", file=sys.stderr)
+            return None
+        pairs.extend((service, index) for index in range(1, count + 1))
+    return pairs
+
+
+def run_lifecycle_action(action: str, args: argparse.Namespace) -> int:
+    """Expand --service (with optional per-token count prefixes, e.g.
+    "5cp-daemon,relay") into an ordered list of (service, instance_index)
+    pairs and run `action` once per pair, in order, stopping at the first
+    failure. Each pair still goes through the exact same infra.control()
+    call a single-service invocation would make -- running
+    `--service relay,signaling` (or `2cp-daemon`) is equivalent to (and just
+    a shorthand for) separate single-service/single-instance calls sharing
+    the same --name, which is what actually colocates them on one instance
+    (see program.py's group-by-name merge)."""
+    pairs = parse_service_tokens(args.service)
+    if pairs is None:
+        return 2
+    for service, instance_index in pairs:
+        code = infra.control(
+            action,
+            args.name,
+            service,
+            args.provider,
+            getattr(args, "yes", False),
+            getattr(args, "find_instance_type", False),
+            getattr(args, "all_region", False),
+            getattr(args, "size", None),
+            instance_index,
+        )
+        if code != 0:
+            if len(pairs) > 1:
+                label = service if instance_index == 1 else f"{service}-{instance_index}"
+                print(f"'{action}' failed for service '{label}'; stopping.", file=sys.stderr)
+            return code
+    return 0
+
+
 def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     for action, help_text in (
         ("start", "Start a topology service through Pulumi."),
@@ -206,7 +284,17 @@ def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.Argume
     ):
         parser = subparsers.add_parser(action, help=help_text)
         parser.add_argument("--name", required=True, help="Topology instance name to control.")
-        parser.add_argument("--service", required=True, choices=sorted(DOCKER_SERVICES), help="Service type hosted by the instance.")
+        parser.add_argument(
+            "--service",
+            required=True,
+            help=(
+                "Service type(s) hosted by the instance. Comma-separate to colocate "
+                "multiple services on one --name (e.g. relay,signaling). Prefix a token "
+                "with an integer to run that many instances of it (e.g. 5cp-daemon,relay "
+                "= 5 cp-daemon instances + 1 relay); no prefix defaults to 1. "
+                f"Choices: {', '.join(sorted(DOCKER_SERVICES))}."
+            ),
+        )
         parser.add_argument("--provider", required=True, choices=sorted(infra.PROVIDERS), help="Cloud provider for the topology instance.")
         if action == "kill":
             parser.add_argument("--yes", action="store_true", help="Confirm destructive instance deletion.")
@@ -221,14 +309,15 @@ def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.Argume
                 action="store_true",
                 help="Scan every Alibaba region for spot capacity instead of only the default region.",
             )
-        parser.set_defaults(
-            handler=lambda args, selected_action=action: infra.control(
-                selected_action,
-                args.name,
-                args.service,
-                args.provider,
-                getattr(args, "yes", False),
-                getattr(args, "find_instance_type", False),
-                getattr(args, "all_region", False),
+            parser.add_argument(
+                "--size",
+                help=(
+                    "VM size/SKU override (e.g. s-4vcpu-8gb). Persists on the topology row. "
+                    "When colocating multiple services under the same --name, pass a matching "
+                    "--size on every call sharing that name."
+                ),
             )
+        parser.set_defaults(
+            handler=lambda args, selected_action=action: run_lifecycle_action(selected_action, args)
         )
+

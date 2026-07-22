@@ -1,0 +1,9 @@
+{# One site block per relay/signaling instance colocated on this host.
+   Hostname must exactly match what deploy_one_service.yml injects as
+   RELAY_ENDPOINT_URL/ENDPOINT_URL (wss://<instance_key>.<ip-dashed>.sslip.io)
+   or the cert Caddy obtains won't match what the client connects to. #}
+{% for svc in xaisen_public_services %}
+{{ svc.instance_key | default(svc.service) }}.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    reverse_proxy xaisen-{{ svc.instance_key | default(svc.service) }}:{{ svc.port }}
+}
+{% endfor %}

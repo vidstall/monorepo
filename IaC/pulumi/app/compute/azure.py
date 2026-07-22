@@ -72,8 +72,11 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         f"{name}-vm-ip",
         resource_group_name=resource_group.name,
         location=location,
-        public_ip_allocation_method=network.IPAllocationMethod.DYNAMIC,
-        sku=network.PublicIPAddressSkuArgs(name=network.PublicIPAddressSkuName.BASIC),
+        # Basic SKU public IPs were retired by Azure (Sept 2025) -- quota is
+        # now 0 on every subscription. Standard SKU requires Static (not
+        # Dynamic) allocation.
+        public_ip_allocation_method=network.IPAllocationMethod.STATIC,
+        sku=network.PublicIPAddressSkuArgs(name=network.PublicIPAddressSkuName.STANDARD),
     )
     nic = network.NetworkInterface(
         f"{name}-vm-nic",
@@ -94,8 +97,13 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         resource_group_name=resource_group.name,
         location=location,
         hardware_profile=compute.HardwareProfileArgs(
-            vm_size=instance.get("size") or "Standard_B1s"
+            vm_size=instance.get("size") or "Standard_D2als_v7"
         ),
+        priority=compute.VirtualMachinePriorityTypes.SPOT,
+        eviction_policy=compute.VirtualMachineEvictionPolicyTypes.DEALLOCATE,
+        # -1 = pay up to on-demand price, i.e. never evicted purely for price
+        # -- still gets the spot discount, only capacity-based eviction risk.
+        billing_profile=compute.BillingProfileArgs(max_price=-1),
         os_profile=compute.OSProfileArgs(
             computer_name=name,
             admin_username="azureuser",

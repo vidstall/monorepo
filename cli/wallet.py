@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,19 @@ from .context import (
 
 MIN_GAS_MIST = 2_000_000_000  # 2 SUI
 FAUCET_NETWORKS = ("devnet", "testnet")
+
+# Env var each daemon checks on boot to skip auto-registration (see
+# apps/*/src/auto-register.ts). cp-daemon gets a ControlPlaneCap; every other
+# role gets a (shared-type) MinerCap distinguished on-chain by its role field.
+CAP_ENV_VARS = {
+    "cp-daemon": "CP_CAP_ID",
+    "relay": "MINER_CAP_ID",
+    "signaling": "MINER_CAP_ID",
+    "validator-daemon": "VALIDATOR_CAP_ID",
+}
+CAP_STRUCT_NAMES = {
+    "cp-daemon": "ControlPlaneCap",
+}  # everything else owns a MinerCap
 
 _ALIAS_ADJECTIVES = [
     "affectionate", "amused", "brave", "calm", "clever", "cosmic", "curious",
@@ -41,25 +55,57 @@ _ALIAS_NOUNS = [
 ]
 
 
-def checkout_wallet(name: str, service: str, provider: str, env_name: str) -> tuple[dict[str, Any], bool]:
-    """Assign a free pooled wallet to (name, service, provider, env_name).
+def checkout_wallet(
+    name: str, service: str, provider: str, env_name: str, instance_index: int = 1
+) -> tuple[dict[str, Any], bool]:
+    """Assign a free pooled wallet to (name, service, provider, env_name, instance_index).
+
+    `instance_index` (1-based) distinguishes multiple colocated instances of
+    the SAME service on one --name (see vidctl.py's count-prefix --service
+    syntax, e.g. `5cp-daemon`) -- each index gets its own independently
+    checked-out wallet. It plays no part in the `registered_role` pin below:
+    a replica is still fundamentally the same on-chain role as any other
+    instance of that service.
 
     Idempotent: if this exact instance identity already holds an assignment
     (e.g. a `restart` on an already-running instance), that wallet is reused
-    rather than checking out a second one. Otherwise a uniformly random free
-    wallet is picked; if the pool has none free, one is lazily generated and
-    assigned. Returns (entry, created).
+    rather than checking out a second one.
+
+    Otherwise, a free wallet is picked -- but ONLY from wallets whose
+    `registered_role` is either unset (never checked out for anything yet)
+    or already equal to `service`. On-chain registration is a one-time,
+    permanent action per wallet (register() aborts if called again for a
+    DIFFERENT role); `release_wallet()` frees a wallet for reassignment on
+    the NEXT instance, but a wallet that already registered as (say) relay
+    must only ever be reused as relay again, never reassigned to cp-daemon
+    or any other service -- doing so previously caused
+    `registration::E_ALREADY_REGISTERED` aborts when an instance was
+    killed and recreated, since the wallet pool had no memory of which role
+    a wallet had actually registered as on-chain.
+
+    `registered_role` is set once, on this wallet's first-ever checkout, and
+    is never cleared by `release_wallet()` -- it is permanent for the
+    wallet's lifetime, unlike the assigned_* fields which just track the
+    CURRENT holder. If the pool has no free wallet matching (or unpinned
+    for) `service`, one is lazily generated and assigned. Returns (entry, created).
     """
     pool = _read_pool(env_name)
     wallets = pool.setdefault("wallets", [])
 
     for entry in wallets:
-        if _matches(entry, name, service, provider):
+        if _matches(entry, name, service, provider, instance_index):
             faucet_if_needed(entry, env_name)
+            resolve_cap_id(entry, service, env_name)
             _write_pool(env_name, pool)
             return entry, False
 
-    free = [entry for entry in wallets if not entry.get("assigned_name")]
+    free = [
+        entry
+        for entry in wallets
+        if not entry.get("assigned_name")
+        and entry.get("registered_role", "") in ("", service)
+        and not entry.get("role_mismatch")
+    ]
     created = False
     if free:
         entry = random.choice(free)
@@ -79,8 +125,11 @@ def checkout_wallet(name: str, service: str, provider: str, env_name: str) -> tu
             "assigned_name": "",
             "assigned_service": "",
             "assigned_provider": "",
+            "assigned_instance_index": 0,
             "assigned_at": "",
             "released_at": "",
+            "registered_role": "",
+            "cap_id": "",
         }
         wallets.append(entry)
         created = True
@@ -88,25 +137,33 @@ def checkout_wallet(name: str, service: str, provider: str, env_name: str) -> tu
     entry["assigned_name"] = name
     entry["assigned_service"] = service
     entry["assigned_provider"] = provider
+    entry["assigned_instance_index"] = instance_index
     entry["assigned_at"] = _timestamp()
+    if not entry.get("registered_role"):
+        entry["registered_role"] = service
 
     faucet_if_needed(entry, env_name)
+    resolve_cap_id(entry, service, env_name)
     _write_pool(env_name, pool)
     return entry, created
 
 
-def release_wallet(name: str, service: str, provider: str, env_name: str) -> dict[str, Any] | None:
-    """Return the wallet assigned to (name, service, provider, env_name) to
-    the free pool. Clears assignment fields only; the wallet record (address,
-    secret_key, x25519_secret) is kept for future reuse. Does not perform any
+def release_wallet(
+    name: str, service: str, provider: str, env_name: str, instance_index: int = 1
+) -> dict[str, Any] | None:
+    """Return the wallet assigned to (name, service, provider, env_name,
+    instance_index) to the free pool. Clears assignment fields only; the
+    wallet record (address, secret_key, x25519_secret) AND its permanent
+    `registered_role` pin are kept for future reuse. Does not perform any
     on-chain registry cleanup. Returns the released entry, or None if no
     wallet was assigned to this instance."""
     pool = _read_pool(env_name)
     for entry in pool.get("wallets", []):
-        if _matches(entry, name, service, provider):
+        if _matches(entry, name, service, provider, instance_index):
             entry["assigned_name"] = ""
             entry["assigned_service"] = ""
             entry["assigned_provider"] = ""
+            entry["assigned_instance_index"] = 0
             entry["assigned_at"] = ""
             entry["released_at"] = _timestamp()
             _write_pool(env_name, pool)
@@ -128,7 +185,10 @@ def gc_orphaned_assignments(topology: dict[str, Any]) -> list[dict[str, Any]]:
     """Release wallets assigned to (name, service, provider, env) tuples that
     no longer exist in the live topology. Returns the list of released
     entries."""
-    live = {(i.get("name"), i.get("service"), i.get("provider"), i.get("env")) for i in topology.get("instances", [])}
+    live = {
+        (i.get("name"), i.get("service"), i.get("provider"), i.get("env"), i.get("instance_index", 1))
+        for i in topology.get("instances", [])
+    }
     released: list[dict[str, Any]] = []
     for env_name in _all_pool_envs():
         pool = _read_pool(env_name)
@@ -136,11 +196,18 @@ def gc_orphaned_assignments(topology: dict[str, Any]) -> list[dict[str, Any]]:
         for entry in pool.get("wallets", []):
             if not entry.get("assigned_name"):
                 continue
-            key = (entry["assigned_name"], entry["assigned_service"], entry["assigned_provider"], env_name)
+            key = (
+                entry["assigned_name"],
+                entry["assigned_service"],
+                entry["assigned_provider"],
+                env_name,
+                entry.get("assigned_instance_index", 1),
+            )
             if key not in live:
                 entry["assigned_name"] = ""
                 entry["assigned_service"] = ""
                 entry["assigned_provider"] = ""
+                entry["assigned_instance_index"] = 0
                 entry["assigned_at"] = ""
                 entry["released_at"] = _timestamp()
                 changed = True
@@ -162,7 +229,8 @@ def list_pool(env_name: str | None) -> int:
             if entry.get("assigned_name"):
                 state = f"assigned -> {entry['assigned_name']}/{entry['assigned_service']}/{entry['assigned_provider']}"
             else:
-                state = "free"
+                role = entry.get("registered_role", "")
+                state = f"free (pinned: {role})" if role else "free (unpinned)"
             print(f"  {entry.get('alias', '(no alias)')}  {entry['address']}  {state}")
     return 0
 
@@ -196,11 +264,12 @@ def _generate_alias(existing_aliases: set[str]) -> str:
     return candidate
 
 
-def _matches(entry: dict[str, Any], name: str, service: str, provider: str) -> bool:
+def _matches(entry: dict[str, Any], name: str, service: str, provider: str, instance_index: int = 1) -> bool:
     return (
         entry.get("assigned_name") == name
         and entry.get("assigned_service") == service
         and entry.get("assigned_provider") == provider
+        and entry.get("assigned_instance_index", 1) == instance_index
     )
 
 
@@ -227,6 +296,91 @@ def faucet_if_needed(entry: dict[str, Any], env_name: str) -> None:
         entry["last_faucet_at"] = _timestamp()
     else:
         print(f"Warning: faucet request failed for {entry['address']}.", file=sys.stderr)
+
+
+def resolve_cap_id(entry: dict[str, Any], service: str, env_name: str) -> None:
+    """Populate entry['cap_id'] from chain state if this wallet has already
+    registered on-chain but the pool has no record of it yet (e.g. it
+    registered on a prior run before this field existed, or the pool file
+    was recreated). A wallet only ever registers once for its lifetime (see
+    checkout_wallet's docstring), so once cap_id is cached there is nothing
+    left to look up on subsequent checkouts.
+
+    Best-effort: any lookup failure just leaves cap_id unresolved, and the
+    daemon falls through to its normal auto-registration path (which will
+    itself fail loudly with E_ALREADY_REGISTERED if that assumption turns
+    out to be wrong -- better than silently deploying a wrong/stale cap id).
+    """
+    if entry.get("cap_id"):
+        return
+    try:
+        found = find_cap_id(entry["address"], env_name)
+    except (subprocess.CalledProcessError, RuntimeError) as exc:
+        print(f"Warning: could not check on-chain registration for {entry['address']}: {exc}", file=sys.stderr)
+        return
+    if found is None:
+        return
+    struct_name, object_id = found
+    expected_struct = CAP_STRUCT_NAMES.get(service, "MinerCap")
+    if struct_name != expected_struct:
+        # staking::determine_role() (registration.move) picks the on-chain
+        # role from stake amount + current cp_count at register() time -- it
+        # does NOT read back which service binary vidctl intends to run.
+        # This wallet landed on a different role than `service`, so it can
+        # never present a valid cap to this daemon; injecting object_id here
+        # would just fail on-chain with a type mismatch. Surface it loudly
+        # instead of silently deploying broken state -- the fix is to
+        # release this wallet (it's now permanently pinned to whatever role
+        # it landed on) and let checkout_wallet mint a fresh one.
+        print(
+            f"Warning: wallet {entry['address']} was assigned for '{service}' but registered "
+            f"on-chain as {struct_name} instead of {expected_struct}. It can never run as "
+            f"'{service}'; quarantining it and it will not be reassigned. Release this instance "
+            "and start/restart again to pick up a fresh wallet.",
+            file=sys.stderr,
+        )
+        entry["role_mismatch"] = struct_name
+        return
+    entry["cap_id"] = object_id
+
+
+def find_cap_id(address: str, env_name: str) -> tuple[str, str] | None:
+    """Look up the on-chain Cap object (ControlPlaneCap or MinerCap) this
+    address already owns, if any -- i.e. whether it has already registered,
+    and under which role. Returns (struct_name, object_id), or None for a
+    fresh/never-registered wallet.
+
+    Only matches caps minted by the CURRENTLY deployed package -- a bare
+    struct-name suffix match (no package check) previously let a stale cap
+    from a prior `contract publish --force` (new package + new registries)
+    get cached and injected forever, since cap_id is only ever resolved
+    once (see resolve_cap_id). That stale object may no longer even exist
+    on-chain, permanently wedging the daemon's registration."""
+    from . import contract
+
+    code = contract.ensure_active_sui_env(env_name)
+    if code != 0:
+        raise RuntimeError(f"could not switch sui client to {env_name}")
+
+    deployment = contract.load_deployment(env_name)
+    package_id = deployment.get("CONTRACT_PACKAGE_ID", "")
+
+    result = subprocess.run(
+        ["sui", "client", "objects", address],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    object_ids = re.findall(r"objectId\s*\│\s*(0x[0-9a-fA-F]+)", result.stdout)
+    object_types = re.findall(r"objectType\s*\│\s*(\S+)", result.stdout)
+    for object_id, object_type in zip(object_ids, object_types):
+        for struct_name in ("ControlPlaneCap", "MinerCap"):
+            if not object_type.endswith(f"::caps::{struct_name}"):
+                continue
+            if package_id and not object_type.startswith(f"{package_id}::"):
+                continue
+            return struct_name, object_id
+    return None
 
 
 def generate_sui_keypair() -> tuple[str, str]:
@@ -298,6 +452,7 @@ def operator_state_json(entry: dict[str, Any]) -> str:
             "secretKey": entry["secret_key"],
             "nodeId": entry["node_id"] or None,
             "x25519Secret": entry["x25519_secret"],
+            "capId": entry.get("cap_id") or None,
         }
     )
 
@@ -361,6 +516,7 @@ def _refresh_public_view() -> None:
                 "assigned_provider": entry.get("assigned_provider", ""),
                 "assigned_at": entry.get("assigned_at", ""),
                 "last_balance_mist": entry.get("last_balance_mist", 0),
+                "registered_role": entry.get("registered_role", ""),
             }
             for key, value in public_fields.items():
                 lines.append(f"{key} = {toml_value(value)}")

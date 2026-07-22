@@ -40,7 +40,6 @@ WORKER_DIR = ROOT / "services" / "worker"
 # the per-service Dockerfile path passed via `docker build -f`.
 DOCKER_SERVICES = {
     "cp-daemon": WORKER_DIR,
-    "forensic-cli": WORKER_DIR,
     "relay": WORKER_DIR,
     "signaling": WORKER_DIR,
     "validator-daemon": WORKER_DIR,

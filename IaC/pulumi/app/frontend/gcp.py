@@ -17,7 +17,13 @@ def create_site(instance: TopologyInstance, bucket_name: str, desired_state: str
         location=provider_region("gcp"),
         force_destroy=True,
         uniform_bucket_level_access=True,
-        website={"main_page_suffix": "index.html", "not_found_page": "404.html"},
+        # not_found_page -> index.html, not a real 404 page: this is a
+        # client-side-routed SPA (React Router). A hard reload/direct link to
+        # a deep route like /rooms/<id> is a real HTTP request the bucket has
+        # no object for -- GCS static website hosting serves not_found_page
+        # for ANY unmatched path, so it must be the app shell (letting the
+        # router resolve the path client-side), not a dead-end 404 page.
+        website={"main_page_suffix": "index.html", "not_found_page": "index.html"},
     )
     if public:
         gcp.storage.BucketIAMBinding(

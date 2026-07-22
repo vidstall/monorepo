@@ -1,0 +1,215 @@
+---
+# Included once per entry in xaisen_services (see main.yml). Two namespacing
+# keys are in play per item, both from cli/infra.py control() /
+# program.py's group-by-name merge:
+#   - xaisen_service_item.service       -- the base service TYPE (cp-daemon,
+#     relay, ...). Shared across every colocated replica of that type --
+#     used only for things that are identical per replica: the Docker
+#     image/tag, and the keypair/cap env var NAMES below.
+#   - xaisen_service_item.instance_key  -- service, or "service-N" for the
+#     Nth colocated replica of that service on this host (vidctl.py's
+#     count-prefix --service syntax, e.g. `5cp-daemon`). Index 1 is
+#     un-suffixed (== service) for backward compatibility. Used for
+#     everything that must be UNIQUE per replica: container name, state
+#     dir, wallet file, xaisen_operator_wallets lookup key.
+# `| default(xaisen_service_item.service)` guards instance_key in case an
+# older-shaped inventory entry (pre-dating this field) ever reaches here.
+
+- name: Ensure persistent state directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Check for a per-service secrets file locally
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service_item.service }}.env"
+  delegate_to: localhost
+  become: false
+  register: xaisen_service_secrets_file
+
+- name: Copy per-service secrets file to host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service_item.service }}.env"
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}/service.env"
+    owner: root
+    group: root
+    mode: "0640"
+  when: xaisen_service_secrets_file.stat.exists | default(false)
+
+# xaisen_operator_wallets is a dict keyed by instance_key, but only ever
+# contains the ONE instance that was just checked out by the current
+# `vidctl infra start`/`restart` call (see cli/infra.py control()) -- other
+# colocated services/replicas simply aren't in the dict this round, so this
+# task is a no-op for them (their wallet file is left untouched, whatever it
+# currently holds -- correct, since only ITS OWN start/restart call ever
+# refreshes it).
+#
+# ALWAYS overwrite when this instance's entry IS present this round -- do NOT
+# skip just because a file already exists at this path. cli/infra.py's
+# checkout_wallet() may hand back a DIFFERENT wallet than whatever is
+# currently on disk (e.g. after this instance was killed and relaunched, and
+# the pool assigned a new/reassigned wallet) -- skipping on file-exists left
+# a stale, wrong wallet in place indefinitely, since nothing else ever
+# refreshes this file.
+- name: Write operator wallet credentials
+  ansible.builtin.copy:
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
+    owner: root
+    group: root
+    mode: "0600"
+    content: "{{ xaisen_operator_wallets[xaisen_service_item.instance_key | default(xaisen_service_item.service)] }}"
+  when:
+    - xaisen_operator_wallets is defined
+    - (xaisen_service_item.instance_key | default(xaisen_service_item.service)) in xaisen_operator_wallets
+  no_log: true
+  register: xaisen_wallet_credentials_write
+
+# Each worker app expects its own differently-named keypair env var
+# (CP_KEYPAIR, SIGNALING_KEYPAIR, PRIVATE_KEY for relay, SUI_PRIVATE_KEY for
+# validator-daemon -- see loadKeypair() calls in each apps/*/src/index.ts),
+# not the wallet JSON file path itself. Read the bech32 secretKey back from
+# the file on the host (written above, or by an earlier start of THIS
+# instance if this loop iteration belongs to a co-located sibling) and
+# inject it as the correct env var.
+- name: Re-check operator state file (may have just been written above)
+  ansible.builtin.stat:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
+  register: xaisen_operator_state_file
+
+- name: Read operator wallet secret key from host
+  ansible.builtin.slurp:
+    src: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
+  register: xaisen_operator_state_slurp
+  when: xaisen_operator_state_file.stat.exists
+  no_log: true
+
+- name: Determine this service's keypair and cap-id env vars
+  ansible.builtin.set_fact:
+    xaisen_keypair_env_name: "{{ xaisen_keypair_env_names.get(xaisen_service_item.service) }}"
+    xaisen_keypair_env_value: >-
+      {{
+        (xaisen_operator_state_slurp.content | b64decode | from_json).secretKey
+        if (xaisen_operator_state_slurp is defined and xaisen_operator_state_slurp.content is defined)
+        else ''
+      }}
+    xaisen_cap_env_name: "{{ xaisen_cap_env_names.get(xaisen_service_item.service) }}"
+    xaisen_cap_env_value: >-
+      {{
+        (xaisen_operator_state_slurp.content | b64decode | from_json).capId | default('')
+        if (xaisen_operator_state_slurp is defined and xaisen_operator_state_slurp.content is defined)
+        else ''
+      }}
+  vars:
+    xaisen_keypair_env_names:
+      relay: PRIVATE_KEY
+      signaling: SIGNALING_KEYPAIR
+      cp-daemon: CP_KEYPAIR
+      validator-daemon: SUI_PRIVATE_KEY
+    # Set only when cli/wallet.py's checkout_wallet() found this wallet
+    # already owns a Cap object on-chain (see wallet.py resolve_cap_id) --
+    # tells each daemon's auto-register.ts to skip registration instead of
+    # retrying it and hitting registration::E_ALREADY_REGISTERED forever.
+    xaisen_cap_env_names:
+      relay: MINER_CAP_ID
+      signaling: MINER_CAP_ID
+      cp-daemon: CP_CAP_ID
+      validator-daemon: VALIDATOR_CAP_ID
+  no_log: true
+
+# relay/signaling each register THEIR OWN address on-chain (RelayNodeInfo /
+# SignalingNodeInfo's endpoint_url) so clients know where to connect --
+# without this, both apps default to `ws://127.0.0.1:<port>` (see
+# apps/relay/src/index.ts / apps/signaling/src/index.ts), which is useless
+# to any client since it's the visitor's own loopback address, not the
+# droplet's. sslip.io resolves "<anything>.<a>-<b>-<c>-<d>.sslip.io" to
+# a.b.c.d with no real DNS registration needed -- the instance_key prefix
+# gives each colocated service on this host its OWN hostname (and therefore
+# its own Let's Encrypt cert + Caddy site block, see main.yml's shared
+# xaisen-caddy) sharing one droplet IP, since relay and signaling both
+# publicly listen on the same host and can't each own ports 80/443.
+- name: Determine this service's public sslip.io endpoint env var
+  ansible.builtin.set_fact:
+    xaisen_public_endpoint_env_name: "{{ xaisen_public_endpoint_env_names.get(xaisen_service_item.service) }}"
+    xaisen_sslip_host: "{{ (xaisen_service_item.instance_key | default(xaisen_service_item.service)) }}.{{ ansible_host | replace('.', '-') }}.sslip.io"
+  vars:
+    xaisen_public_endpoint_env_names:
+      relay: RELAY_ENDPOINT_URL
+      signaling: ENDPOINT_URL
+
+# F1/G3.2b inter-relay PipeTransport (apps/relay/src/index.ts, packages/
+# inter-relay-client/*): a standby announces its {ip,port} UP to the primary
+# so the primary's mediasoup PipeTransport can connect() to the REAL host.
+# ANNOUNCED_IP defaults to 127.0.0.1 (see index.ts/inter-relay.ts) for
+# same-machine local/bench setups; left unset on a real multi-droplet deploy,
+# every relay announces "connect to yourself" -- the pipe "connects"
+# (mediasoup's connect() RPC always succeeds locally) but no RTP ever crosses
+# hosts, so a standby's joiner never gets the primary's piped producer
+# (silently stuck on "no announced producer"). Set to this droplet's real
+# public IP so cross-host dual-relay rooms actually forward media.
+- name: Run the service container
+  community.docker.docker_container:
+    name: "xaisen-{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}"
+    image: "{{ xaisen_images[xaisen_service_item.service] }}:{{ xaisen_tags[xaisen_service_item.service] }}"
+    restart_policy: unless-stopped
+    # Each container's own desired_state, not the host-level aggregate --
+    # lets one colocated service be paused/restarted independently of
+    # its siblings sharing the host.
+    state: "{{ 'started' if xaisen_service_item.desired_state == 'running' else 'stopped' }}"
+    restart: "{{ (xaisen_container_state | default('started')) == 'restarted' or xaisen_wallet_credentials_write is changed }}"
+    ports: >-
+      {{
+        ([xaisen_service_item.port ~ ':' ~ xaisen_service_item.port]
+         if (xaisen_service_item.port | default(0) | int > 0) else [])
+        + (['10000-10100:10000-10100/udp', '40000-40100:40000-40100/udp']
+           if xaisen_service_item.service == 'relay' else [])
+      }}
+    # KNOWN LIMITATION: the UDP RTC ranges above are NOT offset per replica --
+    # colocating more than one relay instance on the same host (count-prefix
+    # --service, e.g. `2relay`) will collide on those UDP ports even though
+    # the TCP port below is correctly offset (see cli/infra.py
+    # set_vm_defaults). Not addressed here.
+    env_file: "{{ (xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.instance_key | default(xaisen_service_item.service)) ~ '/service.env') if (xaisen_service_secrets_file.stat.exists | default(false)) else omit }}"
+    volumes:
+      - "{{ xaisen_services_root }}/runtime/contract:{{ xaisen_services_root }}/runtime/contract:ro"
+      - "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}:{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}"
+    # Joins the shared bridge network (main.yml) instead of Docker's default
+    # bridge -- lets this container's Caddy TLS sidecar below reverse_proxy
+    # to it by container name (only user-defined networks support
+    # container-name DNS resolution). Published host ports (above) are
+    # unaffected by which network a container is on.
+    networks:
+      - name: xaisen-net
+    # loadNetworkConfig() (services/worker/packages/shared/src/chain/client.ts)
+    # reads PACKAGE_ID/NETWORK_REGISTRY_ID/etc. and SUI_NETWORK straight from
+    # process.env -- it never reads CONTRACT_ENV_PATH itself (that var only
+    # tells the app where the file *would* be). xaisen_contract_values is
+    # populated by cli/infra.py's docker_deploy_extra_vars() by parsing
+    # runtime/contract/<env>.env -- combine() overlays those real keys on
+    # top of the static ones below.
+    env: >-
+      {{
+        {
+          'CONTRACT_ENV_PATH': xaisen_services_root ~ '/runtime/contract/' ~ xaisen_env ~ '.env',
+          'CONTRACT_NETWORK': xaisen_env,
+          'SUI_NETWORK': xaisen_env,
+        }
+        | combine(xaisen_contract_values[xaisen_env] | default({}))
+        | combine({xaisen_keypair_env_name: xaisen_keypair_env_value} if (xaisen_keypair_env_name and xaisen_keypair_env_value) else {})
+        | combine({xaisen_cap_env_name: xaisen_cap_env_value} if (xaisen_cap_env_name and xaisen_cap_env_value) else {})
+        | combine({xaisen_public_endpoint_env_name: 'wss://' ~ xaisen_sslip_host} if xaisen_public_endpoint_env_name else {})
+        | combine({'ANNOUNCED_IP': ansible_host} if xaisen_service_item.service == 'relay' else {})
+      }}
+  when:
+    - xaisen_images is defined and xaisen_service_item.service in xaisen_images
+    - xaisen_tags is defined and xaisen_service_item.service in xaisen_tags
+  no_log: true
+
+# NOTE: the TLS-terminating Caddy proxy for this service (if it's relay or
+# signaling) is NOT set up here -- ports 80/443 can only be bound once per
+# host, so it's a single shared container covering every relay/signaling
+# instance on this host, configured once in main.yml after this whole loop
+# (which is what populates xaisen_public_endpoint_env_name-eligible
+# services' state) rather than per-service here.

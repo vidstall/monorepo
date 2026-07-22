@@ -1,7 +1,7 @@
 ---
-- name: Skip docker deployment for hosts with no xaisen_service
+- name: Skip docker deployment for hosts with no xaisen_services
   ansible.builtin.meta: end_host
-  when: xaisen_service is not defined or xaisen_service | length == 0
+  when: xaisen_services is not defined or xaisen_services | length == 0
 
 - name: Install Docker
   ansible.builtin.apt:
@@ -23,72 +23,71 @@
   no_log: true
   when: xaisen_registry_host is defined
 
-- name: Ensure persistent state directory exists
+# Shared user-defined bridge network for this host's containers. Docker's
+# DEFAULT bridge network does NOT support container-name DNS resolution --
+# only user-defined networks do -- and the shared Caddy TLS proxy below
+# needs to reverse_proxy to each relay/signaling container by name
+# (xaisen-<instance_key>). Idempotent; safe to (re)ensure on every run
+# regardless of which services this round's xaisen_services happens to
+# include.
+- name: Ensure shared xaisen docker network exists
+  community.docker.docker_network:
+    name: xaisen-net
+    state: present
+
+# One host can run several services (colocation). Everything below is
+# per-service (its own state dir, secrets file, wallet file, container),
+# so it's isolated in an included task file run once per xaisen_services
+# entry rather than a single-service task list.
+- name: Deploy each service on this host
+  ansible.builtin.include_tasks: deploy_one_service.yml
+  loop: "{{ xaisen_services }}"
+  loop_control:
+    loop_var: xaisen_service_item
+    label: "{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}"
+
+# Every relay/signaling instance on this host shares ONE Caddy TLS proxy --
+# ports 80/443 can only be bound once per host, so this can't be a
+# per-instance sidecar (see deploy_one_service.yml's endpoint-URL comment
+# for why each instance still gets its own sslip.io hostname/cert via a
+# distinct Caddyfile site block keyed by instance_key).
+- name: Determine which colocated services need the shared Caddy TLS proxy
+  ansible.builtin.set_fact:
+    xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'signaling']) | list }}"
+
+- name: Ensure Caddy config directory exists
   ansible.builtin.file:
-    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}"
+    path: "{{ xaisen_services_root }}/runtime/caddy"
     state: directory
     owner: root
     group: root
     mode: "0750"
+  when: xaisen_public_services | length > 0
 
-- name: Check for a per-service secrets file locally
-  ansible.builtin.stat:
-    path: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service }}.env"
-  delegate_to: localhost
-  become: false
-  register: xaisen_service_secrets_file
-
-- name: Copy per-service secrets file to host
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service }}.env"
-    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/service.env"
+- name: Write shared Caddyfile (one site block per relay/signaling instance)
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ xaisen_services_root }}/runtime/caddy/Caddyfile"
     owner: root
     group: root
-    mode: "0640"
-  when: xaisen_service_secrets_file.stat.exists | default(false)
+    mode: "0644"
+  when: xaisen_public_services | length > 0
+  register: xaisen_caddyfile_write
 
-- name: Check for an existing operator state file on the host
-  ansible.builtin.stat:
-    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/{{ inventory_hostname }}.json"
-  register: xaisen_existing_operator_state
-
-# TODO: this JSON file is written generically (any xaisen_service), but no
-# worker role currently reads it from this path. Each new worker app expects
-# its own differently-named keypair env var instead (CP_KEYPAIR,
-# SIGNALING_KEYPAIR, PRIVATE_KEY for relay, SUI_PRIVATE_KEY for
-# validator-daemon) rather than a single JSON file path the way legacy
-# routes' self-registration TypeScript did. Wiring xaisen_operator_wallet_json
-# into the correct per-app env var is a follow-up; until then this task only
-# persists the file, nothing consumes it.
-- name: Write operator wallet credentials
-  ansible.builtin.copy:
-    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}/{{ inventory_hostname }}.json"
-    owner: root
-    group: root
-    mode: "0600"
-    content: "{{ xaisen_operator_wallet_json }}"
-  when: xaisen_operator_wallet_json is defined and not xaisen_existing_operator_state.stat.exists
-  no_log: true
-  register: xaisen_wallet_credentials_write
-
-- name: Run the service container
+- name: Run the shared Caddy TLS proxy container
   community.docker.docker_container:
-    name: "xaisen-{{ xaisen_service }}"
-    image: "{{ xaisen_images[xaisen_service] }}:{{ xaisen_tags[xaisen_service] }}"
+    name: xaisen-caddy
+    image: "caddy:2-alpine"
     restart_policy: unless-stopped
-    state: "{{ 'started' if xaisen_desired_state == 'running' else 'stopped' }}"
-    restart: "{{ (xaisen_container_state | default('started')) == 'restarted' or xaisen_wallet_credentials_write is changed }}"
-    # TODO: this only publishes a single TCP port (xaisen_port). relay also
-    # needs its UDP RTC/pipe port ranges published (10000-10100, 40000-40100 —
-    # see services/worker/apps/relay/.env.example); not modeled here yet.
-    ports: "{{ [xaisen_port ~ ':' ~ xaisen_port] if (xaisen_port | default(0) | int > 0) else [] }}"
-    env_file: "{{ (xaisen_services_root ~ '/runtime/' ~ xaisen_service ~ '/service.env') if (xaisen_service_secrets_file.stat.exists | default(false)) else omit }}"
+    state: started
+    restart: "{{ xaisen_caddyfile_write is changed }}"
+    networks:
+      - name: xaisen-net
+    ports:
+      - "80:80"
+      - "443:443"
     volumes:
-      - "{{ xaisen_services_root }}/runtime/contract:{{ xaisen_services_root }}/runtime/contract:ro"
-      - "{{ xaisen_services_root }}/runtime/{{ xaisen_service }}:{{ xaisen_services_root }}/runtime/{{ xaisen_service }}"
-    env:
-      CONTRACT_ENV_PATH: "{{ xaisen_services_root }}/runtime/contract/{{ xaisen_env }}.env"
-      CONTRACT_NETWORK: "{{ xaisen_env }}"
-  when:
-    - xaisen_images is defined and xaisen_service in xaisen_images
-    - xaisen_tags is defined and xaisen_service in xaisen_tags
+      - "{{ xaisen_services_root }}/runtime/caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
+      - "{{ xaisen_services_root }}/runtime/caddy/data:/data"
+      - "{{ xaisen_services_root }}/runtime/caddy/config:/config"
+  when: xaisen_public_services | length > 0

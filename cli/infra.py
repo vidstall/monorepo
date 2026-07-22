@@ -12,6 +12,7 @@ import tomllib
 
 from .context import (
     ANSIBLE_DIR,
+    CONTRACT_RUNTIME_DIR,
     DOCKER_SERVICES,
     GENERATED_INVENTORY,
     PULUMI_DIR,
@@ -28,19 +29,31 @@ from .context import (
 NETWORKS = ("devnet", "testnet", "mainnet")
 PROVIDERS = ("aws", "gcp", "azure", "alibaba", "digitalocean", "tencent", "cloudflare")
 SERVICE_BACKENDS = {service: "vm" for service in DOCKER_SERVICES}
-REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "CONTRACT_REGISTRY_OBJECT_ID")
-# cp-daemon/forensic-cli/validator-daemon have no externally-published port
+REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "NETWORK_REGISTRY_ID")
+# cp-daemon/validator-daemon have no externally-published port
 # (default 0 via SERVICE_PORTS.get(service, 0)) — they're chain-facing
 # daemons/CLIs, not client-facing servers.
 SERVICE_PORTS = {"signaling": 8080, "relay": 4000}
 VM_INSTANCE_SIZES = {
     "aws": "t3.micro",
     "gcp": "e2-micro",
-    "azure": "Standard_B1s",
+    # This subscription (Azure for Students) has no B-series/A-series x86_64
+    # capacity in any tested region (eastus, eastus2, westus2) -- confirmed
+    # via `az vm list-skus` restrictions, not just live SkuNotAvailable
+    # errors. Standard_D2als_v7 (AMD, low-memory v7-gen) is the actual floor:
+    # the cheapest x86_64 SKU this subscription can provision at all. ARM
+    # (`*p*` prefixed) SKUs ARE available but unusable -- worker images are
+    # built linux/amd64 only (see TARGET_PLATFORM in cli/registry.py).
+    "azure": "Standard_D2als_v7",
     "alibaba": "ecs.t6-c1m1.large",
     "digitalocean": "s-1vcpu-1gb",
     "tencent": "S5.SMALL1",
 }
+# Per-(provider, service) override, for cases where a role needs more
+# headroom than the provider's cheapest default (e.g. relay/mediasoup under
+# real call load). Currently empty -- Azure's cheapest available SKU already
+# exceeds what relay needs.
+VM_INSTANCE_SIZE_OVERRIDES: dict[tuple[str, str], str] = {}
 SSH_KEY_ROOT = ROOT / "runtime" / "ssh_key"
 
 
@@ -172,11 +185,11 @@ def instance_address(name: str) -> str:
         return ""
 
 
-def registry_status(name: str, service: str, address: str) -> str:
+def registry_status(name: str, instance_key: str, address: str) -> str:
     key_path = SSH_KEY_ROOT / name / "id_ed25519"
     if not address or not key_path.exists():
         return "unknown (host unreachable)"
-    container_name = f"xaisen-{service}"
+    container_name = f"xaisen-{instance_key}"
     try:
         result = subprocess.run(
             [
@@ -258,10 +271,43 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
         print(f"Skipping docker image deployment: {exc}", file=sys.stderr)
         return {}
 
+    # loadNetworkConfig() (services/worker/packages/shared/src/chain/client.ts)
+    # reads PACKAGE_ID/NETWORK_REGISTRY_ID/etc. straight from process.env --
+    # it never reads CONTRACT_ENV_PATH itself, that var only tells the app
+    # where the file *would* be if it wanted to load it. Parse each
+    # runtime/contract/<env>.env here and inject its keys as real container
+    # env vars so every worker actually gets its contract config.
+    contract_values: dict[str, dict[str, str]] = {
+        env_file.stem: read_env_file(env_file)
+        for env_file in sorted(CONTRACT_RUNTIME_DIR.glob("*.env"))
+    } if CONTRACT_RUNTIME_DIR.exists() else {}
+    for values in contract_values.values():
+        # Every other key matches loadNetworkConfig()'s expectations
+        # verbatim (NETWORK_REGISTRY_ID, CP_REGISTRY_ID, ...) -- only the
+        # package id is written as CONTRACT_PACKAGE_ID in the contract file
+        # but read as bare PACKAGE_ID by the worker apps. Alias it.
+        if "CONTRACT_PACKAGE_ID" in values:
+            values.setdefault("PACKAGE_ID", values["CONTRACT_PACKAGE_ID"])
+        # cp-daemon's startCapTokenIssuer() bootstrap (index.ts) bypasses
+        # loadNetworkConfig() and reads these two raw off process.env under
+        # different names than what contract.py's create_registries() writes
+        # (CP_REGISTRY_ID / QUORUM_CONFIG_ID). Left unaliased, both come back
+        # empty, startCapTokenIssuer's QUORUM_STATE_OBJECT_ID guard fails
+        # closed, and cp-daemon crashes on every boot -- which also kills the
+        # role-voting loop (role_voting.move) that promotes newly-registered
+        # relay/signaling/validator miners out of role_user() into their
+        # requested role, so they get stuck failing E_NOT_RELAY/E_NOT_SIGNALING
+        # etc. forever. Alias to the names index.ts actually reads.
+        if "CP_REGISTRY_ID" in values:
+            values.setdefault("CP_REGISTRY_OBJECT_ID", values["CP_REGISTRY_ID"])
+        if "QUORUM_CONFIG_ID" in values:
+            values.setdefault("QUORUM_STATE_OBJECT_ID", values["QUORUM_CONFIG_ID"])
+
     extra_vars: dict[str, Any] = {
         "xaisen_images": state.images,
         "xaisen_tags": state.deployed,
         "xaisen_registry_host": state.host,
+        "xaisen_contract_values": contract_values,
     }
     try:
         config = registry.provider_config(state.provider, require_credentials=True)
@@ -294,6 +340,8 @@ def control(
     yes: bool = False,
     find_instance_type: bool = False,
     all_region: bool = False,
+    size: str | None = None,
+    instance_index: int = 1,
 ) -> int:
     if service not in DOCKER_SERVICES:
         print(f"Unknown service: {service}", file=sys.stderr)
@@ -306,6 +354,15 @@ def control(
     env_name = validate_network(str(topology.get("active_env", "devnet")))
     contract_path = contract_env_path(env_name)
     backend = service_backend(service)
+    # instance_index (1-based) distinguishes multiple colocated instances of
+    # the SAME service on one --name (vidctl.py's count-prefix --service
+    # syntax, e.g. `5cp-daemon`). Index 1 is identical to the pre-existing
+    # single-instance identity (no suffix); index >=2 gets a `-N` suffix
+    # everywhere namespaced by service alone (container name, state/wallet
+    # dir, xaisen_operator_wallets key) -- but NOT for the base docker
+    # image/tag or the wallet's permanent registered_role pin, which stay
+    # keyed on the bare `service` string.
+    instance_key = service if instance_index == 1 else f"{service}-{instance_index}"
 
     if backend == "vm" and action in {"pause", "restart"} and provider != "alibaba":
         message = (
@@ -313,8 +370,28 @@ def control(
             "powered lifecycle support currently requires --provider alibaba."
         )
         print(message, file=sys.stderr)
-        record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+        record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
         return 1
+
+    if backend == "vm" and action in {"start", "restart"} and provider != "digitalocean":
+        other_active = any(
+            item.get("name") == name
+            and item.get("provider") == provider
+            and item.get("env", env_name) == env_name
+            and item.get("backend") == "vm"
+            and item.get("desired_state") != "deleted"
+            and not (item.get("service") == service and item.get("instance_index", 1) == instance_index)
+            for item in topology.get("instances", [])
+        )
+        if instance_index > 1 or other_active:
+            message = (
+                f"Colocating multiple service instances on one --name is only supported for "
+                f"--provider digitalocean (got --provider {provider}). Use a separate --name per "
+                "instance, or redeploy this instance with --provider digitalocean."
+            )
+            print(message, file=sys.stderr)
+            record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
+            return 1
 
     if action in {"start", "restart"}:
         missing_keys = missing_contract_keys(contract_path)
@@ -324,13 +401,13 @@ def control(
                 f"Run ./vidctl contract publish --env {env_name} --yes first."
             )
             print(message, file=sys.stderr)
-            record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+            record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
             return 1
         if backend == "vm":
             if provider == "cloudflare":
                 message = "cloudflare has no compute/VM product; choose another --provider for vm-backed services."
                 print(message, file=sys.stderr)
-                record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+                record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
                 return 1
             if provider == "tencent":
                 message = (
@@ -338,19 +415,19 @@ def control(
                     "found for Tencent compute/VPC resources); choose another --provider for now."
                 )
                 print(message, file=sys.stderr)
-                record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+                record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
                 return 1
             missing_provider_keys = missing_vm_provider_keys(provider)
             if missing_provider_keys:
                 message = vm_provider_error(provider, missing_provider_keys)
                 print(message, file=sys.stderr)
-                record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+                record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
                 return 1
 
     if action == "kill" and not yes:
         message = "Refusing to delete infrastructure without --yes."
         print(message, file=sys.stderr)
-        record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=2, error=message)
+        record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=2, error=message)
         return 2
 
     wallet_entry: dict[str, Any] | None = None
@@ -359,16 +436,16 @@ def control(
         from . import wallet
 
         try:
-            wallet_entry, wallet_created = wallet.checkout_wallet(name, service, provider, env_name)
+            wallet_entry, wallet_created = wallet.checkout_wallet(name, service, provider, env_name, instance_index)
         except (subprocess.CalledProcessError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
             message = f"Failed to create/load operator wallet for {name}: {exc}"
             print(message, file=sys.stderr)
-            record_history(action, env=env_name, name=name, service=service, provider=provider, result_for_code=1, error=message)
+            record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
             return 1
 
-    instance = find_instance(topology, env_name, name, service, provider)
+    instance = find_instance(topology, env_name, name, service, provider, instance_index)
     if instance is None:
-        instance = new_instance(env_name, name, service, provider)
+        instance = new_instance(env_name, name, service, provider, instance_index)
         topology.setdefault("instances", []).append(instance)
 
     previous = str(instance.get("desired_state", instance.get("last_status", "unknown")))
@@ -379,7 +456,7 @@ def control(
     instance["last_updated"] = timestamp()
     instance["contract_env"] = relative_contract_env(env_name)
     if backend == "vm" and action in {"start", "restart"}:
-        set_vm_defaults(instance, topology, find_instance_type=find_instance_type)
+        set_vm_defaults(instance, topology, find_instance_type=find_instance_type, size=size, instance_index=instance_index)
     write_topology(topology)
 
     code = 0
@@ -413,13 +490,28 @@ def control(
                     and item.get("service") == service
                     and item.get("provider") == provider
                     and item.get("env", env_name) == env_name
+                    and item.get("instance_index", 1) == instance_index
                 )
             ]
             if backend == "vm":
-                shutil.rmtree(SSH_KEY_ROOT / name, ignore_errors=True)
+                # Colocated hosts share one SSH keypair across services --
+                # only remove it once no other still-active VM-backed
+                # service remains under this name/provider/env, or a
+                # sibling service's future `configure()` run would lose
+                # host access.
+                other_active_vm = any(
+                    item.get("name") == name
+                    and item.get("provider") == provider
+                    and item.get("env", env_name) == env_name
+                    and item.get("backend") == "vm"
+                    and item.get("desired_state") != "deleted"
+                    for item in topology.get("instances", [])
+                )
+                if not other_active_vm:
+                    shutil.rmtree(SSH_KEY_ROOT / name, ignore_errors=True)
                 from . import wallet
 
-                wallet.release_wallet(name, service, provider, env_name)
+                wallet.release_wallet(name, service, provider, env_name, instance_index)
         elif backend == "vm" and action in {"start", "restart"}:
             failed_stage = "inventory"
             code = inventory()
@@ -429,7 +521,7 @@ def control(
                 failed_stage = "configure"
                 container_state = "restarted" if action == "restart" else "started"
                 configure_extra_vars = (
-                    {"xaisen_operator_wallet_json": wallet.operator_state_json(wallet_entry)}
+                    {"xaisen_operator_wallets": {instance_key: wallet.operator_state_json(wallet_entry)}}
                     if wallet_entry is not None
                     else None
                 )
@@ -456,13 +548,13 @@ def control(
         print(f"IP:      {address or 'unknown'}")
         print(f"Wallet:  {wallet_address[:8]}...")
         print(f"Balance: {balance_mist / 1_000_000_000:.4f} SUI")
-        print(f"Registry: {registry_status(name, service, address)}")
+        print(f"Registry: {registry_status(name, instance_key, address)}")
 
     record_history(
         action,
         env=env_name,
         name=name,
-        service=service,
+        service=instance_key,
         provider=str(instance.get("provider", "")),
         resource_id=str(instance.get("resource_id", "")),
         previous_status=previous,
@@ -631,6 +723,7 @@ def find_instance(
     name: str,
     service: str,
     provider: str,
+    instance_index: int = 1,
 ) -> dict[str, Any] | None:
     for instance in topology.get("instances", []):
         if (
@@ -638,6 +731,7 @@ def find_instance(
             and instance.get("service") == service
             and instance.get("provider") == provider
             and instance.get("env", env_name) == env_name
+            and instance.get("instance_index", 1) == instance_index
         ):
             return instance
     return None
@@ -650,13 +744,14 @@ def find_pinned_alibaba_instance(topology: dict[str, Any], service: str, provide
     return None
 
 
-def new_instance(env_name: str, name: str, service: str, provider: str) -> dict[str, Any]:
+def new_instance(env_name: str, name: str, service: str, provider: str, instance_index: int = 1) -> dict[str, Any]:
     return {
         "name": name,
         "service": service,
         "provider": provider,
         "env": env_name,
         "backend": service_backend(service),
+        "instance_index": instance_index,
     }
 
 
@@ -712,10 +807,34 @@ def ensure_ssh_keypair(instance: dict[str, Any]) -> str:
     return f"runtime/ssh_key/{name}"
 
 
-def set_vm_defaults(instance: dict[str, Any], topology: dict[str, Any], find_instance_type: bool = False) -> None:
+def set_vm_defaults(
+    instance: dict[str, Any],
+    topology: dict[str, Any],
+    find_instance_type: bool = False,
+    size: str | None = None,
+    instance_index: int = 1,
+) -> None:
     service = str(instance.get("service", ""))
     provider = str(instance.get("provider", ""))
-    instance.setdefault("port", SERVICE_PORTS.get(service, 0))
+    # Only relay (4000) and signaling (8080) have a real listening port --
+    # cp-daemon/validator-daemon (SERVICE_PORTS has no entry for them, so
+    # base_port is 0) are exactly the services this count-prefix feature was
+    # built for and have zero port-collision risk regardless of replica
+    # count. For relay/signaling, offset each replica's host port by
+    # (instance_index - 1) so multiple instances on one droplet don't bind
+    # the same port. NOTE: this does NOT extend to relay's hardcoded UDP RTC
+    # ranges (10000-10100/40000-40100, see deploy_one_service.yml) -- running
+    # more than one relay replica on the same host will still collide there;
+    # that's a known, unaddressed limitation, not a bug.
+    base_port = SERVICE_PORTS.get(service, 0)
+    instance.setdefault("port", base_port + (instance_index - 1) if base_port else 0)
+
+    if size:
+        # Explicit --size always wins over any default/pin below, and
+        # persists on the topology row for subsequent restarts. When
+        # colocating multiple services under one --name, every call sharing
+        # that name must agree (enforced by program.py's merge step).
+        instance["size"] = size
 
     if provider == "alibaba":
         if find_instance_type:
@@ -727,7 +846,8 @@ def set_vm_defaults(instance: dict[str, Any], topology: dict[str, Any], find_ins
                 instance["region"] = pinned["region"]
                 instance["size"] = pinned["size"]
     else:
-        instance.setdefault("size", VM_INSTANCE_SIZES.get(provider, ""))
+        default_size = VM_INSTANCE_SIZE_OVERRIDES.get((provider, service), VM_INSTANCE_SIZES.get(provider, ""))
+        instance.setdefault("size", default_size)
 
     instance["ssh_key_dir"] = ensure_ssh_keypair(instance)
 

@@ -37,7 +37,11 @@ def adapter(provider: str) -> VMAdapter:
 def create_vm_instance(instance: TopologyInstance) -> VMResult:
     provider = str(instance.get("provider", ""))
     desired_state = str(instance.get("desired_state", ""))
-    if desired_state == "deleted":
+    # "unknown" means a prior provisioning attempt failed before anything was
+    # actually created (see cli/infra.py control()'s rollback-to-previous
+    # logic) -- skip it like "deleted", or every future apply for ANY
+    # instance keeps retrying and can abort on the same dead entry.
+    if desired_state in ("deleted", "unknown"):
         return {
             "provider": provider,
             "desired_state": desired_state,
