@@ -8,11 +8,13 @@ from typing import Any
 import tomllib
 
 from . import contract, infra, registry
+from . import object as object_cmd
 from .context import ROOT, RUNTIME_SCENARIO_LOCK, contract_env_path
 
 SCENARIO_DIR = ROOT / "scenario"
 
 InstanceKey = tuple[str, str, str, str, int]
+FrontendKey = tuple[str, str, str]
 
 
 def load_scenario(path: Path) -> dict[str, Any]:
@@ -58,6 +60,28 @@ def load_scenario(path: Path) -> dict[str, Any]:
             }
         )
 
+    raw_frontends = data.get("frontends", [])
+    if not isinstance(raw_frontends, list):
+        raise ValueError("Scenario 'frontends' must be an array of tables ([[frontends]]).")
+
+    seen_frontends: set[FrontendKey] = set()
+    frontends: list[dict[str, Any]] = []
+    for row in raw_frontends:
+        name = str(row.get("name", ""))
+        object_type = str(row.get("object") or "frontend")
+        provider = str(row.get("provider", ""))
+        if not name:
+            raise ValueError("Every scenario frontend needs a 'name'.")
+        if object_type not in object_cmd.OBJECT_TYPES:
+            raise ValueError(f"Unknown object type '{object_type}' for frontend '{name}'.")
+        if provider not in object_cmd.PROVIDERS:
+            raise ValueError(f"Unknown provider '{provider}' for frontend '{name}'.")
+        key: FrontendKey = (name, object_type, provider)
+        if key in seen_frontends:
+            raise ValueError(f"Duplicate scenario frontend: name={name} object={object_type} provider={provider}.")
+        seen_frontends.add(key)
+        frontends.append({"name": name, "object": object_type, "provider": provider})
+
     contract_opts = data.get("contract", {})
     contract_opts = contract_opts if isinstance(contract_opts, dict) else {}
     registry_opts = data.get("registry", {})
@@ -72,8 +96,10 @@ def load_scenario(path: Path) -> dict[str, Any]:
             "force": bool(contract_opts.get("force", False)),
         },
         "registry": {
+            "provider": registry_opts.get("provider") or None,
             "tag": registry_opts.get("tag") or None,
         },
+        "frontends": frontends,
         "instances": instances,
     }
 
@@ -224,6 +250,30 @@ def apply(path_str: str, yes: bool) -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Frontend sites are publish-only here -- never killed/deleted by a
+    # scenario, in apply() or destroy(). This depends only on the contract
+    # step above (object_cmd.publish's pnpm build reads services/client/
+    # client/.env, populated by contract.publish's sync_frontend_env), not
+    # on the worker images below, so it runs before registry login/publish.
+    for frontend in scenario["frontends"]:
+        code = object_cmd.publish(frontend["name"], frontend["object"], frontend["provider"])
+        if code != 0:
+            write_lock(scenario_path_display, scenario_hash, env, "failed")
+            print(
+                f"Scenario apply failed publishing frontend {frontend['name']}"
+                f"@{frontend['provider']} (exit {code}).",
+                file=sys.stderr,
+            )
+            return code
+
+    registry_provider = scenario["registry"]["provider"]
+    if registry_provider:
+        code = registry.login(registry_provider)
+        if code != 0:
+            write_lock(scenario_path_display, scenario_hash, env, "failed")
+            print(f"Scenario apply failed at registry login (exit {code}).", file=sys.stderr)
+            return code
 
     code = registry.publish(None, True, scenario["registry"]["tag"])
     if code != 0:

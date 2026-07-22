@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cli import contract, infra, registry, scenario
+from cli import object as object_cmd
 from cli.registry import RegistryState
 
 FAKE_WALLET = {"secret_key": "k", "node_id": None, "x25519_secret": "x", "cap_id": None}
@@ -74,6 +75,8 @@ class ScenarioTestCase(unittest.TestCase):
             patch("cli.wallet.release_wallet", return_value=None),
             patch.object(contract, "publish", return_value=0),
             patch.object(registry, "publish", return_value=0),
+            patch.object(registry, "login", return_value=0),
+            patch.object(object_cmd, "publish", return_value=0),
             patch.object(
                 registry,
                 "read_runtime_registry",
@@ -135,6 +138,47 @@ class LoadScenarioTests(ScenarioTestCase):
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
+
+    def test_empty_frontends_allowed(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        parsed = scenario.load_scenario(path)
+        self.assertEqual(parsed["frontends"], [])
+
+    def test_frontends_parse(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML + '\n[[frontends]]\nname = "site-2-bucket"\nprovider = "alibaba"\n',
+        )
+        parsed = scenario.load_scenario(path)
+        self.assertEqual(
+            parsed["frontends"],
+            [{"name": "site-2-bucket", "object": "frontend", "provider": "alibaba"}],
+        )
+
+    def test_frontend_unknown_object_type_rejected(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML + '\n[[frontends]]\nname = "n"\nobject = "bogus"\nprovider = "alibaba"\n',
+        )
+        with self.assertRaises(ValueError):
+            scenario.load_scenario(path)
+
+    def test_frontend_unknown_provider_rejected(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML + '\n[[frontends]]\nname = "n"\nprovider = "bogus"\n',
+        )
+        with self.assertRaises(ValueError):
+            scenario.load_scenario(path)
+
+    def test_registry_provider_optional(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        parsed = scenario.load_scenario(path)
+        self.assertIsNone(parsed["registry"]["provider"])
+
+        path2 = self.write_scenario("s2.toml", SCENARIO_TOML + '\n[registry]\nprovider = "digitalocean"\n')
+        parsed2 = scenario.load_scenario(path2)
+        self.assertEqual(parsed2["registry"]["provider"], "digitalocean")
 
 
 class LockTests(ScenarioTestCase):
@@ -198,6 +242,65 @@ class ApplyTests(ScenarioTestCase):
         lock = scenario.read_lock()
         self.assertEqual(lock["status"], "active")
         self.assertEqual(lock["scenario_hash"], scenario.scenario_hash_of(path))
+
+    def test_apply_publishes_frontends_before_registry(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML + '\n[[frontends]]\nname = "site-2-bucket"\nprovider = "alibaba"\n',
+        )
+        with patch.object(object_cmd, "publish", return_value=0) as publish_frontend:
+            code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        publish_frontend.assert_called_once_with("site-2-bucket", "frontend", "alibaba")
+
+    def test_apply_frontend_failure_stops_before_registry_and_instances(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML + '\n[[frontends]]\nname = "site-2-bucket"\nprovider = "alibaba"\n',
+        )
+        with (
+            patch.object(object_cmd, "publish", return_value=1),
+            patch.object(registry, "publish") as registry_publish,
+        ):
+            code = scenario.apply(str(path), True)
+        self.assertNotEqual(code, 0)
+        registry_publish.assert_not_called()
+        self.assertEqual(scenario.read_lock()["status"], "failed")
+        # Instance reconcile never started -- topology.toml isn't even
+        # created yet (only ensure_topology(), reached during reconcile,
+        # would create it).
+        self.assertFalse(self.topology.exists())
+
+    def test_apply_never_calls_object_delete(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML + '\n[[frontends]]\nname = "site-2-bucket"\nprovider = "alibaba"\n',
+        )
+        with patch.object(object_cmd, "delete") as delete_frontend:
+            self.assertEqual(scenario.apply(str(path), True), 0)
+            self.assertEqual(scenario.destroy(None), 0)
+        delete_frontend.assert_not_called()
+
+    def test_apply_logs_into_registry_when_provider_set(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML + '\n[registry]\nprovider = "digitalocean"\n')
+        with patch.object(registry, "login", return_value=0) as login:
+            code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        login.assert_called_once_with("digitalocean")
+
+    def test_apply_skips_registry_login_when_provider_unset(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(registry, "login", return_value=0) as login:
+            code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        login.assert_not_called()
+
+    def test_apply_registry_login_failure_leaves_lock_failed(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML + '\n[registry]\nprovider = "digitalocean"\n')
+        with patch.object(registry, "login", return_value=1):
+            code = scenario.apply(str(path), True)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(scenario.read_lock()["status"], "failed")
 
     def test_apply_without_yes_is_refused(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)

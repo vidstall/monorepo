@@ -86,13 +86,17 @@ def check(env: str) -> int:
     return test(env)
 
 
-def sync_devnet_chain_id() -> None:
+def sync_devnet_chain_id() -> str | None:
     """Best-effort: refresh Move.toml's `devnet` chain identifier from the
     live network before a devnet build, since devnet resets its genesis
     (and therefore its chain identifier) periodically and vidctl has no
     other mechanism to detect that drift. Never blocks the build — on any
     failure (no network, sui not on PATH, etc.) it warns and leaves
     Move.toml as-is, since the existing value might still be correct.
+
+    Returns the live chain-id on success (even if Move.toml already matched
+    it, or couldn't be updated), or None if it couldn't be determined at
+    all -- callers use this to detect a devnet reset (see `publish()`).
     """
     try:
         result = subprocess.run(
@@ -101,22 +105,22 @@ def sync_devnet_chain_id() -> None:
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
         print(f"Warning: could not refresh devnet chain-id ({exc}); using existing Move.toml value.", file=sys.stderr)
-        return
+        return None
     if result.returncode != 0:
         print(
             f"Warning: could not refresh devnet chain-id ({result.stderr.strip() or 'sui command failed'}); "
             "using existing Move.toml value.",
             file=sys.stderr,
         )
-        return
+        return None
     try:
         chain_id = json.loads(result.stdout.strip())
     except json.JSONDecodeError:
         print("Warning: could not parse devnet chain-id response; using existing Move.toml value.", file=sys.stderr)
-        return
+        return None
 
     if not MOVE_TOML.exists():
-        return
+        return chain_id
     text = MOVE_TOML.read_text()
     new_line = f'devnet = "{chain_id}"'
     if re.search(r'(?m)^devnet\s*=\s*".*"$', text):
@@ -124,10 +128,11 @@ def sync_devnet_chain_id() -> None:
     elif "[environments]" in text:
         updated = text.replace("[environments]", f"[environments]\n{new_line}", 1)
     else:
-        return
+        return chain_id
     if updated != text:
         MOVE_TOML.write_text(updated)
         print(f"Move.toml: devnet chain-id refreshed -> {chain_id}")
+    return chain_id
 
 
 def ensure_active_sui_env(env: str) -> int:
@@ -153,23 +158,44 @@ def publish(
         print("Refusing to publish contract without --dry-run or --yes.", file=sys.stderr)
         return 2
 
-    if env == "devnet":
-        sync_devnet_chain_id()
+    live_chain_id = sync_devnet_chain_id() if env == "devnet" else None
 
     code = ensure_active_sui_env(env)
     if code != 0:
         return code
 
+    deployment = load_deployment(env)
+
+    if not force and live_chain_id:
+        # devnet is wiped periodically, which mints a new chain-id -- any
+        # package/upgrade-cap recorded against the OLD chain-id no longer
+        # exists on-chain, so a normal upgrade is impossible (Sui itself
+        # rejects it: "cannot be used to publish to chain with id ...").
+        # Detect that here and fall back to a fresh publish automatically,
+        # the same recovery `--force` provides manually, so a scenario apply
+        # survives a devnet reset without operator intervention.
+        recorded_chain_id = deployment.get("CONTRACT_CHAIN_ID")
+        if recorded_chain_id and recorded_chain_id != live_chain_id:
+            print(
+                f"devnet chain-id changed ({recorded_chain_id} -> {live_chain_id}); the network was "
+                "reset since the last publish, so the recorded package/upgrade-cap no longer exist "
+                "there. Forcing a fresh publish instead of an upgrade.",
+            )
+            force = True
+
     if force:
         if not dry_run:
             clear_published_entry(env)
-        deployment: dict[str, str] = {
+        deployment = {
             key: value
             for key, value in load_deployment(env).items()
             if key in {"CONTRACT_NETWORK", "CONTRACT_CHAIN_ID"}
         }
-    else:
-        deployment = load_deployment(env)
+        if live_chain_id:
+            # load_deployment() re-reads runtime/contract/<env>.env, whose
+            # own CONTRACT_CHAIN_ID may still be the stale pre-reset value --
+            # always prefer the just-fetched live one when we have it.
+            deployment["CONTRACT_CHAIN_ID"] = live_chain_id
 
     existing_package_id = deployment.get("CONTRACT_PACKAGE_ID")
     existing_upgrade_cap_id = deployment.get("CONTRACT_UPGRADE_CAP_ID")
@@ -226,7 +252,12 @@ def publish(
 
     new_deployment = {
         "CONTRACT_NETWORK": env,
-        "CONTRACT_CHAIN_ID": deployment.get("CONTRACT_CHAIN_ID", ""),
+        # Prefer the just-fetched live chain-id over whatever's in
+        # `deployment` (which can still be a stale pre-reset value via
+        # load_deployment()'s env-file merge) so runtime/contract/<env>.env
+        # always records an accurate chain-id for the next publish's reset
+        # check above.
+        "CONTRACT_CHAIN_ID": live_chain_id or deployment.get("CONTRACT_CHAIN_ID", ""),
         "CONTRACT_PACKAGE_ID": package_id,
         "CONTRACT_ORIGINAL_PACKAGE_ID": package_id,
         "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id or "",

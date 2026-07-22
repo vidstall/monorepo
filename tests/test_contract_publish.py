@@ -190,6 +190,104 @@ class ContractPublishTests(unittest.TestCase):
         self.assertEqual(self.env_path.read_text(), before)
         self.assertTrue((self.runtime_dir / "Pub.devnet.toml").exists())
 
+    def fake_sui_fresh_devnet_publish(self, args: list[object], cwd: Path | None = None) -> tuple[int, dict | None, str]:
+        # Unlike `fake_sui`, distinguishes devnet's preview vs real
+        # "test-publish" call by `--dry-run` presence, since real_publish_command()
+        # uses "test-publish" (not "publish") for BOTH on devnet. The real
+        # response also needs to mint AdminCap/NetworkRegistry/MinerStore/
+        # RoleVoteBox, which the shared published_payload() fixture omits.
+        command = [str(arg) for arg in args]
+        self.commands.append(command)
+        action = command[2]
+        if action == "test-publish":
+            if "--dry-run" in command:
+                return 0, {"effects": {}}, ""
+            payload = published_payload()
+            payload["objectChanges"].extend(
+                [
+                    {"type": "created", "objectType": "0xpackage::admin::AdminCap", "objectId": "0xadmincap"},
+                    {"type": "created", "objectType": "0xpackage::node_registry::NetworkRegistry", "objectId": "0xnetworkregistry"},
+                    {"type": "created", "objectType": "0xpackage::miner::MinerStore", "objectId": "0xminerstore"},
+                    {"type": "created", "objectType": "0xpackage::role_voting::RoleVoteBox", "objectId": "0xrolevotebox"},
+                ]
+            )
+            return 0, payload, ""
+        if action == "call":
+            return 0, registry_payload(), ""
+        self.fail(f"Unexpected Sui action: {action}")
+
+    def test_devnet_chain_reset_forces_fresh_publish_not_upgrade(self) -> None:
+        # An existing (pre-reset) deployment record: package/upgrade-cap and
+        # a CHAIN_ID that no longer matches the live devnet network.
+        self.write_env(
+            {
+                "CONTRACT_NETWORK": "devnet",
+                "CONTRACT_CHAIN_ID": "old-chain-id",
+                "CONTRACT_PACKAGE_ID": "0xpackage",
+                "CONTRACT_REGISTRY_OBJECT_ID": "0xregistry",
+                "CONTRACT_UPGRADE_CAP_ID": "0xupgradecap",
+            }
+        )
+
+        with (
+            patch.object(contract, "run_sui_json", self.fake_sui_fresh_devnet_publish),
+            patch.object(contract, "sync_devnet_chain_id", return_value="new-chain-id"),
+            patch.object(contract, "upgrade_existing") as upgrade_existing,
+            patch.object(
+                contract,
+                "create_registries",
+                return_value={
+                    "CP_REGISTRY_ID": "0xcp",
+                    "RELAY_REGISTRY_ID": "0xrelay",
+                    "SIGNALING_REGISTRY_ID": "0xsignaling",
+                    "VALIDATOR_REGISTRY_ID": "0xvalidator",
+                    "USER_REGISTRY_ID": "0xuser",
+                    "ROOM_MANAGER_ID": "0xroom",
+                    "QUORUM_CONFIG_ID": "0xquorum",
+                },
+            ),
+        ):
+            code = contract.publish("devnet", dry_run=False, yes=True, gas_budget=None)
+
+        self.assertEqual(code, 0)
+        # The chain-id mismatch must route to a fresh publish, never to the
+        # upgrade path (which would fail on-chain against a wiped network).
+        upgrade_existing.assert_not_called()
+        self.assertEqual([command[2] for command in self.commands], ["test-publish", "test-publish"])
+        values = parse_env(self.env_path)
+        self.assertEqual(values["CONTRACT_PACKAGE_ID"], "0xpackage")
+        # The record self-heals to the live chain-id, not the stale one.
+        self.assertEqual(values["CONTRACT_CHAIN_ID"], "new-chain-id")
+
+    def test_devnet_matching_chain_id_still_upgrades(self) -> None:
+        self.write_env(
+            {
+                "CONTRACT_NETWORK": "devnet",
+                "CONTRACT_CHAIN_ID": "same-chain-id",
+                "CONTRACT_PACKAGE_ID": "0xpackage",
+                "CONTRACT_REGISTRY_OBJECT_ID": "0xregistry",
+                "CONTRACT_UPGRADE_CAP_ID": "0xupgradecap",
+                "CP_REGISTRY_ID": "0xcp",
+                "RELAY_REGISTRY_ID": "0xrelay",
+                "SIGNALING_REGISTRY_ID": "0xsignaling",
+                "VALIDATOR_REGISTRY_ID": "0xvalidator",
+                "USER_REGISTRY_ID": "0xuser",
+                "ROOM_MANAGER_ID": "0xroom",
+                "QUORUM_CONFIG_ID": "0xquorum",
+            }
+        )
+
+        with (
+            patch.object(contract, "run_sui_json", self.fake_sui),
+            patch.object(contract, "sync_devnet_chain_id", return_value="same-chain-id"),
+        ):
+            code = contract.publish("devnet", dry_run=False, yes=True, gas_budget="1000")
+
+        self.assertEqual(code, 0)
+        self.assertEqual([command[2] for command in self.commands], ["test-upgrade", "upgrade"])
+        values = parse_env(self.env_path)
+        self.assertEqual(values["CONTRACT_PACKAGE_ID"], "0xupgraded")
+
 
 if __name__ == "__main__":
     unittest.main()
