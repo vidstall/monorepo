@@ -7,7 +7,7 @@ from ..models import TopologyInstance
 def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     import pulumi_gcp as gcp
 
-    name = instance["name"]
+    name = instance["host"]
     port = int(instance.get("port") or 0)
     zone = provider_zone(instance)
     instance["zone"] = zone

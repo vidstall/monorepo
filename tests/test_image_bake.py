@@ -194,7 +194,7 @@ class BakeOrchestrationTests(unittest.TestCase):
             patch.object(infra, "command_env", return_value={"DIGITALOCEAN_TOKEN": "token"}),
             patch.object(infra, "pulumi_up", return_value=0),
             patch.object(infra, "inventory", return_value=0),
-            patch.object(infra, "instance_address", return_value="203.0.113.10"),
+            patch.object(infra, "host_address", return_value="203.0.113.10"),
             patch.object(infra, "persist_vm_resolution", return_value=None),
             patch.object(infra, "GENERATED_INVENTORY", self.root / "runtime" / "hosts.generated.yml"),
             patch.object(image_bake, "wait_for_ssh", return_value=True),
@@ -242,7 +242,7 @@ class BakeOrchestrationTests(unittest.TestCase):
 
         # Bake VM's topology row must be gone after a successful run.
         topology = self.read_topology()
-        bake_rows = [i for i in topology["instances"] if i.get("service") == image_bake.BAKE_SERVICE]
+        bake_rows = [i for i in topology["workers"] if i.get("service") == image_bake.BAKE_SERVICE]
         self.assertEqual(bake_rows, [])
 
     def test_pulumi_up_failure_removes_topology_row(self) -> None:
@@ -250,7 +250,7 @@ class BakeOrchestrationTests(unittest.TestCase):
             code = image_bake.bake("digitalocean", "nyc3", True)
         self.assertNotEqual(code, 0)
         topology = self.read_topology()
-        bake_rows = [i for i in topology["instances"] if i.get("service") == image_bake.BAKE_SERVICE]
+        bake_rows = [i for i in topology["workers"] if i.get("service") == image_bake.BAKE_SERVICE]
         self.assertEqual(bake_rows, [])
 
     def test_ssh_never_ready_leaves_vm_for_inspection(self) -> None:
@@ -263,7 +263,7 @@ class BakeOrchestrationTests(unittest.TestCase):
         wait_for_ssh_fn.assert_called_once()
         ssh_run_fn.assert_not_called()
         topology = self.read_topology()
-        bake_rows = [i for i in topology["instances"] if i.get("service") == image_bake.BAKE_SERVICE]
+        bake_rows = [i for i in topology["workers"] if i.get("service") == image_bake.BAKE_SERVICE]
         self.assertEqual(len(bake_rows), 1)
         self.assertEqual(image_bake.read_runtime_images(), {})
 
@@ -272,7 +272,7 @@ class BakeOrchestrationTests(unittest.TestCase):
             code = image_bake.bake("digitalocean", "nyc3", True)
         self.assertNotEqual(code, 0)
         topology = self.read_topology()
-        bake_rows = [i for i in topology["instances"] if i.get("service") == image_bake.BAKE_SERVICE]
+        bake_rows = [i for i in topology["workers"] if i.get("service") == image_bake.BAKE_SERVICE]
         self.assertEqual(len(bake_rows), 1)
         self.assertEqual(image_bake.read_runtime_images(), {})
 
@@ -281,7 +281,7 @@ class BakeOrchestrationTests(unittest.TestCase):
             code = image_bake.bake("digitalocean", "nyc3", True)
         self.assertNotEqual(code, 0)
         topology = self.read_topology()
-        bake_rows = [i for i in topology["instances"] if i.get("service") == image_bake.BAKE_SERVICE]
+        bake_rows = [i for i in topology["workers"] if i.get("service") == image_bake.BAKE_SERVICE]
         self.assertEqual(len(bake_rows), 1)
         self.assertEqual(image_bake.read_runtime_images(), {})
 

@@ -13,7 +13,7 @@ from .context import ROOT, RUNTIME_SCENARIO_LOCK, contract_env_path
 
 SCENARIO_DIR = ROOT / "scenario"
 
-InstanceKey = tuple[str, str, str, str, int]
+WorkerKey = tuple[str, str, str, str, int]
 FrontendKey = tuple[str, str, str]
 
 
@@ -26,36 +26,36 @@ def load_scenario(path: Path) -> dict[str, Any]:
     if env not in infra.NETWORKS:
         raise ValueError(f"Scenario env must be one of {', '.join(infra.NETWORKS)}, got {env!r}.")
 
-    raw_instances = data.get("instances", [])
-    if not isinstance(raw_instances, list) or not raw_instances:
-        raise ValueError("Scenario must declare at least one [[instances]] entry.")
+    raw_workers = data.get("workers", [])
+    if not isinstance(raw_workers, list) or not raw_workers:
+        raise ValueError("Scenario must declare at least one [[workers]] entry.")
 
-    seen: set[InstanceKey] = set()
-    instances: list[dict[str, Any]] = []
-    for row in raw_instances:
-        name = str(row.get("name", ""))
+    seen: set[WorkerKey] = set()
+    workers: list[dict[str, Any]] = []
+    for row in raw_workers:
+        host = str(row.get("host", ""))
         service = str(row.get("service", ""))
         provider = str(row.get("provider", ""))
-        instance_index = int(row.get("instance_index", 1) or 1)
-        if not name:
-            raise ValueError("Every scenario instance needs a 'name'.")
+        worker_index = int(row.get("worker_index", 1) or 1)
+        if not host:
+            raise ValueError("Every scenario worker needs a 'host'.")
         if service not in infra.DOCKER_SERVICES:
-            raise ValueError(f"Unknown service '{service}' for instance '{name}'.")
+            raise ValueError(f"Unknown service '{service}' for worker on host '{host}'.")
         if provider not in infra.PROVIDERS:
-            raise ValueError(f"Unknown provider '{provider}' for instance '{name}'.")
-        key: InstanceKey = (name, service, provider, env, instance_index)
+            raise ValueError(f"Unknown provider '{provider}' for worker on host '{host}'.")
+        key: WorkerKey = (host, service, provider, env, worker_index)
         if key in seen:
             raise ValueError(
-                f"Duplicate scenario instance: name={name} service={service} "
-                f"provider={provider} instance_index={instance_index}."
+                f"Duplicate scenario worker: host={host} service={service} "
+                f"provider={provider} worker_index={worker_index}."
             )
         seen.add(key)
-        instances.append(
+        workers.append(
             {
-                "name": name,
+                "host": host,
                 "service": service,
                 "provider": provider,
-                "instance_index": instance_index,
+                "worker_index": worker_index,
                 "size": row.get("size") or None,
                 "region": row.get("region") or None,
             }
@@ -101,7 +101,7 @@ def load_scenario(path: Path) -> dict[str, Any]:
             "tag": registry_opts.get("tag") or None,
         },
         "frontends": frontends,
-        "instances": instances,
+        "workers": workers,
     }
 
 
@@ -159,33 +159,33 @@ def guard_manual_infra(action: str) -> int | None:
     return 3
 
 
-def diff_instances(
-    wanted: dict[InstanceKey, dict[str, Any]],
-    current: dict[InstanceKey, dict[str, Any]],
-) -> tuple[list[InstanceKey], list[InstanceKey]]:
+def diff_workers(
+    wanted: dict[WorkerKey, dict[str, Any]],
+    current: dict[WorkerKey, dict[str, Any]],
+) -> tuple[list[WorkerKey], list[WorkerKey]]:
     to_kill = sorted(current.keys() - wanted.keys())
     to_start = list(wanted.keys())
     return to_kill, to_start
 
 
-def _topology_instance_key(item: dict[str, Any], default_env: str) -> InstanceKey:
+def _topology_worker_key(item: dict[str, Any], default_env: str) -> WorkerKey:
     return (
-        str(item.get("name")),
+        str(item.get("host")),
         str(item.get("service")),
         str(item.get("provider")),
         str(item.get("env", default_env)),
-        int(item.get("instance_index", 1) or 1),
+        int(item.get("worker_index", 1) or 1),
     )
 
 
-def _active_instances_for_env(env: str) -> list[dict[str, Any]]:
+def _active_workers_for_env(env: str) -> list[dict[str, Any]]:
     # ensure_topology (not read_topology) since topology.toml may not exist
     # yet on a first-ever `scenario apply` (normally created by `vidctl infra
     # init`, which a scenario apply doesn't require running first).
     topology = infra.ensure_topology(env)
     return [
         item
-        for item in topology.get("instances", [])
+        for item in topology.get("workers", [])
         if item.get("env", env) == env and item.get("desired_state") != "deleted"
     ]
 
@@ -294,27 +294,27 @@ def apply(path_str: str, yes: bool) -> int:
         print(f"Image publish succeeded but missing deployed tags for: {', '.join(missing_images)}.", file=sys.stderr)
         return 1
 
-    wanted: dict[InstanceKey, dict[str, Any]] = {
-        (row["name"], row["service"], row["provider"], env, row["instance_index"]): row
-        for row in scenario["instances"]
+    wanted: dict[WorkerKey, dict[str, Any]] = {
+        (row["host"], row["service"], row["provider"], env, row["worker_index"]): row
+        for row in scenario["workers"]
     }
-    current: dict[InstanceKey, dict[str, Any]] = {
-        _topology_instance_key(item, env): item for item in _active_instances_for_env(env)
+    current: dict[WorkerKey, dict[str, Any]] = {
+        _topology_worker_key(item, env): item for item in _active_workers_for_env(env)
     }
-    to_kill, to_start = diff_instances(wanted, current)
+    to_kill, to_start = diff_workers(wanted, current)
 
-    for name, service, provider, _env, instance_index in to_kill:
-        code = infra.control("kill", name, service, provider, yes=True, instance_index=instance_index)
+    for host, service, provider, _env, worker_index in to_kill:
+        code = infra.control("kill", host, service, provider, yes=True, worker_index=worker_index)
         if code != 0:
             write_lock(scenario_path_display, scenario_hash, env, "failed")
             print(
-                f"Scenario apply failed killing extra instance {name}/{service}/{provider}"
-                f"#{instance_index} (exit {code}).",
+                f"Scenario apply failed killing extra worker {host}/{service}/{provider}"
+                f"#{worker_index} (exit {code}).",
                 file=sys.stderr,
             )
             return code
 
-    # Bake a golden image for any (provider, region) among the instances
+    # Bake a golden image for any (provider, region) among the workers
     # about to start that doesn't have one yet -- set_vm_defaults() then
     # picks it up automatically for every infra.control("start", ...) call
     # below, same as if it had been baked ahead of time. Only providers
@@ -331,15 +331,15 @@ def apply(path_str: str, yes: bool) -> int:
             print(f"Scenario apply failed ensuring a golden image: {error_message}", file=sys.stderr)
             return 1
 
-    # Group by (name, provider): colocated services on the same host go
+    # Group by (host, provider): colocated services on the same host go
     # through infra.control_many() -- one pulumi_up()+inventory()+configure()
     # pass for the whole host instead of one full pass per service (see
     # control_many's docstring). Singleton hosts and non-colocation-capable
     # providers keep using infra.control() one row at a time, unchanged.
-    host_groups: dict[tuple[str, str], list[InstanceKey]] = {}
+    host_groups: dict[tuple[str, str], list[WorkerKey]] = {}
     for key in to_start:
         row = wanted[key]
-        host_groups.setdefault((row["name"], row["provider"]), []).append(key)
+        host_groups.setdefault((row["host"], row["provider"]), []).append(key)
 
     COLOCATE_PROVIDERS = {"digitalocean", "upcloud", "akamai"}
     for (host_name, host_provider), keys in host_groups.items():
@@ -350,7 +350,7 @@ def apply(path_str: str, yes: bool) -> int:
                 {
                     "service": wanted[key]["service"],
                     "size": wanted[key].get("size"),
-                    "instance_index": wanted[key]["instance_index"],
+                    "worker_index": wanted[key]["worker_index"],
                     "region": wanted[key].get("region"),
                 }
                 for key in keys
@@ -367,22 +367,22 @@ def apply(path_str: str, yes: bool) -> int:
 
         for key in keys:
             row = wanted[key]
-            name, service, provider, instance_index = row["name"], row["service"], row["provider"], row["instance_index"]
+            host, service, provider, worker_index = row["host"], row["service"], row["provider"], row["worker_index"]
             code = infra.control(
                 "start",
-                name,
+                host,
                 service,
                 provider,
                 yes=True,
                 size=row.get("size"),
-                instance_index=instance_index,
+                worker_index=worker_index,
                 region=row.get("region"),
             )
             if code != 0:
                 write_lock(scenario_path_display, scenario_hash, env, "failed")
                 print(
-                    f"Scenario apply failed starting instance {name}/{service}/{provider}"
-                    f"#{instance_index} (exit {code}).",
+                    f"Scenario apply failed starting worker {host}/{service}/{provider}"
+                    f"#{worker_index} (exit {code}).",
                     file=sys.stderr,
                 )
                 return code
@@ -406,18 +406,18 @@ def status(_args: Any) -> int:
     print(f"  updated:  {lock.get('updated_at')}")
 
     env = str(lock.get("env", ""))
-    rows = _active_instances_for_env(env)
+    rows = _active_workers_for_env(env)
     if not rows:
-        print("No managed instances.")
+        print("No managed workers.")
         return 0
 
-    print("Instances:")
-    for item in sorted(rows, key=lambda r: (str(r.get("name")), str(r.get("service")), int(r.get("instance_index", 1) or 1))):
-        instance_index = int(item.get("instance_index", 1) or 1)
-        label = str(item.get("service")) if instance_index == 1 else f"{item.get('service')}-{instance_index}"
+    print("Workers:")
+    for item in sorted(rows, key=lambda r: (str(r.get("host")), str(r.get("service")), int(r.get("worker_index", 1) or 1))):
+        worker_index = int(item.get("worker_index", 1) or 1)
+        label = str(item.get("service")) if worker_index == 1 else f"{item.get('service')}-{worker_index}"
         state = item.get("last_status") or item.get("desired_state")
         error = f" ERROR: {item.get('last_error')}" if item.get("last_error") else ""
-        print(f"  {item.get('name')}/{label}@{item.get('provider')}: {state}{error}")
+        print(f"  {item.get('host')}/{label}@{item.get('provider')}: {state}{error}")
     return 0
 
 
@@ -432,19 +432,19 @@ def destroy(_args: Any) -> int:
     scenario_hash = str(lock.get("scenario_hash", ""))
 
     rows = sorted(
-        _active_instances_for_env(env),
-        key=lambda r: (str(r.get("name")), str(r.get("service")), int(r.get("instance_index", 1) or 1)),
+        _active_workers_for_env(env),
+        key=lambda r: (str(r.get("host")), str(r.get("service")), int(r.get("worker_index", 1) or 1)),
     )
     for item in rows:
-        name = str(item.get("name"))
+        host = str(item.get("host"))
         service = str(item.get("service"))
         provider = str(item.get("provider"))
-        instance_index = int(item.get("instance_index", 1) or 1)
-        code = infra.control("kill", name, service, provider, yes=True, instance_index=instance_index)
+        worker_index = int(item.get("worker_index", 1) or 1)
+        code = infra.control("kill", host, service, provider, yes=True, worker_index=worker_index)
         if code != 0:
             write_lock(scenario_path_display, scenario_hash, env, "failed")
             print(
-                f"Scenario destroy failed killing {name}/{service}/{provider}#{instance_index} "
+                f"Scenario destroy failed killing {host}/{service}/{provider}#{worker_index} "
                 f"(exit {code}).",
                 file=sys.stderr,
             )

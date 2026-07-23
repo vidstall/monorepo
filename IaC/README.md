@@ -57,10 +57,10 @@ export S3_API_ENDPOINT="https://ACCOUNT_ID.r2.cloudflarestorage.com"
 ./vidctl infra ping
 ./vidctl infra configure
 ./vidctl infra deploy --yes
-./vidctl infra start --name INSTANCE --service routes --provider digitalocean
-./vidctl infra pause --name INSTANCE --service routes --provider digitalocean
-./vidctl infra restart --name INSTANCE --service routes --provider digitalocean
-./vidctl infra kill --name INSTANCE --service routes --provider digitalocean --yes
+./vidctl infra start --host HOST --service routes --provider digitalocean
+./vidctl infra pause --host HOST --service routes --provider digitalocean
+./vidctl infra restart --host HOST --service routes --provider digitalocean
+./vidctl infra kill --host HOST --service routes --provider digitalocean --yes
 ./vidctl infra start --name SITE --service frontend --provider cloudflare
 ```
 

@@ -7,7 +7,7 @@ from ..models import TopologyInstance
 def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     import pulumi_upcloud as upcloud
 
-    name = instance["name"]
+    name = instance["host"]
     # `services` is set for colocated hosts (program.py's group-by-name
     # merge); fall back to the singular service/port pair for a
     # single-service instance so this function still works unchanged when

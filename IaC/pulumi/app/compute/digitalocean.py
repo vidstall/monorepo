@@ -7,7 +7,7 @@ from ..models import TopologyInstance
 def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     import pulumi_digitalocean as digitalocean
 
-    name = instance["name"]
+    name = instance["host"]
     # `services` is set for colocated hosts (program.py's group-by-name
     # merge); fall back to the singular service/port pair for a
     # single-service instance so this function still works unchanged when
@@ -41,14 +41,24 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                     source_addresses=["0.0.0.0/0", "::/0"],
                 )
             )
-    if any(svc.get("service") == "relay" for svc in services):
-        # relay's mediasoup RTC/pipe transports -- see
-        # services/worker/apps/relay/.env.example and the matching Ansible
-        # port-publish change in docker_service/tasks/main.yml.
-        for udp_range in ("10000-10100", "40000-40100"):
+    # relay's mediasoup RTC/pipe transports -- see
+    # services/worker/apps/relay/.env.example and the matching Ansible
+    # port-publish change in docker_service/tasks/deploy_one_service.yml.
+    # Each colocated relay replica gets its own 100-port-wide UDP window,
+    # offset by worker_index (mirrors deploy_one_service.yml's
+    # xaisen_relay_port_offset) -- a single fixed 10000-10100/40000-40100
+    # rule only covers replica 1 and silently drops replica 2+'s media
+    # traffic at the cloud firewall even though the container is listening.
+    for svc in services:
+        if svc.get("service") != "relay":
+            continue
+        offset = (int(svc.get("index") or 1) - 1) * 100
+        for base in (10000, 40000):
             inbound_rules.append(
                 digitalocean.FirewallInboundRuleArgs(
-                    protocol="udp", port_range=udp_range, source_addresses=["0.0.0.0/0", "::/0"]
+                    protocol="udp",
+                    port_range=f"{base + offset}-{base + offset + 99}",
+                    source_addresses=["0.0.0.0/0", "::/0"],
                 )
             )
     if any(svc.get("service") in ("relay", "signaling") for svc in services):

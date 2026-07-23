@@ -219,22 +219,22 @@ def add_scenario_parser(subparsers: argparse._SubParsersAction[argparse.Argument
 
     apply_parser = actions.add_parser(
         "apply",
-        help="Publish contract+images and reconcile instances to match a scenario file.",
+        help="Publish contract+images and reconcile workers to match a scenario file.",
     )
     apply_parser.add_argument("path", help="Path to a scenario TOML file (e.g. scenario/example.toml).")
     apply_parser.add_argument(
         "--yes",
         action="store_true",
-        help="Confirm the scenario apply (contract publish, image publish, instance reconcile).",
+        help="Confirm the scenario apply (contract publish, image publish, worker reconcile).",
     )
     apply_parser.set_defaults(handler=lambda args: scenario.apply(args.path, args.yes))
 
-    status_parser = actions.add_parser("status", help="Show the active scenario lock and its instances' current state.")
+    status_parser = actions.add_parser("status", help="Show the active scenario lock and its workers' current state.")
     status_parser.set_defaults(handler=lambda args: scenario.status(args))
 
     destroy_parser = actions.add_parser(
         "destroy",
-        help="Kill every instance owned by the active scenario and release the lock.",
+        help="Kill every worker owned by the active scenario and release the lock.",
     )
     destroy_parser.set_defaults(handler=lambda args: scenario.destroy(args))
 
@@ -286,7 +286,7 @@ def add_wallet_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
 
     gc_parser = actions.add_parser(
         "gc",
-        help="Release wallets assigned to instances no longer present in the topology.",
+        help="Release wallets assigned to workers no longer present in the topology.",
     )
     gc_parser.set_defaults(handler=lambda _args: wallet.gc())
 
@@ -318,14 +318,14 @@ _SERVICE_TOKEN_RE = re.compile(r"^(?P<count>[0-9]*)(?P<service>[a-zA-Z][a-zA-Z0-
 
 def parse_service_tokens(raw: str) -> list[tuple[str, int]] | None:
     """Parse a comma-separated --service string into an ordered list of
-    (service, instance_index) pairs, expanding an optional leading integer
-    count prefix per token (e.g. "5cp-daemon" -> 5 instances of cp-daemon,
-    indices 1..5; no prefix defaults to a single instance, index 1).
+    (service, worker_index) pairs, expanding an optional leading integer
+    count prefix per token (e.g. "5cp-daemon" -> 5 workers of cp-daemon,
+    indices 1..5; no prefix defaults to a single worker, index 1).
 
     Returns None (after printing an error to stderr) on any malformed token,
     unknown service, zero count, or a count above MAX_SERVICE_COUNT (a typo
     guard -- e.g. "50cp-daemon" instead of "5cp-daemon,..." would otherwise
-    silently provision 50 real cloud instances)."""
+    silently provision 50 real cloud workers)."""
     pairs: list[tuple[str, int]] = []
     for token in (t.strip() for t in raw.split(",")):
         if not token:
@@ -356,35 +356,35 @@ def parse_service_tokens(raw: str) -> list[tuple[str, int]] | None:
 
 def run_lifecycle_action(action: str, args: argparse.Namespace) -> int:
     """Expand --service (with optional per-token count prefixes, e.g.
-    "5cp-daemon,relay") into an ordered list of (service, instance_index)
+    "5cp-daemon,relay") into an ordered list of (service, worker_index)
     pairs and run `action` once per pair, in order, stopping at the first
     failure. Each pair still goes through the exact same infra.control()
     call a single-service invocation would make -- running
     `--service relay,signaling` (or `2cp-daemon`) is equivalent to (and just
-    a shorthand for) separate single-service/single-instance calls sharing
-    the same --name, which is what actually colocates them on one instance
-    (see program.py's group-by-name merge)."""
+    a shorthand for) separate single-service/single-worker calls sharing
+    the same --host, which is what actually colocates them on one worker
+    (see program.py's group-by-host merge)."""
     guard_code = scenario.guard_manual_infra(action)
     if guard_code is not None:
         return guard_code
     pairs = parse_service_tokens(args.service)
     if pairs is None:
         return 2
-    for service, instance_index in pairs:
+    for service, worker_index in pairs:
         code = infra.control(
             action,
-            args.name,
+            args.host,
             service,
             args.provider,
             getattr(args, "yes", False),
             getattr(args, "find_instance_type", False),
             getattr(args, "all_region", False),
             getattr(args, "size", None),
-            instance_index,
+            worker_index,
         )
         if code != 0:
             if len(pairs) > 1:
-                label = service if instance_index == 1 else f"{service}-{instance_index}"
+                label = service if worker_index == 1 else f"{service}-{worker_index}"
                 print(f"'{action}' failed for service '{label}'; stopping.", file=sys.stderr)
             return code
     return 0
@@ -398,21 +398,21 @@ def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.Argume
         ("kill", "Delete a topology service through Pulumi."),
     ):
         parser = subparsers.add_parser(action, help=help_text)
-        parser.add_argument("--name", required=True, help="Topology instance name to control.")
+        parser.add_argument("--host", required=True, help="Topology host name to control.")
         parser.add_argument(
             "--service",
             required=True,
             help=(
-                "Service type(s) hosted by the instance. Comma-separate to colocate "
-                "multiple services on one --name (e.g. relay,signaling). Prefix a token "
-                "with an integer to run that many instances of it (e.g. 5cp-daemon,relay "
-                "= 5 cp-daemon instances + 1 relay); no prefix defaults to 1. "
+                "Service type(s) hosted by the worker. Comma-separate to colocate "
+                "multiple services on one --host (e.g. relay,signaling). Prefix a token "
+                "with an integer to run that many workers of it (e.g. 5cp-daemon,relay "
+                "= 5 cp-daemon workers + 1 relay); no prefix defaults to 1. "
                 f"Choices: {', '.join(sorted(DOCKER_SERVICES))}."
             ),
         )
-        parser.add_argument("--provider", required=True, choices=sorted(infra.PROVIDERS), help="Cloud provider for the topology instance.")
+        parser.add_argument("--provider", required=True, choices=sorted(infra.PROVIDERS), help="Cloud provider for the topology worker.")
         if action == "kill":
-            parser.add_argument("--yes", action="store_true", help="Confirm destructive instance deletion.")
+            parser.add_argument("--yes", action="store_true", help="Confirm destructive worker deletion.")
         if action in {"start", "restart"}:
             parser.add_argument(
                 "--find-instance-type",
@@ -428,8 +428,8 @@ def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.Argume
                 "--size",
                 help=(
                     "VM size/SKU override (e.g. s-4vcpu-8gb). Persists on the topology row. "
-                    "When colocating multiple services under the same --name, pass a matching "
-                    "--size on every call sharing that name."
+                    "When colocating multiple services under the same --host, pass a matching "
+                    "--size on every call sharing that host."
                 ),
             )
         parser.set_defaults(

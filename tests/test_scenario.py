@@ -21,14 +21,14 @@ SCENARIO_TOML = """
 name = "baseline-devnet"
 env = "devnet"
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-1"
 service = "signaling"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-1"
 service = "relay"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
@@ -38,8 +38,8 @@ SCENARIO_TOML_ONE_INSTANCE = """
 name = "baseline-devnet-small"
 env = "devnet"
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-1"
 service = "signaling"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
@@ -75,9 +75,9 @@ class ScenarioTestCase(unittest.TestCase):
             patch.object(infra, "GENERATED_INVENTORY", self.root / "runtime" / "hosts.generated.yml"),
             # set_vm_defaults()'s ensure_ssh_keypair() does real ssh-keygen
             # file I/O against SSH_KEY_ROOT regardless of the pulumi_up/
-            # inventory/configure mocks above -- these scenarios use instance
-            # name "node-1", which collides with a real deployed instance
-            # name. Without this, running this suite regenerates the REAL
+            # inventory/configure mocks above -- these scenarios use worker
+            # host "node-1", which collides with a real deployed worker
+            # host. Without this, running this suite regenerates the REAL
             # runtime/ssh_key/node-1 keypair, orphaning SSH access to an
             # actually-running droplet.
             patch.object(infra, "SSH_KEY_ROOT", self.root / "runtime" / "ssh_key"),
@@ -122,12 +122,12 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         parsed = scenario.load_scenario(path)
         self.assertEqual(parsed["env"], "devnet")
-        self.assertEqual(len(parsed["instances"]), 2)
+        self.assertEqual(len(parsed["workers"]), 2)
 
     def test_unknown_service_rejected(self) -> None:
         path = self.write_scenario(
             "s.toml",
-            'env = "devnet"\n[[instances]]\nname = "n"\nservice = "bogus"\nprovider = "digitalocean"\n',
+            'env = "devnet"\n[[workers]]\nhost = "n"\nservice = "bogus"\nprovider = "digitalocean"\n',
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
@@ -135,17 +135,17 @@ class LoadScenarioTests(ScenarioTestCase):
     def test_unknown_provider_rejected(self) -> None:
         path = self.write_scenario(
             "s.toml",
-            'env = "devnet"\n[[instances]]\nname = "n"\nservice = "relay"\nprovider = "bogus"\n',
+            'env = "devnet"\n[[workers]]\nhost = "n"\nservice = "relay"\nprovider = "bogus"\n',
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
 
-    def test_duplicate_instance_identity_rejected(self) -> None:
+    def test_duplicate_worker_identity_rejected(self) -> None:
         path = self.write_scenario(
             "s.toml",
             'env = "devnet"\n'
-            '[[instances]]\nname = "n"\nservice = "relay"\nprovider = "digitalocean"\n'
-            '[[instances]]\nname = "n"\nservice = "relay"\nprovider = "digitalocean"\n',
+            '[[workers]]\nhost = "n"\nservice = "relay"\nprovider = "digitalocean"\n'
+            '[[workers]]\nhost = "n"\nservice = "relay"\nprovider = "digitalocean"\n',
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
@@ -226,7 +226,7 @@ class LockTests(ScenarioTestCase):
         self.assertNotEqual(h1, h3)
 
 
-class DiffInstancesTests(unittest.TestCase):
+class DiffWorkersTests(unittest.TestCase):
     def test_kill_and_start_sets(self) -> None:
         wanted = {
             ("node-1", "signaling", "digitalocean", "devnet", 1): {},
@@ -235,20 +235,20 @@ class DiffInstancesTests(unittest.TestCase):
             ("node-1", "signaling", "digitalocean", "devnet", 1): {},
             ("node-2", "relay", "digitalocean", "devnet", 1): {},
         }
-        to_kill, to_start = scenario.diff_instances(wanted, current)
+        to_kill, to_start = scenario.diff_workers(wanted, current)
         self.assertEqual(to_kill, [("node-2", "relay", "digitalocean", "devnet", 1)])
         self.assertEqual(to_start, [("node-1", "signaling", "digitalocean", "devnet", 1)])
 
 
 class ApplyTests(ScenarioTestCase):
-    def test_apply_ensures_image_before_starting_instances(self) -> None:
+    def test_apply_ensures_image_before_starting_workers(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         with patch.object(image_bake, "ensure_image", return_value=(True, "")) as ensure_image:
             code = scenario.apply(str(path), True)
         self.assertEqual(code, 0)
-        # SCENARIO_TOML has two digitalocean instances with no explicit
+        # SCENARIO_TOML has two digitalocean workers with no explicit
         # region -- ensure_image should be called once per unique
-        # (provider, region) pair, not once per instance.
+        # (provider, region) pair, not once per worker.
         ensure_image.assert_called_once_with("digitalocean", None)
 
     def test_apply_fails_when_image_bake_fails(self) -> None:
@@ -259,14 +259,14 @@ class ApplyTests(ScenarioTestCase):
         self.assertEqual(scenario.read_lock()["status"], "failed")
         # Nothing should have been started.
         topology = self.read_topology()
-        self.assertEqual(topology.get("instances", []), [])
+        self.assertEqual(topology.get("workers", []), [])
 
     def test_apply_passes_explicit_region_through_to_control(self) -> None:
         path = self.write_scenario(
             "s.toml",
             SCENARIO_TOML.replace(
-                '[[instances]]\nname = "node-1"\nservice = "signaling"',
-                '[[instances]]\nname = "node-1"\nservice = "signaling"\nregion = "sfo3"',
+                '[[workers]]\nhost = "node-1"\nservice = "signaling"',
+                '[[workers]]\nhost = "node-1"\nservice = "signaling"\nregion = "sfo3"',
             ),
         )
         with (
@@ -276,7 +276,7 @@ class ApplyTests(ScenarioTestCase):
             code = scenario.apply(str(path), True)
         self.assertEqual(code, 0)
         ensure_image.assert_any_call("digitalocean", "sfo3")
-        # Both instances are colocated on node-1@digitalocean, so apply()
+        # Both workers are colocated on node-1@digitalocean, so apply()
         # batches them through control_many() (see control_many's docstring)
         # instead of calling control() once per service.
         call_args, _call_kwargs = control_many_spy.call_args
@@ -284,14 +284,14 @@ class ApplyTests(ScenarioTestCase):
         signaling_row = next(r for r in rows if r["service"] == "signaling")
         self.assertEqual(signaling_row.get("region"), "sfo3")
 
-    def test_apply_creates_instances_and_locks(self) -> None:
+    def test_apply_creates_workers_and_locks(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         code = scenario.apply(str(path), True)
         self.assertEqual(code, 0)
 
         topology = self.read_topology()
-        self.assertEqual(len(topology["instances"]), 2)
-        self.assertTrue(all(i["desired_state"] == "running" for i in topology["instances"]))
+        self.assertEqual(len(topology["workers"]), 2)
+        self.assertTrue(all(i["desired_state"] == "running" for i in topology["workers"]))
 
         lock = scenario.read_lock()
         self.assertEqual(lock["status"], "active")
@@ -307,7 +307,7 @@ class ApplyTests(ScenarioTestCase):
         self.assertEqual(code, 0)
         publish_frontend.assert_called_once_with("site-2-bucket", "frontend", "alibaba")
 
-    def test_apply_frontend_failure_stops_before_registry_and_instances(self) -> None:
+    def test_apply_frontend_failure_stops_before_registry_and_workers(self) -> None:
         path = self.write_scenario(
             "s.toml",
             SCENARIO_TOML + '\n[[frontends]]\nname = "site-2-bucket"\nprovider = "alibaba"\n',
@@ -378,10 +378,10 @@ class ApplyTests(ScenarioTestCase):
         lock_after = scenario.read_lock()
         self.assertEqual(lock_before, lock_after)
 
-    def test_reconcile_kills_dropped_instance_and_never_touches_objects(self) -> None:
+    def test_reconcile_kills_dropped_worker_and_never_touches_objects(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         self.assertEqual(scenario.apply(str(path), True), 0)
-        self.assertEqual(len(self.read_topology()["instances"]), 2)
+        self.assertEqual(len(self.read_topology()["workers"]), 2)
 
         # Seed an [[objects]] row (frontend/object-storage) that must survive
         # every scenario apply/destroy untouched.
@@ -398,7 +398,7 @@ class ApplyTests(ScenarioTestCase):
         )
         infra.write_topology(topology)
 
-        # Edit the SAME scenario path in place (drop the relay instance) and
+        # Edit the SAME scenario path in place (drop the relay worker) and
         # re-apply it -- this is the intended drift-reconcile flow, since the
         # lock's identity check is by content hash, not path.
         self.write_scenario("s.toml", SCENARIO_TOML_ONE_INSTANCE)
@@ -406,7 +406,7 @@ class ApplyTests(ScenarioTestCase):
         self.assertEqual(code, 0)
 
         topology = self.read_topology()
-        active = [i for i in topology["instances"] if i["desired_state"] != "deleted"]
+        active = [i for i in topology["workers"] if i["desired_state"] != "deleted"]
         self.assertEqual(len(active), 1)
         self.assertEqual(active[0]["service"], "signaling")
         self.assertEqual(len(topology["objects"]), 1)
@@ -436,7 +436,7 @@ class StatusDestroyTests(ScenarioTestCase):
     def test_destroy_with_no_lock_is_noop(self) -> None:
         self.assertEqual(scenario.destroy(None), 0)
 
-    def test_destroy_kills_all_instances_and_clears_lock(self) -> None:
+    def test_destroy_kills_all_workers_and_clears_lock(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         self.assertEqual(scenario.apply(str(path), True), 0)
 
@@ -445,7 +445,7 @@ class StatusDestroyTests(ScenarioTestCase):
         self.assertIsNone(scenario.read_lock())
 
         topology = self.read_topology()
-        active = [i for i in topology["instances"] if i["desired_state"] != "deleted"]
+        active = [i for i in topology["workers"] if i["desired_state"] != "deleted"]
         self.assertEqual(active, [])
 
     def test_status_reports_active_scenario(self) -> None:

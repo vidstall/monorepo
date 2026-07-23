@@ -165,15 +165,15 @@ def list_images() -> int:
     return 0
 
 
-def new_bake_instance(env_name: str, provider: str, region: str) -> dict[str, Any]:
-    name = f"bake-{provider}-{region}-{int(time.time())}".replace(".", "-").replace(":", "-")
+def new_bake_worker(env_name: str, provider: str, region: str) -> dict[str, Any]:
+    host = f"bake-{provider}-{region}-{int(time.time())}".replace(".", "-").replace(":", "-")
     return {
-        "name": name,
+        "host": host,
         "service": BAKE_SERVICE,
         "provider": provider,
         "env": env_name,
         "backend": "vm",
-        "instance_index": 1,
+        "worker_index": 1,
         "desired_state": "running",
         "region": region,
     }
@@ -441,21 +441,21 @@ def bake(provider: str, region: str, yes: bool) -> int:
     # yet on a first-ever bake -- mirrors cli/scenario.py's same fix.
     env_name = infra.active_stack()
     topology = infra.ensure_topology(env_name)
-    bake_instance = new_bake_instance(env_name, provider, region)
-    infra.set_vm_defaults(bake_instance, topology)
+    bake_worker = new_bake_worker(env_name, provider, region)
+    infra.set_vm_defaults(bake_worker, topology)
     # A bake VM must always use the stock image (it's what's being turned
     # INTO a golden image) -- never a previously-baked one.
-    bake_instance.pop("image", None)
-    topology.setdefault("instances", []).append(bake_instance)
+    bake_worker.pop("image", None)
+    topology.setdefault("workers", []).append(bake_worker)
     infra.write_topology(topology)
 
-    name = bake_instance["name"]
+    host = bake_worker["host"]
 
     def _abort(message: str, remove_row: bool) -> int:
         print(message, file=sys.stderr)
         if remove_row:
             current = infra.read_topology()
-            current["instances"] = [i for i in current.get("instances", []) if i.get("name") != name]
+            current["workers"] = [i for i in current.get("workers", []) if i.get("host") != host]
             infra.write_topology(current)
         return 1
 
@@ -466,28 +466,28 @@ def bake(provider: str, region: str, yes: bool) -> int:
     code = infra.inventory()
     if code != 0:
         return _abort(
-            f"Bake VM '{name}' provisioned but inventory generation failed (exit {code}). "
+            f"Bake VM '{host}' provisioned but inventory generation failed (exit {code}). "
             "Left in place for inspection -- run 'vidctl infra inventory' manually or clean up by "
             "removing its topology row and re-running pulumi up.",
             remove_row=False,
         )
 
-    infra.persist_vm_resolution(topology, env_name, name, BAKE_SERVICE, provider)
-    resolved = infra.find_instance(topology, env_name, name, BAKE_SERVICE, provider) or bake_instance
+    infra.persist_vm_resolution(topology, env_name, host, BAKE_SERVICE, provider)
+    resolved = infra.find_worker(topology, env_name, host, BAKE_SERVICE, provider) or bake_worker
     resolved_region = str(resolved.get("region") or resolved.get("zone") or region)
 
-    address = infra.instance_address(name)
+    address = infra.host_address(host)
     if not address:
         return _abort(
-            f"Bake VM '{name}' provisioned but has no resolved address. Left in place for inspection.",
+            f"Bake VM '{host}' provisioned but has no resolved address. Left in place for inspection.",
             remove_row=False,
         )
 
-    key_path = infra.SSH_KEY_ROOT / name / "id_ed25519"
+    key_path = infra.SSH_KEY_ROOT / host / "id_ed25519"
     print(f"Waiting for SSH on {address} ...")
     if not wait_for_ssh(address, key_path):
         return _abort(
-            f"Bake VM '{name}' ({address}) never became SSH-reachable. Left in place for inspection.",
+            f"Bake VM '{host}' ({address}) never became SSH-reachable. Left in place for inspection.",
             remove_row=False,
         )
 
@@ -495,7 +495,7 @@ def bake(provider: str, region: str, yes: bool) -> int:
     ssh_code, ssh_out, ssh_err = ssh_run(address, key_path, BOOTSTRAP_SCRIPT)
     if ssh_code != 0:
         return _abort(
-            f"Bake VM '{name}' ({address}) bootstrap script failed (exit {ssh_code}): {ssh_err or ssh_out}. "
+            f"Bake VM '{host}' ({address}) bootstrap script failed (exit {ssh_code}): {ssh_err or ssh_out}. "
             "Left in place for inspection.",
             remove_row=False,
         )
@@ -508,12 +508,12 @@ def bake(provider: str, region: str, yes: bool) -> int:
         ssh_code, _, ssh_err = ssh_run(address, key_path, AZURE_DEPROVISION_SCRIPT)
         if ssh_code != 0:
             return _abort(
-                f"Bake VM '{name}' ({address}) azure deprovision step failed (exit {ssh_code}): {ssh_err}. "
+                f"Bake VM '{host}' ({address}) azure deprovision step failed (exit {ssh_code}): {ssh_err}. "
                 "Left in place for inspection.",
                 remove_row=False,
             )
 
-    resource_id = str(resolved.get("resource_id") or name)
+    resource_id = str(resolved.get("resource_id") or host)
     image_name = f"xaisen-golden-{provider}-{resolved_region}-{int(time.time())}"
     print(f"Stopping VM and creating image '{image_name}' ...")
     success, image_id, error_message = _stop_and_create_image(
@@ -521,7 +521,7 @@ def bake(provider: str, region: str, yes: bool) -> int:
     )
     if not success:
         return _abort(
-            f"Bake VM '{name}' ({address}) image creation failed: {error_message}. Left in place for inspection.",
+            f"Bake VM '{host}' ({address}) image creation failed: {error_message}. Left in place for inspection.",
             remove_row=False,
         )
 
@@ -529,13 +529,13 @@ def bake(provider: str, region: str, yes: bool) -> int:
     print(f"Baked {provider}:{resolved_region} -> {image_id}")
 
     current = infra.read_topology()
-    current["instances"] = [i for i in current.get("instances", []) if i.get("name") != name]
+    current["workers"] = [i for i in current.get("workers", []) if i.get("host") != host]
     infra.write_topology(current)
     teardown_code = infra.pulumi_up(env_name)
-    shutil.rmtree(infra.SSH_KEY_ROOT / name, ignore_errors=True)
+    shutil.rmtree(infra.SSH_KEY_ROOT / host, ignore_errors=True)
     if teardown_code != 0:
         print(
-            f"Warning: image baked successfully but tearing down bake VM '{name}' failed "
+            f"Warning: image baked successfully but tearing down bake VM '{host}' failed "
             f"(exit {teardown_code}); it may still be running and billing.",
             file=sys.stderr,
         )

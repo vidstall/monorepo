@@ -9,30 +9,30 @@ force = false
 [registry]
 tag = ""
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-1"
 service = "signaling"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
-instance_index = 1
+worker_index = 1
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-1"
 service = "relay"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
-instance_index = 1
+worker_index = 1
 
-[[instances]]
-name = "node-2"
+[[workers]]
+host = "node-2"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
-instance_index = 1
+worker_index = 1
 
-[[instances]]
-name = "node-3"
+[[workers]]
+host = "node-3"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
-instance_index = 1
+worker_index = 1

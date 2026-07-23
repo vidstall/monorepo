@@ -28,7 +28,7 @@
 # DEFAULT bridge network does NOT support container-name DNS resolution --
 # only user-defined networks do -- and the shared Caddy TLS proxy below
 # needs to reverse_proxy to each relay/signaling container by name
-# (xaisen-<instance_key>). Idempotent; safe to (re)ensure on every run
+# (xaisen-<worker_key>). Idempotent; safe to (re)ensure on every run
 # regardless of which services this round's xaisen_services happens to
 # include.
 - name: Ensure shared xaisen docker network exists
@@ -45,13 +45,13 @@
   loop: "{{ xaisen_services }}"
   loop_control:
     loop_var: xaisen_service_item
-    label: "{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}"
+    label: "{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
 
 # Every relay/signaling instance on this host shares ONE Caddy TLS proxy --
 # ports 80/443 can only be bound once per host, so this can't be a
 # per-instance sidecar (see deploy_one_service.yml's endpoint-URL comment
 # for why each instance still gets its own sslip.io hostname/cert via a
-# distinct Caddyfile site block keyed by instance_key).
+# distinct Caddyfile site block keyed by worker_key).
 - name: Determine which colocated services need the shared Caddy TLS proxy
   ansible.builtin.set_fact:
     xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'signaling']) | list }}"

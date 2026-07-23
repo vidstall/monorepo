@@ -136,7 +136,7 @@ def inventory() -> int:
 def persist_vm_resolution(
     topology: dict[str, Any],
     env_name: str,
-    name: str,
+    host: str,
     service: str,
     provider: str,
 ) -> None:
@@ -162,27 +162,27 @@ def persist_vm_resolution(
     except (subprocess.CalledProcessError, json.JSONDecodeError):
         return
 
-    for remote_instance in remote_topology.get("instances", []):
+    for remote_worker in remote_topology.get("workers", []):
         if (
-            remote_instance.get("name") == name
-            and remote_instance.get("service") == service
-            and remote_instance.get("provider") == provider
-            and remote_instance.get("env", env_name) == env_name
+            remote_worker.get("host") == host
+            and remote_worker.get("service") == service
+            and remote_worker.get("provider") == provider
+            and remote_worker.get("env", env_name) == env_name
         ):
-            local_instance = find_instance(topology, env_name, name, service, provider)
-            if local_instance is not None:
-                if remote_instance.get("region"):
-                    local_instance["region"] = remote_instance["region"]
-                if remote_instance.get("zone"):
-                    local_instance["zone"] = remote_instance["zone"]
-                if remote_instance.get("size"):
-                    local_instance["size"] = remote_instance["size"]
-                if remote_instance.get("resource_id"):
-                    local_instance["resource_id"] = remote_instance["resource_id"]
+            local_worker = find_worker(topology, env_name, host, service, provider)
+            if local_worker is not None:
+                if remote_worker.get("region"):
+                    local_worker["region"] = remote_worker["region"]
+                if remote_worker.get("zone"):
+                    local_worker["zone"] = remote_worker["zone"]
+                if remote_worker.get("size"):
+                    local_worker["size"] = remote_worker["size"]
+                if remote_worker.get("resource_id"):
+                    local_worker["resource_id"] = remote_worker["resource_id"]
             return
 
 
-def instance_address(name: str) -> str:
+def host_address(host: str) -> str:
     try:
         import yaml
     except ImportError:
@@ -191,17 +191,17 @@ def instance_address(name: str) -> str:
         return ""
     try:
         data = yaml.safe_load(GENERATED_INVENTORY.read_text(encoding="utf-8"))
-        host = data["all"]["children"]["xaisen"]["hosts"].get(name, {})
-        return str(host.get("ansible_host", ""))
+        host_entry = data["all"]["children"]["xaisen"]["hosts"].get(host, {})
+        return str(host_entry.get("ansible_host", ""))
     except (KeyError, TypeError, AttributeError):
         return ""
 
 
-def registry_status(name: str, instance_key: str, address: str) -> str:
-    key_path = SSH_KEY_ROOT / name / "id_ed25519"
+def registry_status(host: str, worker_key: str, address: str) -> str:
+    key_path = SSH_KEY_ROOT / host / "id_ed25519"
     if not address or not key_path.exists():
         return "unknown (host unreachable)"
-    container_name = f"xaisen-{instance_key}"
+    container_name = f"xaisen-{worker_key}"
     try:
         result = subprocess.run(
             [
@@ -346,14 +346,14 @@ def deploy(yes: bool) -> int:
 
 def control(
     action: str,
-    name: str,
+    host: str,
     service: str,
     provider: str,
     yes: bool = False,
     find_instance_type: bool = False,
     all_region: bool = False,
     size: str | None = None,
-    instance_index: int = 1,
+    worker_index: int = 1,
     region: str | None = None,
 ) -> int:
     if service not in DOCKER_SERVICES:
@@ -367,15 +367,15 @@ def control(
     env_name = validate_network(str(topology.get("active_env", "devnet")))
     contract_path = contract_env_path(env_name)
     backend = service_backend(service)
-    # instance_index (1-based) distinguishes multiple colocated instances of
-    # the SAME service on one --name (vidctl.py's count-prefix --service
+    # worker_index (1-based) distinguishes multiple colocated workers of
+    # the SAME service on one --host (vidctl.py's count-prefix --service
     # syntax, e.g. `5cp-daemon`). Index 1 is identical to the pre-existing
-    # single-instance identity (no suffix); index >=2 gets a `-N` suffix
-    # everywhere namespaced by service alone (container name, state/wallet
+    # single-worker identity (no suffix); index >=2 gets a `-N` suffix
+    # everywhere namespaced by service alone (container host, state/wallet
     # dir, xaisen_operator_wallets key) -- but NOT for the base docker
     # image/tag or the wallet's permanent registered_role pin, which stay
     # keyed on the bare `service` string.
-    instance_key = service if instance_index == 1 else f"{service}-{instance_index}"
+    worker_key = service if worker_index == 1 else f"{service}-{worker_index}"
 
     if backend == "vm" and action in {"pause", "restart"} and provider not in {"alibaba", "akamai"}:
         message = (
@@ -383,28 +383,28 @@ def control(
             "powered lifecycle support currently requires --provider alibaba or --provider akamai."
         )
         print(message, file=sys.stderr)
-        record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
+        record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
         return 1
 
     if backend == "vm" and action in {"start", "restart"} and provider not in {"digitalocean", "upcloud", "akamai"}:
         other_active = any(
-            item.get("name") == name
+            item.get("host") == host
             and item.get("provider") == provider
             and item.get("env", env_name) == env_name
             and item.get("backend") == "vm"
             and item.get("desired_state") != "deleted"
-            and not (item.get("service") == service and item.get("instance_index", 1) == instance_index)
-            for item in topology.get("instances", [])
+            and not (item.get("service") == service and item.get("worker_index", 1) == worker_index)
+            for item in topology.get("workers", [])
         )
-        if instance_index > 1 or other_active:
+        if worker_index > 1 or other_active:
             message = (
-                f"Colocating multiple service instances on one --name is only supported for "
+                f"Colocating multiple service workers on one --host is only supported for "
                 f"--provider digitalocean, --provider upcloud, or --provider akamai (got --provider "
-                f"{provider}). Use a separate --name per instance, or redeploy this instance with "
+                f"{provider}). Use a separate --host per worker, or redeploy this worker with "
                 "--provider digitalocean, upcloud, or akamai."
             )
             print(message, file=sys.stderr)
-            record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
+            record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
             return 1
 
     if action in {"start", "restart"}:
@@ -415,13 +415,13 @@ def control(
                 f"Run ./vidctl contract publish --env {env_name} --yes first."
             )
             print(message, file=sys.stderr)
-            record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
+            record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
             return 1
         if backend == "vm":
             if provider == "cloudflare":
                 message = "cloudflare has no compute/VM product; choose another --provider for vm-backed services."
                 print(message, file=sys.stderr)
-                record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
+                record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
                 return 1
             if provider == "tencent":
                 message = (
@@ -429,19 +429,19 @@ def control(
                     "found for Tencent compute/VPC resources); choose another --provider for now."
                 )
                 print(message, file=sys.stderr)
-                record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
+                record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
                 return 1
             missing_provider_keys = missing_vm_provider_keys(provider)
             if missing_provider_keys:
                 message = vm_provider_error(provider, missing_provider_keys)
                 print(message, file=sys.stderr)
-                record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
+                record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
                 return 1
 
     if action == "kill" and not yes:
         message = "Refusing to delete infrastructure without --yes."
         print(message, file=sys.stderr)
-        record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=2, error=message)
+        record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=2, error=message)
         return 2
 
     wallet_entry: dict[str, Any] | None = None
@@ -450,27 +450,27 @@ def control(
         from . import wallet
 
         try:
-            wallet_entry, wallet_created = wallet.checkout_wallet(name, service, provider, env_name, instance_index)
+            wallet_entry, wallet_created = wallet.checkout_wallet(host, service, provider, env_name, worker_index)
         except (subprocess.CalledProcessError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
-            message = f"Failed to create/load operator wallet for {name}: {exc}"
+            message = f"Failed to create/load operator wallet for {host}: {exc}"
             print(message, file=sys.stderr)
-            record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
+            record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
             return 1
 
-    instance = find_instance(topology, env_name, name, service, provider, instance_index)
-    if instance is None:
-        instance = new_instance(env_name, name, service, provider, instance_index)
-        topology.setdefault("instances", []).append(instance)
+    worker = find_worker(topology, env_name, host, service, provider, worker_index)
+    if worker is None:
+        worker = new_worker(env_name, host, service, provider, worker_index)
+        topology.setdefault("workers", []).append(worker)
 
-    previous = str(instance.get("desired_state", instance.get("last_status", "unknown")))
+    previous = str(worker.get("desired_state", worker.get("last_status", "unknown")))
     next_state = desired_state_for(action)
-    instance["backend"] = backend
-    instance["desired_state"] = next_state
-    instance["last_operation"] = action
-    instance["last_updated"] = timestamp()
-    instance["contract_env"] = relative_contract_env(env_name)
+    worker["backend"] = backend
+    worker["desired_state"] = next_state
+    worker["last_operation"] = action
+    worker["last_updated"] = timestamp()
+    worker["contract_env"] = relative_contract_env(env_name)
     if backend == "vm" and action in {"start", "restart"}:
-        set_vm_defaults(instance, topology, find_instance_type=find_instance_type, size=size, region=region, instance_index=instance_index)
+        set_vm_defaults(worker, topology, find_instance_type=find_instance_type, size=size, region=region, worker_index=worker_index)
     write_topology(topology)
 
     code = 0
@@ -482,9 +482,9 @@ def control(
             # resources that aren't in the fixed target URN list, so fall back
             # to an untargeted apply whenever that scan is in play. Likewise,
             # `--target` only accepts URNs that already exist in the stack's
-            # state, so a brand-new instance (nothing created yet) must also
+            # state, so a brand-new worker (nothing created yet) must also
             # go through an untargeted apply.
-            target_urns = alibaba_vm_target_urns(env_name, name, service, bool(instance.get("port")))
+            target_urns = alibaba_vm_target_urns(env_name, host, service, bool(worker.get("port")))
             use_targets = not all_region and stack_has_urns(env_name, target_urns)
             code = pulumi_up(
                 env_name,
@@ -496,64 +496,64 @@ def control(
 
     if code == 0:
         if action == "kill":
-            topology["instances"] = [
+            topology["workers"] = [
                 item
-                for item in topology.get("instances", [])
+                for item in topology.get("workers", [])
                 if not (
-                    item.get("name") == name
+                    item.get("host") == host
                     and item.get("service") == service
                     and item.get("provider") == provider
                     and item.get("env", env_name) == env_name
-                    and item.get("instance_index", 1) == instance_index
+                    and item.get("worker_index", 1) == worker_index
                 )
             ]
             if backend == "vm":
                 # Colocated hosts share one SSH keypair across services --
                 # only remove it once no other still-active VM-backed
-                # service remains under this name/provider/env, or a
+                # service remains under this host/provider/env, or a
                 # sibling service's future `configure()` run would lose
                 # host access.
                 other_active_vm = any(
-                    item.get("name") == name
+                    item.get("host") == host
                     and item.get("provider") == provider
                     and item.get("env", env_name) == env_name
                     and item.get("backend") == "vm"
                     and item.get("desired_state") != "deleted"
-                    for item in topology.get("instances", [])
+                    for item in topology.get("workers", [])
                 )
                 if not other_active_vm:
-                    shutil.rmtree(SSH_KEY_ROOT / name, ignore_errors=True)
+                    shutil.rmtree(SSH_KEY_ROOT / host, ignore_errors=True)
                 from . import wallet
 
-                wallet.release_wallet(name, service, provider, env_name, instance_index)
+                wallet.release_wallet(host, service, provider, env_name, worker_index)
         elif backend == "vm" and action in {"start", "restart"}:
             failed_stage = "inventory"
             code = inventory()
             if code == 0:
-                persist_vm_resolution(topology, env_name, name, service, provider)
+                persist_vm_resolution(topology, env_name, host, service, provider)
             if code == 0:
                 failed_stage = "configure"
                 container_state = "restarted" if action == "restart" else "started"
                 configure_extra_vars = (
-                    {"xaisen_operator_wallets": {instance_key: wallet.operator_state_json(wallet_entry)}}
+                    {"xaisen_operator_wallets": {worker_key: wallet.operator_state_json(wallet_entry)}}
                     if wallet_entry is not None
                     else None
                 )
-                code = configure(host_limit=name, container_state=container_state, extra_vars=configure_extra_vars)
+                code = configure(host_limit=host, container_state=container_state, extra_vars=configure_extra_vars)
 
         if code == 0 and action != "kill":
-            instance["last_status"] = next_state
-            instance["last_error"] = ""
+            worker["last_status"] = next_state
+            worker["last_error"] = ""
         write_topology(topology)
 
     if code != 0:
         if failed_stage == "pulumi":
-            instance["desired_state"] = previous
-        instance["last_error"] = f"{failed_stage} failed with exit code {code}"
+            worker["desired_state"] = previous
+        worker["last_error"] = f"{failed_stage} failed with exit code {code}"
         write_topology(topology)
 
     if code == 0 and backend == "vm" and action in {"start", "restart"} and wallet_entry is not None:
-        address = instance_address(name)
+        address = host_address(host)
         wallet_address = str(wallet_entry.get("address", ""))
         try:
             balance_mist = wallet.current_balance_mist(wallet_address)
@@ -562,33 +562,33 @@ def control(
         print(f"IP:      {address or 'unknown'}")
         print(f"Wallet:  {wallet_address[:8]}...")
         print(f"Balance: {balance_mist / 1_000_000_000:.4f} SUI")
-        print(f"Registry: {registry_status(name, instance_key, address)}")
+        print(f"Registry: {registry_status(host, worker_key, address)}")
 
     record_history(
         action,
         env=env_name,
-        name=name,
-        service=instance_key,
-        provider=str(instance.get("provider", "")),
-        resource_id=str(instance.get("resource_id", "")),
+        name=host,
+        service=worker_key,
+        provider=str(worker.get("provider", "")),
+        resource_id=str(worker.get("resource_id", "")),
         previous_status=previous,
-        next_status=str(instance.get("desired_state", "")),
+        next_status=str(worker.get("desired_state", "")),
         result_for_code=code,
-        error=str(instance.get("last_error", "")),
+        error=str(worker.get("last_error", "")),
     )
     return code
 
 
 def control_many(
     action: str,
-    name: str,
+    host: str,
     provider: str,
     rows: list[dict[str, Any]],
     yes: bool = False,
 ) -> int:
     """Batched variant of control() for multiple vm-backed services
-    colocated on ONE host (same name+provider). control() does a full
-    pulumi_up()+inventory()+configure() pass per (name, service) row -- fine
+    colocated on ONE host (same host+provider). control() does a full
+    pulumi_up()+inventory()+configure() pass per (host, service) row -- fine
     for a single service, but wasteful when many services share a host
     (e.g. a scenario colocating 8 services on one DigitalOcean droplet):
     the same host would get a full pulumi apply and a full Ansible
@@ -598,7 +598,7 @@ def control_many(
     update) for every row, then ONE pulumi_up()+inventory()+configure()
     pass covering the whole batch.
 
-    Each row is a dict with keys: service, size (optional), instance_index
+    Each row is a dict with keys: service, size (optional), worker_index
     (optional, default 1), region (optional). Only supports action in
     {"start", "restart"} -- kill/pause aren't batched since they're not the
     slow path this exists to fix.
@@ -618,7 +618,7 @@ def control_many(
         return 2
     if len(rows) > 1 and provider not in {"digitalocean", "upcloud", "akamai"}:
         message = (
-            f"Colocating multiple service instances on one --name is only supported for "
+            f"Colocating multiple service workers on one --host is only supported for "
             f"--provider digitalocean, --provider upcloud, or --provider akamai (got --provider "
             f"{provider})."
         )
@@ -637,7 +637,7 @@ def control_many(
         )
         print(message, file=sys.stderr)
         for row in rows:
-            record_history(action, env=env_name, name=name, service=str(row["service"]), provider=provider, result_for_code=1, error=message)
+            record_history(action, env=env_name, name=host, service=str(row["service"]), provider=provider, result_for_code=1, error=message)
         return 1
 
     missing_provider_keys = missing_vm_provider_keys(provider)
@@ -645,7 +645,7 @@ def control_many(
         message = vm_provider_error(provider, missing_provider_keys)
         print(message, file=sys.stderr)
         for row in rows:
-            record_history(action, env=env_name, name=name, service=str(row["service"]), provider=provider, result_for_code=1, error=message)
+            record_history(action, env=env_name, name=host, service=str(row["service"]), provider=provider, result_for_code=1, error=message)
         return 1
 
     from . import wallet
@@ -653,8 +653,8 @@ def control_many(
     prepared: list[dict[str, Any]] = []
     for row in rows:
         service = str(row["service"])
-        instance_index = int(row.get("instance_index") or 1)
-        instance_key = service if instance_index == 1 else f"{service}-{instance_index}"
+        worker_index = int(row.get("worker_index") or 1)
+        worker_key = service if worker_index == 1 else f"{service}-{worker_index}"
         if service not in DOCKER_SERVICES:
             print(f"Unknown service: {service}", file=sys.stderr)
             return 2
@@ -663,39 +663,39 @@ def control_many(
             return 2
 
         try:
-            wallet_entry, _created = wallet.checkout_wallet(name, service, provider, env_name, instance_index)
+            wallet_entry, _created = wallet.checkout_wallet(host, service, provider, env_name, worker_index)
         except (subprocess.CalledProcessError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
-            message = f"Failed to create/load operator wallet for {name}: {exc}"
+            message = f"Failed to create/load operator wallet for {host}: {exc}"
             print(message, file=sys.stderr)
-            record_history(action, env=env_name, name=name, service=instance_key, provider=provider, result_for_code=1, error=message)
+            record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
             return 1
 
-        instance = find_instance(topology, env_name, name, service, provider, instance_index)
-        if instance is None:
-            instance = new_instance(env_name, name, service, provider, instance_index)
-            topology.setdefault("instances", []).append(instance)
+        worker = find_worker(topology, env_name, host, service, provider, worker_index)
+        if worker is None:
+            worker = new_worker(env_name, host, service, provider, worker_index)
+            topology.setdefault("workers", []).append(worker)
 
-        previous = str(instance.get("desired_state", instance.get("last_status", "unknown")))
+        previous = str(worker.get("desired_state", worker.get("last_status", "unknown")))
         next_state = desired_state_for(action)
-        instance["backend"] = "vm"
-        instance["desired_state"] = next_state
-        instance["last_operation"] = action
-        instance["last_updated"] = timestamp()
-        instance["contract_env"] = relative_contract_env(env_name)
+        worker["backend"] = "vm"
+        worker["desired_state"] = next_state
+        worker["last_operation"] = action
+        worker["last_updated"] = timestamp()
+        worker["contract_env"] = relative_contract_env(env_name)
         set_vm_defaults(
-            instance,
+            worker,
             topology,
             find_instance_type=False,
             size=row.get("size"),
             region=row.get("region"),
-            instance_index=instance_index,
+            worker_index=worker_index,
         )
         prepared.append(
             {
                 "service": service,
-                "instance_index": instance_index,
-                "instance_key": instance_key,
-                "instance": instance,
+                "worker_index": worker_index,
+                "worker_key": worker_key,
+                "worker": worker,
                 "previous": previous,
                 "next_state": next_state,
                 "wallet_entry": wallet_entry,
@@ -712,32 +712,32 @@ def control_many(
         code = inventory()
         if code == 0:
             for item in prepared:
-                persist_vm_resolution(topology, env_name, name, item["service"], provider)
+                persist_vm_resolution(topology, env_name, host, item["service"], provider)
         if code == 0:
             failed_stage = "configure"
             container_state = "restarted" if action == "restart" else "started"
             extra_vars = {
                 "xaisen_operator_wallets": {
-                    item["instance_key"]: wallet.operator_state_json(item["wallet_entry"])
+                    item["worker_key"]: wallet.operator_state_json(item["wallet_entry"])
                     for item in prepared
                     if item["wallet_entry"] is not None
                 }
             }
-            code = configure(host_limit=name, container_state=container_state, extra_vars=extra_vars)
+            code = configure(host_limit=host, container_state=container_state, extra_vars=extra_vars)
 
     for item in prepared:
-        instance = item["instance"]
+        worker = item["worker"]
         if code == 0:
-            instance["last_status"] = item["next_state"]
-            instance["last_error"] = ""
+            worker["last_status"] = item["next_state"]
+            worker["last_error"] = ""
         else:
             if failed_stage == "pulumi":
-                instance["desired_state"] = item["previous"]
-            instance["last_error"] = f"{failed_stage} failed with exit code {code}"
+                worker["desired_state"] = item["previous"]
+            worker["last_error"] = f"{failed_stage} failed with exit code {code}"
     write_topology(topology)
 
     if code == 0:
-        address = instance_address(name)
+        address = host_address(host)
         for item in prepared:
             wallet_entry = item["wallet_entry"]
             if wallet_entry is None:
@@ -750,21 +750,21 @@ def control_many(
             print(f"IP:      {address or 'unknown'}")
             print(f"Wallet:  {wallet_address[:8]}...")
             print(f"Balance: {balance_mist / 1_000_000_000:.4f} SUI")
-            print(f"Registry: {registry_status(name, item['instance_key'], address)}")
+            print(f"Registry: {registry_status(host, item['worker_key'], address)}")
 
     for item in prepared:
-        instance = item["instance"]
+        worker = item["worker"]
         record_history(
             action,
             env=env_name,
-            name=name,
-            service=item["instance_key"],
-            provider=str(instance.get("provider", "")),
-            resource_id=str(instance.get("resource_id", "")),
+            name=host,
+            service=item["worker_key"],
+            provider=str(worker.get("provider", "")),
+            resource_id=str(worker.get("resource_id", "")),
             previous_status=item["previous"],
-            next_status=str(instance.get("desired_state", "")),
+            next_status=str(worker.get("desired_state", "")),
             result_for_code=code,
-            error=str(instance.get("last_error", "")),
+            error=str(worker.get("last_error", "")),
         )
 
     return code
@@ -839,19 +839,19 @@ def stack_has_urns(stack: str, urns: list[str]) -> bool:
 
 def alibaba_vm_target_urns(
     stack: str,
-    name: str,
+    host: str,
     service: str,
     has_service_port: bool,
 ) -> list[str]:
     prefix = f"urn:pulumi:{stack}::xaisen-iac::"
     resources = [
-        ("pulumi:providers:alicloud", f"{name}-vm-provider"),
-        ("alicloud:vpc/network:Network", f"{name}-vm-vpc"),
-        ("alicloud:vpc/switch:Switch", f"{name}-vm-vswitch"),
-        ("alicloud:ecs/keyPair:KeyPair", f"{name}-vm-key"),
-        ("alicloud:ecs/securityGroup:SecurityGroup", f"{name}-vm-sg"),
-        ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-ssh"),
-        ("alicloud:ecs/instance:Instance", f"{name}-vm"),
+        ("pulumi:providers:alicloud", f"{host}-vm-provider"),
+        ("alicloud:vpc/network:Network", f"{host}-vm-vpc"),
+        ("alicloud:vpc/switch:Switch", f"{host}-vm-vswitch"),
+        ("alicloud:ecs/keyPair:KeyPair", f"{host}-vm-key"),
+        ("alicloud:ecs/securityGroup:SecurityGroup", f"{host}-vm-sg"),
+        ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{host}-vm-sg-ssh"),
+        ("alicloud:ecs/instance:Instance", f"{host}-vm"),
     ]
     # TODO: relay needs UDP security-group rules for its RTC/pipe port ranges
     # (10000-10100, 40000-40100 — see services/worker/apps/relay/.env.example),
@@ -859,7 +859,7 @@ def alibaba_vm_target_urns(
     # service port (e.g. relay's WS_PORT, signaling's SIGNALING_PORT) is
     # opened below until that's designed.
     if has_service_port:
-        resources.append(("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{name}-vm-sg-port"))
+        resources.append(("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{host}-vm-sg-port"))
     return [f"{prefix}{resource_type}::{resource_name}" for resource_type, resource_name in resources]
 
 
@@ -877,17 +877,17 @@ def ensure_topology(env_name: str) -> dict[str, Any]:
     topology.setdefault("providers", {provider: {"enabled": False} for provider in PROVIDERS})
     for provider in PROVIDERS:
         topology["providers"].setdefault(provider, {"enabled": False})
-    topology.setdefault("instances", [])
+    topology.setdefault("workers", [])
     topology.setdefault("objects", [])
-    for instance in topology["instances"]:
-        instance.setdefault("backend", service_backend(str(instance.get("service", ""))))
+    for worker in topology["workers"]:
+        worker.setdefault("backend", service_backend(str(worker.get("service", ""))))
     write_topology(topology)
     return topology
 
 
 def read_topology() -> dict[str, Any]:
     data = tomllib.loads(RUNTIME_TOPOLOGY_TOML.read_text(encoding="utf-8"))
-    data.setdefault("instances", [])
+    data.setdefault("workers", [])
     data.setdefault("objects", [])
     data.setdefault("providers", {provider: {"enabled": False} for provider in PROVIDERS})
     for provider in PROVIDERS:
@@ -909,9 +909,9 @@ def write_topology(topology: dict[str, Any]) -> None:
         for key, value in values.items():
             lines.append(f"{key} = {toml_value(value)}")
         lines.append("")
-    for instance in topology.get("instances", []):
-        lines.append("[[instances]]")
-        for key, value in instance.items():
+    for worker in topology.get("workers", []):
+        lines.append("[[workers]]")
+        for key, value in worker.items():
             lines.append(f"{key} = {toml_value(value)}")
         lines.append("")
     for obj in topology.get("objects", []):
@@ -922,41 +922,41 @@ def write_topology(topology: dict[str, Any]) -> None:
     RUNTIME_TOPOLOGY_TOML.write_text("\n".join(lines), encoding="utf-8")
 
 
-def find_instance(
+def find_worker(
     topology: dict[str, Any],
     env_name: str,
-    name: str,
+    host: str,
     service: str,
     provider: str,
-    instance_index: int = 1,
+    worker_index: int = 1,
 ) -> dict[str, Any] | None:
-    for instance in topology.get("instances", []):
+    for worker in topology.get("workers", []):
         if (
-            instance.get("name") == name
-            and instance.get("service") == service
-            and instance.get("provider") == provider
-            and instance.get("env", env_name) == env_name
-            and instance.get("instance_index", 1) == instance_index
+            worker.get("host") == host
+            and worker.get("service") == service
+            and worker.get("provider") == provider
+            and worker.get("env", env_name) == env_name
+            and worker.get("worker_index", 1) == worker_index
         ):
-            return instance
+            return worker
     return None
 
 
-def find_pinned_alibaba_instance(topology: dict[str, Any], service: str, provider: str) -> dict[str, Any] | None:
-    for item in topology.get("instances", []):
+def find_pinned_alibaba_worker(topology: dict[str, Any], service: str, provider: str) -> dict[str, Any] | None:
+    for item in topology.get("workers", []):
         if item.get("service") == service and item.get("provider") == provider and item.get("region") and item.get("size"):
             return item
     return None
 
 
-def new_instance(env_name: str, name: str, service: str, provider: str, instance_index: int = 1) -> dict[str, Any]:
+def new_worker(env_name: str, host: str, service: str, provider: str, worker_index: int = 1) -> dict[str, Any]:
     return {
-        "name": name,
+        "host": host,
         "service": service,
         "provider": provider,
         "env": env_name,
         "backend": service_backend(service),
-        "instance_index": instance_index,
+        "worker_index": worker_index,
     }
 
 
@@ -990,9 +990,9 @@ def vm_provider_error(provider: str, missing_keys: list[str]) -> str:
     )
 
 
-def ensure_ssh_keypair(instance: dict[str, Any]) -> str:
-    name = str(instance["name"])
-    key_dir = SSH_KEY_ROOT / name
+def ensure_ssh_keypair(worker: dict[str, Any]) -> str:
+    host = str(worker["host"])
+    key_dir = SSH_KEY_ROOT / host
     private_key = key_dir / "id_ed25519"
     if not private_key.exists():
         key_dir.mkdir(parents=True, exist_ok=True)
@@ -1006,43 +1006,43 @@ def ensure_ssh_keypair(instance: dict[str, Any]) -> str:
                 "-f",
                 str(private_key),
                 "-C",
-                f"xaisen-{name}",
+                f"xaisen-{host}",
             ]
         )
         private_key.chmod(0o600)
         (key_dir / "id_ed25519.pub").chmod(0o644)
-    return f"runtime/ssh_key/{name}"
+    return f"runtime/ssh_key/{host}"
 
 
 def set_vm_defaults(
-    instance: dict[str, Any],
+    worker: dict[str, Any],
     topology: dict[str, Any],
     find_instance_type: bool = False,
     size: str | None = None,
     region: str | None = None,
-    instance_index: int = 1,
+    worker_index: int = 1,
 ) -> None:
-    service = str(instance.get("service", ""))
-    provider = str(instance.get("provider", ""))
+    service = str(worker.get("service", ""))
+    provider = str(worker.get("provider", ""))
     # Only relay (4000) and signaling (8080) have a real listening port --
     # cp-daemon/validator-daemon (SERVICE_PORTS has no entry for them, so
     # base_port is 0) are exactly the services this count-prefix feature was
     # built for and have zero port-collision risk regardless of replica
     # count. For relay/signaling, offset each replica's host port by
-    # (instance_index - 1) so multiple instances on one droplet don't bind
+    # (worker_index - 1) so multiple workers on one droplet don't bind
     # the same port. NOTE: this does NOT extend to relay's hardcoded UDP RTC
     # ranges (10000-10100/40000-40100, see deploy_one_service.yml) -- running
     # more than one relay replica on the same host will still collide there;
     # that's a known, unaddressed limitation, not a bug.
     base_port = SERVICE_PORTS.get(service, 0)
-    instance.setdefault("port", base_port + (instance_index - 1) if base_port else 0)
+    worker.setdefault("port", base_port + (worker_index - 1) if base_port else 0)
 
     if size:
         # Explicit --size always wins over any default/pin below, and
         # persists on the topology row for subsequent restarts. When
-        # colocating multiple services under one --name, every call sharing
-        # that name must agree (enforced by program.py's merge step).
-        instance["size"] = size
+        # colocating multiple services under one --host, every call sharing
+        # that host must agree (enforced by program.py's merge step).
+        worker["size"] = size
 
     if region:
         # Same "explicit always wins, persists on the topology row" shape as
@@ -1050,31 +1050,31 @@ def set_vm_defaults(
         # steer the real deploy, not just which region image_bake bakes
         # into for it (cli/scenario.py's ensure_image()/DEFAULT_BAKE_REGIONS
         # would otherwise pick a bake target this VM never actually uses).
-        instance["region"] = region
+        worker["region"] = region
 
     if provider == "alibaba":
         if find_instance_type:
-            instance.pop("region", None)
-            instance.pop("size", None)
-        elif not (instance.get("region") and instance.get("size")):
-            pinned = find_pinned_alibaba_instance(topology, service, provider)
+            worker.pop("region", None)
+            worker.pop("size", None)
+        elif not (worker.get("region") and worker.get("size")):
+            pinned = find_pinned_alibaba_worker(topology, service, provider)
             if pinned:
-                instance["region"] = pinned["region"]
-                instance["size"] = pinned["size"]
+                worker["region"] = pinned["region"]
+                worker["size"] = pinned["size"]
     else:
         default_size = VM_INSTANCE_SIZE_OVERRIDES.get((provider, service), VM_INSTANCE_SIZES.get(provider, ""))
-        instance.setdefault("size", default_size)
+        worker.setdefault("size", default_size)
 
-    if not instance.get("image"):
+    if not worker.get("image"):
         from . import image_bake
 
-        region = str(instance.get("region") or instance.get("zone") or "")
+        region = str(worker.get("region") or worker.get("zone") or "")
         if region:
             baked = image_bake.lookup_image(provider, region)
             if baked:
-                instance["image"] = baked
+                worker["image"] = baked
 
-    instance["ssh_key_dir"] = ensure_ssh_keypair(instance)
+    worker["ssh_key_dir"] = ensure_ssh_keypair(worker)
 
 
 def missing_contract_keys(path: Path) -> list[str]:
@@ -1106,7 +1106,7 @@ def default_topology(env_name: str) -> dict[str, Any]:
         "active_env": env_name,
         "contract_env": relative_contract_env(env_name),
         "providers": {provider: {"enabled": False} for provider in PROVIDERS},
-        "instances": [],
+        "workers": [],
         "objects": [],
     }
 

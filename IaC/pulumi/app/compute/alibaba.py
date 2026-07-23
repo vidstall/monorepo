@@ -14,7 +14,7 @@ def select_size(instance: TopologyInstance, provider: Any, region: str):
 
     pinned_size = str(instance.get("size") or "")
     if not pinned_size:
-        return find_spot_type(instance["name"], provider, region)
+        return find_spot_type(instance["host"], provider, region)
     types = alicloud.ecs.get_instance_types(
         instance_type=pinned_size,
         spot_strategy="SpotAsPriceGo",
@@ -32,7 +32,7 @@ def select_size(instance: TopologyInstance, provider: Any, region: str):
 def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     import pulumi_alicloud as alicloud
 
-    name = instance["name"]
+    name = instance["host"]
     region = provider_region("alibaba", instance)
     provider = alicloud.Provider(
         f"{name}-vm-provider",

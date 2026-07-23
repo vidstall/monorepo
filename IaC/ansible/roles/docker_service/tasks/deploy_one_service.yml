@@ -6,18 +6,18 @@
 #     relay, ...). Shared across every colocated replica of that type --
 #     used only for things that are identical per replica: the Docker
 #     image/tag, and the keypair/cap env var NAMES below.
-#   - xaisen_service_item.instance_key  -- service, or "service-N" for the
+#   - xaisen_service_item.worker_key  -- service, or "service-N" for the
 #     Nth colocated replica of that service on this host (vidctl.py's
 #     count-prefix --service syntax, e.g. `5cp-daemon`). Index 1 is
 #     un-suffixed (== service) for backward compatibility. Used for
 #     everything that must be UNIQUE per replica: container name, state
 #     dir, wallet file, xaisen_operator_wallets lookup key.
-# `| default(xaisen_service_item.service)` guards instance_key in case an
+# `| default(xaisen_service_item.service)` guards worker_key in case an
 # older-shaped inventory entry (pre-dating this field) ever reaches here.
 
 - name: Ensure persistent state directory exists
   ansible.builtin.file:
-    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}"
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
     state: directory
     owner: root
     group: root
@@ -33,13 +33,13 @@
 - name: Copy per-service secrets file to host
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service_item.service }}.env"
-    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}/service.env"
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/service.env"
     owner: root
     group: root
     mode: "0640"
   when: xaisen_service_secrets_file.stat.exists | default(false)
 
-# xaisen_operator_wallets is a dict keyed by instance_key, but only ever
+# xaisen_operator_wallets is a dict keyed by worker_key, but only ever
 # contains the ONE instance that was just checked out by the current
 # `vidctl infra start`/`restart` call (see cli/infra.py control()) -- other
 # colocated services/replicas simply aren't in the dict this round, so this
@@ -56,14 +56,14 @@
 # refreshes this file.
 - name: Write operator wallet credentials
   ansible.builtin.copy:
-    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
     owner: root
     group: root
     mode: "0600"
-    content: "{{ xaisen_operator_wallets[xaisen_service_item.instance_key | default(xaisen_service_item.service)] }}"
+    content: "{{ xaisen_operator_wallets[xaisen_service_item.worker_key | default(xaisen_service_item.service)] }}"
   when:
     - xaisen_operator_wallets is defined
-    - (xaisen_service_item.instance_key | default(xaisen_service_item.service)) in xaisen_operator_wallets
+    - (xaisen_service_item.worker_key | default(xaisen_service_item.service)) in xaisen_operator_wallets
   no_log: true
   register: xaisen_wallet_credentials_write
 
@@ -76,12 +76,12 @@
 # inject it as the correct env var.
 - name: Re-check operator state file (may have just been written above)
   ansible.builtin.stat:
-    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
   register: xaisen_operator_state_file
 
 - name: Read operator wallet secret key from host
   ansible.builtin.slurp:
-    src: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
+    src: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
   register: xaisen_operator_state_slurp
   when: xaisen_operator_state_file.stat.exists
   no_log: true
@@ -125,7 +125,7 @@
 # apps/relay/src/index.ts / apps/signaling/src/index.ts), which is useless
 # to any client since it's the visitor's own loopback address, not the
 # droplet's. sslip.io resolves "<anything>.<a>-<b>-<c>-<d>.sslip.io" to
-# a.b.c.d with no real DNS registration needed -- the instance_key prefix
+# a.b.c.d with no real DNS registration needed -- the worker_key prefix
 # gives each colocated service on this host its OWN hostname (and therefore
 # its own Let's Encrypt cert + Caddy site block, see main.yml's shared
 # xaisen-caddy) sharing one droplet IP, since relay and signaling both
@@ -133,7 +133,7 @@
 - name: Determine this service's public sslip.io endpoint env var
   ansible.builtin.set_fact:
     xaisen_public_endpoint_env_name: "{{ xaisen_public_endpoint_env_names.get(xaisen_service_item.service) }}"
-    xaisen_sslip_host: "{{ (xaisen_service_item.instance_key | default(xaisen_service_item.service)) }}.{{ ansible_host | replace('.', '-') }}.sslip.io"
+    xaisen_sslip_host: "{{ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) }}.{{ ansible_host | replace('.', '-') }}.sslip.io"
   vars:
     xaisen_public_endpoint_env_names:
       relay: RELAY_ENDPOINT_URL
@@ -150,31 +150,42 @@
 # (silently stuck on "no announced producer"). Set to this droplet's real
 # public IP so cross-host dual-relay rooms actually forward media.
 - name: Run the service container
+  vars:
+    xaisen_relay_port_offset: "{{ ((xaisen_service_item.index | default(1) | int) - 1) * 100 }}"
+    xaisen_relay_rtc_min: "{{ 10000 + (xaisen_relay_port_offset | int) }}"
+    xaisen_relay_rtc_max: "{{ xaisen_relay_rtc_min | int + 99 }}"
+    xaisen_relay_pipe_min: "{{ 40000 + (xaisen_relay_port_offset | int) }}"
+    xaisen_relay_pipe_max: "{{ xaisen_relay_pipe_min | int + 99 }}"
   community.docker.docker_container:
-    name: "xaisen-{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}"
+    name: "xaisen-{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
     image: "{{ xaisen_images[xaisen_service_item.service] }}:{{ xaisen_tags[xaisen_service_item.service] }}"
+    # cli/registry.py tags images with the git short SHA, which is stable
+    # across repeat `vidctl registry publish` runs on an uncommitted branch
+    # -- without forcing a pull, a host that already has that tag cached
+    # locally from an earlier deploy this session silently keeps running the
+    # stale image even after a newer one with the same tag was pushed.
+    pull: true
     restart_policy: unless-stopped
     # Each container's own desired_state, not the host-level aggregate --
     # lets one colocated service be paused/restarted independently of
     # its siblings sharing the host.
     state: "{{ 'started' if xaisen_service_item.desired_state == 'running' else 'stopped' }}"
     restart: "{{ (xaisen_container_state | default('started')) == 'restarted' or xaisen_wallet_credentials_write is changed }}"
+    # UDP RTC/pipe ranges are offset per worker_index (100 ports apart) so
+    # colocated relay replicas on the same host don't collide -- mirrors how
+    # the TCP port below is offset in cli/infra.py's set_vm_defaults().
     ports: >-
       {{
         ([xaisen_service_item.port ~ ':' ~ xaisen_service_item.port]
          if (xaisen_service_item.port | default(0) | int > 0) else [])
-        + (['10000-10100:10000-10100/udp', '40000-40100:40000-40100/udp']
+        + ([xaisen_relay_rtc_min ~ '-' ~ xaisen_relay_rtc_max ~ ':' ~ xaisen_relay_rtc_min ~ '-' ~ xaisen_relay_rtc_max ~ '/udp',
+            xaisen_relay_pipe_min ~ '-' ~ xaisen_relay_pipe_max ~ ':' ~ xaisen_relay_pipe_min ~ '-' ~ xaisen_relay_pipe_max ~ '/udp']
            if xaisen_service_item.service == 'relay' else [])
       }}
-    # KNOWN LIMITATION: the UDP RTC ranges above are NOT offset per replica --
-    # colocating more than one relay instance on the same host (count-prefix
-    # --service, e.g. `2relay`) will collide on those UDP ports even though
-    # the TCP port below is correctly offset (see cli/infra.py
-    # set_vm_defaults). Not addressed here.
-    env_file: "{{ (xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.instance_key | default(xaisen_service_item.service)) ~ '/service.env') if (xaisen_service_secrets_file.stat.exists | default(false)) else omit }}"
+    env_file: "{{ (xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/service.env') if (xaisen_service_secrets_file.stat.exists | default(false)) else omit }}"
     volumes:
       - "{{ xaisen_services_root }}/runtime/contract:{{ xaisen_services_root }}/runtime/contract:ro"
-      - "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}:{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.instance_key | default(xaisen_service_item.service) }}"
+      - "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}:{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
     # Joins the shared bridge network (main.yml) instead of Docker's default
     # bridge -- lets this container's Caddy TLS sidecar below reverse_proxy
     # to it by container name (only user-defined networks support
@@ -188,7 +199,13 @@
     # tells the app where the file *would* be). xaisen_contract_values is
     # populated by cli/infra.py's docker_deploy_extra_vars() by parsing
     # runtime/contract/<env>.env -- combine() overlays those real keys on
-    # top of the static ones below.
+    # top of the static ones below. RTC_MIN_PORT/RTC_MAX_PORT/PIPE_PORT_RANGE
+    # tell relay's mediasoup workers and inter-relay pipe transports about
+    # the per-replica port range reserved above. REGISTRATION_MODE=voting
+    # makes fresh (MINER_CAP_ID-unset) relay/signaling/validator-daemon
+    # registrations wait for a CP's async role vote before Step 2's registry
+    # enrollment (which asserts cap.role == <role>) -- see auto-register.ts's
+    # votingMode branch. cp-daemon is excluded: it casts votes, not waits.
     env: >-
       {{
         {
@@ -201,6 +218,8 @@
         | combine({xaisen_cap_env_name: xaisen_cap_env_value} if (xaisen_cap_env_name and xaisen_cap_env_value) else {})
         | combine({xaisen_public_endpoint_env_name: 'wss://' ~ xaisen_sslip_host} if xaisen_public_endpoint_env_name else {})
         | combine({'ANNOUNCED_IP': ansible_host} if xaisen_service_item.service == 'relay' else {})
+        | combine({'RTC_MIN_PORT': xaisen_relay_rtc_min, 'RTC_MAX_PORT': xaisen_relay_rtc_max, 'PIPE_PORT_RANGE': xaisen_relay_pipe_min ~ '-' ~ xaisen_relay_pipe_max} if xaisen_service_item.service == 'relay' else {})
+        | combine({'REGISTRATION_MODE': 'voting'} if xaisen_service_item.service in ['relay', 'signaling', 'validator-daemon'] else {})
       }}
   when:
     - xaisen_images is defined and xaisen_service_item.service in xaisen_images

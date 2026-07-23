@@ -56,19 +56,19 @@ _ALIAS_NOUNS = [
 
 
 def checkout_wallet(
-    name: str, service: str, provider: str, env_name: str, instance_index: int = 1
+    host: str, service: str, provider: str, env_name: str, worker_index: int = 1
 ) -> tuple[dict[str, Any], bool]:
-    """Assign a free pooled wallet to (name, service, provider, env_name, instance_index).
+    """Assign a free pooled wallet to (host, service, provider, env_name, worker_index).
 
-    `instance_index` (1-based) distinguishes multiple colocated instances of
-    the SAME service on one --name (see vidctl.py's count-prefix --service
+    `worker_index` (1-based) distinguishes multiple colocated workers of
+    the SAME service on one --host (see vidctl.py's count-prefix --service
     syntax, e.g. `5cp-daemon`) -- each index gets its own independently
     checked-out wallet. It plays no part in the `registered_role` pin below:
     a replica is still fundamentally the same on-chain role as any other
-    instance of that service.
+    worker of that service.
 
-    Idempotent: if this exact instance identity already holds an assignment
-    (e.g. a `restart` on an already-running instance), that wallet is reused
+    Idempotent: if this exact worker identity already holds an assignment
+    (e.g. a `restart` on an already-running worker), that wallet is reused
     rather than checking out a second one.
 
     Otherwise, a free wallet is picked -- but ONLY from wallets whose
@@ -76,10 +76,10 @@ def checkout_wallet(
     or already equal to `service`. On-chain registration is a one-time,
     permanent action per wallet (register() aborts if called again for a
     DIFFERENT role); `release_wallet()` frees a wallet for reassignment on
-    the NEXT instance, but a wallet that already registered as (say) relay
+    the NEXT worker, but a wallet that already registered as (say) relay
     must only ever be reused as relay again, never reassigned to cp-daemon
     or any other service -- doing so previously caused
-    `registration::E_ALREADY_REGISTERED` aborts when an instance was
+    `registration::E_ALREADY_REGISTERED` aborts when an worker was
     killed and recreated, since the wallet pool had no memory of which role
     a wallet had actually registered as on-chain.
 
@@ -93,7 +93,7 @@ def checkout_wallet(
     wallets = pool.setdefault("wallets", [])
 
     for entry in wallets:
-        if _matches(entry, name, service, provider, instance_index):
+        if _matches(entry, host, service, provider, worker_index):
             faucet_if_needed(entry, env_name)
             resolve_cap_id(entry, service, env_name)
             _write_pool(env_name, pool)
@@ -102,7 +102,7 @@ def checkout_wallet(
     free = [
         entry
         for entry in wallets
-        if not entry.get("assigned_name")
+        if not entry.get("assigned_host")
         and entry.get("registered_role", "") in ("", service)
         and not entry.get("role_mismatch")
     ]
@@ -122,10 +122,10 @@ def checkout_wallet(
             "created_at": _timestamp(),
             "last_balance_mist": 0,
             "last_faucet_at": "",
-            "assigned_name": "",
+            "assigned_host": "",
             "assigned_service": "",
             "assigned_provider": "",
-            "assigned_instance_index": 0,
+            "assigned_worker_index": 0,
             "assigned_at": "",
             "released_at": "",
             "registered_role": "",
@@ -135,10 +135,10 @@ def checkout_wallet(
         wallets.append(entry)
         created = True
 
-    entry["assigned_name"] = name
+    entry["assigned_host"] = host
     entry["assigned_service"] = service
     entry["assigned_provider"] = provider
-    entry["assigned_instance_index"] = instance_index
+    entry["assigned_worker_index"] = worker_index
     entry["assigned_at"] = _timestamp()
     if not entry.get("registered_role"):
         entry["registered_role"] = service
@@ -150,21 +150,21 @@ def checkout_wallet(
 
 
 def release_wallet(
-    name: str, service: str, provider: str, env_name: str, instance_index: int = 1
+    host: str, service: str, provider: str, env_name: str, worker_index: int = 1
 ) -> dict[str, Any] | None:
-    """Return the wallet assigned to (name, service, provider, env_name,
-    instance_index) to the free pool. Clears assignment fields only; the
+    """Return the wallet assigned to (host, service, provider, env_name,
+    worker_index) to the free pool. Clears assignment fields only; the
     wallet record (address, secret_key, x25519_secret) AND its permanent
     `registered_role` pin are kept for future reuse. Does not perform any
     on-chain registry cleanup. Returns the released entry, or None if no
-    wallet was assigned to this instance."""
+    wallet was assigned to this worker."""
     pool = _read_pool(env_name)
     for entry in pool.get("wallets", []):
-        if _matches(entry, name, service, provider, instance_index):
-            entry["assigned_name"] = ""
+        if _matches(entry, host, service, provider, worker_index):
+            entry["assigned_host"] = ""
             entry["assigned_service"] = ""
             entry["assigned_provider"] = ""
-            entry["assigned_instance_index"] = 0
+            entry["assigned_worker_index"] = 0
             entry["assigned_at"] = ""
             entry["released_at"] = _timestamp()
             _write_pool(env_name, pool)
@@ -183,32 +183,32 @@ def pool_status(env_name: str | None = None) -> dict[str, list[dict[str, Any]]]:
 
 
 def gc_orphaned_assignments(topology: dict[str, Any]) -> list[dict[str, Any]]:
-    """Release wallets assigned to (name, service, provider, env) tuples that
+    """Release wallets assigned to (host, service, provider, env) tuples that
     no longer exist in the live topology. Returns the list of released
     entries."""
     live = {
-        (i.get("name"), i.get("service"), i.get("provider"), i.get("env"), i.get("instance_index", 1))
-        for i in topology.get("instances", [])
+        (i.get("host"), i.get("service"), i.get("provider"), i.get("env"), i.get("worker_index", 1))
+        for i in topology.get("workers", [])
     }
     released: list[dict[str, Any]] = []
     for env_name in _all_pool_envs():
         pool = _read_pool(env_name)
         changed = False
         for entry in pool.get("wallets", []):
-            if not entry.get("assigned_name"):
+            if not entry.get("assigned_host"):
                 continue
             key = (
-                entry["assigned_name"],
+                entry["assigned_host"],
                 entry["assigned_service"],
                 entry["assigned_provider"],
                 env_name,
-                entry.get("assigned_instance_index", 1),
+                entry.get("assigned_worker_index", 1),
             )
             if key not in live:
-                entry["assigned_name"] = ""
+                entry["assigned_host"] = ""
                 entry["assigned_service"] = ""
                 entry["assigned_provider"] = ""
-                entry["assigned_instance_index"] = 0
+                entry["assigned_worker_index"] = 0
                 entry["assigned_at"] = ""
                 entry["released_at"] = _timestamp()
                 changed = True
@@ -224,11 +224,11 @@ def list_pool(env_name: str | None) -> int:
         print("No pooled wallets yet.")
         return 0
     for env, entries in status.items():
-        free = sum(1 for entry in entries if not entry.get("assigned_name"))
+        free = sum(1 for entry in entries if not entry.get("assigned_host"))
         print(f"[{env}] {len(entries)} wallet(s), {free} free, {len(entries) - free} assigned")
         for entry in entries:
-            if entry.get("assigned_name"):
-                state = f"assigned -> {entry['assigned_name']}/{entry['assigned_service']}/{entry['assigned_provider']}"
+            if entry.get("assigned_host"):
+                state = f"assigned -> {entry['assigned_host']}/{entry['assigned_service']}/{entry['assigned_provider']}"
             else:
                 role = entry.get("registered_role", "")
                 state = f"free (pinned: {role})" if role else "free (unpinned)"
@@ -240,7 +240,7 @@ def gc() -> int:
     from .context import RUNTIME_TOPOLOGY_TOML
     from .infra import read_topology
 
-    topology = read_topology() if RUNTIME_TOPOLOGY_TOML.exists() else {"instances": []}
+    topology = read_topology() if RUNTIME_TOPOLOGY_TOML.exists() else {"workers": []}
     released = gc_orphaned_assignments(topology)
     for entry in released:
         print(f"Released {entry['address']}")
@@ -265,12 +265,12 @@ def _generate_alias(existing_aliases: set[str]) -> str:
     return candidate
 
 
-def _matches(entry: dict[str, Any], name: str, service: str, provider: str, instance_index: int = 1) -> bool:
+def _matches(entry: dict[str, Any], host: str, service: str, provider: str, worker_index: int = 1) -> bool:
     return (
-        entry.get("assigned_name") == name
+        entry.get("assigned_host") == host
         and entry.get("assigned_service") == service
         and entry.get("assigned_provider") == provider
-        and entry.get("assigned_instance_index", 1) == instance_index
+        and entry.get("assigned_worker_index", 1) == worker_index
     )
 
 
@@ -344,7 +344,7 @@ def resolve_cap_id(entry: dict[str, Any], service: str, env_name: str) -> None:
             return
         print(
             f"Warning: cached cap_id {entry['cap_id']} for wallet {entry['address']} was minted "
-            f"under a previous contract deployment; dropping it so this instance re-registers fresh "
+            f"under a previous contract deployment; dropping it so this worker re-registers fresh "
             "against the current deployment.",
             file=sys.stderr,
         )
@@ -372,7 +372,7 @@ def resolve_cap_id(entry: dict[str, Any], service: str, env_name: str) -> None:
         print(
             f"Warning: wallet {entry['address']} was assigned for '{service}' but registered "
             f"on-chain as {struct_name} instead of {expected_struct}. It can never run as "
-            f"'{service}'; quarantining it and it will not be reassigned. Release this instance "
+            f"'{service}'; quarantining it and it will not be reassigned. Release this worker "
             "and start/restart again to pick up a fresh wallet.",
             file=sys.stderr,
         )
@@ -549,7 +549,7 @@ def _refresh_public_view() -> None:
     stats: dict[str, dict[str, int]] = {}
     for env_name in _all_pool_envs():
         entries = _read_pool(env_name).get("wallets", [])
-        free = sum(1 for entry in entries if not entry.get("assigned_name"))
+        free = sum(1 for entry in entries if not entry.get("assigned_host"))
         stats[env_name] = {"total": len(entries), "free": free, "assigned": len(entries) - free}
         for entry in entries:
             lines.append("[[wallets]]")
@@ -558,7 +558,7 @@ def _refresh_public_view() -> None:
                 "alias": entry.get("alias", ""),
                 "env": env_name,
                 "address": entry.get("address", ""),
-                "assigned_name": entry.get("assigned_name", ""),
+                "assigned_host": entry.get("assigned_host", ""),
                 "assigned_service": entry.get("assigned_service", ""),
                 "assigned_provider": entry.get("assigned_provider", ""),
                 "assigned_at": entry.get("assigned_at", ""),

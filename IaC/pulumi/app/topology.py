@@ -15,7 +15,7 @@ def load_topology() -> dict[str, Any]:
         return {
             "active_env": "devnet",
             "contract_env": "runtime/contract/devnet.env",
-            "instances": [],
+            "workers": [],
             "objects": [],
         }
     data = tomllib.loads(TOPOLOGY_PATH.read_text(encoding="utf-8"))

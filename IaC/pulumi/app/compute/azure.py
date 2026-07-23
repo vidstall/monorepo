@@ -31,7 +31,7 @@ def shared_network(location: str):
 def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     from pulumi_azure_native import compute, network
 
-    name = instance["name"]
+    name = instance["host"]
     port = int(instance.get("port") or 0)
     location = provider_region("azure", instance)
     instance["region"] = location

@@ -51,7 +51,7 @@ def vm_host_entry(
 ) -> pulumi.Output[dict[str, Any]]:
     key_path = str(ROOT / instance.get("ssh_key_dir", "") / "id_ed25519")
     # `services` is set on the merged instance for colocated (digitalocean)
-    # hosts (see program.py's _group_vm_instances). For a single-service
+    # hosts (see program.py's _group_vm_workers). For a single-service
     # host it's absent, so fall back to the singular service/port pair --
     # xaisen_service/xaisen_port stay populated too either way, for any
     # Ansible task not yet converted to loop over xaisen_services.
@@ -61,10 +61,10 @@ def vm_host_entry(
                 "service": instance.get("service", ""),
                 "port": instance.get("port", 0),
                 "desired_state": instance.get("desired_state", ""),
-                "index": instance.get("instance_index", 1),
-                "instance_key": instance.get("service", "")
-                if instance.get("instance_index", 1) == 1
-                else f"{instance.get('service', '')}-{instance.get('instance_index', 1)}",
+                "index": instance.get("worker_index", 1),
+                "worker_key": instance.get("service", "")
+                if instance.get("worker_index", 1) == 1
+                else f"{instance.get('service', '')}-{instance.get('worker_index', 1)}",
             }
         ]
         if instance.get("service")
@@ -92,10 +92,10 @@ def vm_host_entry(
 
 def build_inventory(
     hosts: list[HostConfig],
-    instances: list[TopologyInstance],
+    workers: list[TopologyInstance],
     vm_resources: dict[str, dict[str, Any]],
     topology: dict[str, Any],
-    merged_vm_instances: dict[str, TopologyInstance] | None = None,
+    merged_vm_workers: dict[str, TopologyInstance] | None = None,
 ) -> dict[str, Any]:
     inventory_hosts: dict[str, Any] = {}
     for host in hosts:
@@ -103,16 +103,16 @@ def build_inventory(
         if host_name:
             inventory_hosts[host_name] = host_entry(host)
 
-    merged_vm_instances = merged_vm_instances or {}
+    merged_vm_workers = merged_vm_workers or {}
     seen_vm_hosts: set[str] = set()
-    for instance in instances:
-        host_name = instance.get("name")
+    for instance in workers:
+        host_name = instance.get("host")
         if not host_name:
             continue
         # Golden-image bake VMs (cli/image_bake.py, service="__bake__") are
         # provisioned through the normal topology-driven pulumi up and DO
         # stay in this inventory -- image_bake.bake() needs their resolved
-        # address from here (via infra.instance_address()) to SSH in and
+        # address from here (via infra.host_address()) to SSH in and
         # bootstrap them itself. They're still harmless if ever swept into a
         # real `vidctl infra configure` run: docker_service's first task
         # (`end_host` when xaisen_services is undefined/empty) no-ops for
@@ -124,19 +124,19 @@ def build_inventory(
             continue
         # Colocated hosts have multiple raw rows sharing one host_name --
         # process each unique VM host once, and decide inclusion off the
-        # MERGED instance's aggregate desired_state (e.g. one colocated
+        # MERGED worker's aggregate desired_state (e.g. one colocated
         # service paused while another still runs must keep the host in
         # inventory), not whichever raw row happens to be seen first.
         if host_name in seen_vm_hosts:
             continue
         seen_vm_hosts.add(host_name)
-        vm_instance = merged_vm_instances.get(host_name, instance)
-        if not should_include_ansible_host(vm_instance):
+        vm_worker = merged_vm_workers.get(host_name, instance)
+        if not should_include_ansible_host(vm_worker):
             continue
         resource = vm_resources.get(host_name)
         if resource is None or resource.get("address") is None:
             continue
-        inventory_hosts[host_name] = vm_host_entry(vm_instance, resource, topology)
+        inventory_hosts[host_name] = vm_host_entry(vm_worker, resource, topology)
     return {
         "all": {
             "hosts": {},

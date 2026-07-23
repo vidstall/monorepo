@@ -1,9 +1,20 @@
 {# One site block per relay/signaling instance colocated on this host.
    Hostname must exactly match what deploy_one_service.yml injects as
-   RELAY_ENDPOINT_URL/ENDPOINT_URL (wss://<instance_key>.<ip-dashed>.sslip.io)
-   or the cert Caddy obtains won't match what the client connects to. #}
+   RELAY_ENDPOINT_URL/ENDPOINT_URL (wss://<worker_key>.<ip-dashed>.sslip.io)
+   or the cert Caddy obtains won't match what the client connects to.
+
+   The upstream target is each app's FIXED internal listen port (WS_PORT for
+   relay, SIGNALING_PORT for signaling -- see apps/relay/src/index.ts and
+   apps/signaling/src/index.ts, neither reads an env var keyed off
+   worker_index), NOT svc.port -- that field is the per-worker_index-offset
+   HOST-published port (cli/infra.py set_vm_defaults), which only matters for
+   the docker_container ports: mapping. Caddy talks to the sibling container
+   directly over the shared xaisen-net bridge, bypassing published host
+   ports entirely, so every same-service replica on this host listens
+   internally on the SAME fixed port and needs the SAME upstream target. #}
+{% set xaisen_internal_ports = {'relay': 4000, 'signaling': 8080} %}
 {% for svc in xaisen_public_services %}
-{{ svc.instance_key | default(svc.service) }}.{{ ansible_host | replace('.', '-') }}.sslip.io {
-    reverse_proxy xaisen-{{ svc.instance_key | default(svc.service) }}:{{ svc.port }}
+{{ svc.worker_key | default(svc.service) }}.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_internal_ports[svc.service] }}
 }
 {% endfor %}

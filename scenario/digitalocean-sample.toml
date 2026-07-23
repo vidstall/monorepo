@@ -15,55 +15,170 @@ name = "site-2-bucket"
 object = "frontend"
 provider = "alibaba"
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-1"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
+worker_index = 1
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-1"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "node-1"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
+worker_index = 1
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-1"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "node-1"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
+worker_index = 1
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-1"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "node-1"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
-instance_index = 1
+worker_index = 1
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-1"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
-instance_index = 2
+worker_index = 2
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-2"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "node-2"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "node-2"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "node-2"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "node-2"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "node-2"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "node-2"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
-instance_index = 3
+worker_index = 1
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-2"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
-instance_index = 4
+worker_index = 2
 
-[[instances]]
-name = "node-1"
+[[workers]]
+host = "node-3"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "node-3"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "node-3"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "node-3"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "node-3"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "node-3"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "node-3"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
-instance_index = 5
+worker_index = 1
+
+[[workers]]
+host = "node-3"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2

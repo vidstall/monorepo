@@ -2,12 +2,12 @@
 
 A scenario file declares a full deployment: which network/env to publish the
 contract on, which frontend sites to publish, which Docker images to publish,
-and which VM instances should be running. `vidctl scenario apply <path> --yes`
-applies one scenario file as the complete source of truth for compute
-instances (`[[instances]]`). Frontend sites (`[[frontends]]`) are
-publish-only -- a scenario updates them but never deletes/recreates them, since
-domain/SSL setup on an object-storage-hosted frontend (e.g. Alibaba OSS) is too
-costly to churn automatically.
+and which workers (service daemons running on VM hosts) should be running.
+`vidctl scenario apply <path> --yes` applies one scenario file as the complete
+source of truth for compute workers (`[[workers]]`). Frontend sites
+(`[[frontends]]`) are publish-only -- a scenario updates them but never
+deletes/recreates them, since domain/SSL setup on an object-storage-hosted
+frontend (e.g. Alibaba OSS) is too costly to churn automatically.
 
 ```bash
 ./vidctl scenario apply scenario/example.toml --yes
@@ -24,7 +24,7 @@ to reconcile drift.
 ## Fields
 
 - `name` -- human-readable label (used in status/log output).
-- `env` -- `devnet` | `testnet` | `mainnet`. Scenario-wide; every instance in
+- `env` -- `devnet` | `testnet` | `mainnet`. Scenario-wide; every worker in
   the file is provisioned against this one Sui/Pulumi environment.
 - `[contract]` -- passed through to `contract.publish()`: `gas_budget`,
   `create_registry_if_missing`, `force`. Publish is always confirmed
@@ -43,14 +43,16 @@ to reconcile drift.
   wrote into `services/client/client/.env`. Never deleted by `apply` or
   `destroy` -- reuse the same `name`/`provider` across scenarios to update an
   existing site in place rather than creating a new one.
-- `[[instances]]` -- one entry per VM-backed service instance: `name`,
+- `[[workers]]` -- one entry per VM-backed worker (a service daemon deployed
+  onto a host): `host` (the VM/droplet it runs on -- multiple `[[workers]]`
+  entries sharing the same `host` colocate several services on ONE VM),
   `service` (one of the worker services), `provider`, optional `size`
-  (VM SKU override) and `instance_index` (defaults to `1`; only meaningful
-  when running multiple replicas of the same service under one `name`).
+  (VM SKU override) and `worker_index` (defaults to `1`; only meaningful
+  when running multiple replicas of the same service under one `host`).
 
-Instances present in `runtime/topology.toml` but absent from the scenario
+Workers present in `runtime/topology.toml` but absent from the scenario
 file are killed on `apply` (full declarative reconcile) -- this applies only
-to `[[instances]]`, never to `[[frontends]]`.
+to `[[workers]]`, never to `[[frontends]]`.
 
 ## Samples
 

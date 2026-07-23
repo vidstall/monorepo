@@ -9,8 +9,8 @@ VMResult = dict[str, Any]
 VMAdapter = Callable[[TopologyInstance, str], VMResult]
 
 
-def vm_instances(instances: list[TopologyInstance]) -> list[TopologyInstance]:
-    return [instance for instance in instances if instance.get("backend") == "vm"]
+def vm_workers(workers: list[TopologyInstance]) -> list[TopologyInstance]:
+    return [worker for worker in workers if worker.get("backend") == "vm"]
 
 
 def adapter(provider: str) -> VMAdapter:

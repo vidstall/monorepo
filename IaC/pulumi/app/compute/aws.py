@@ -7,7 +7,7 @@ from ..models import TopologyInstance
 def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     import pulumi_aws as aws
 
-    name = instance["name"]
+    name = instance["host"]
     port = int(instance.get("port") or 0)
     region = provider_region("aws", instance)
     instance["region"] = region
