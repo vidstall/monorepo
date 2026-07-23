@@ -39,7 +39,7 @@ def load_scenario(path: Path) -> dict[str, Any]:
         worker_index = int(row.get("worker_index", 1) or 1)
         if not host:
             raise ValueError("Every scenario worker needs a 'host'.")
-        if service not in infra.DOCKER_SERVICES:
+        if service not in infra.DOCKER_SERVICES and service not in infra.PINNED_IMAGES:
             raise ValueError(f"Unknown service '{service}' for worker on host '{host}'.")
         if provider not in infra.PROVIDERS:
             raise ValueError(f"Unknown provider '{provider}' for worker on host '{host}'.")
@@ -408,6 +408,16 @@ def apply(path_str: str, yes: bool) -> int:
                     file=sys.stderr,
                 )
                 return code
+
+    # Same idea as sync_bot_frontend_env() above, for Grafana's embedded
+    # panel URL + the admin's metrics bearer token -- but unlike bot, this
+    # only ever touches ADMIN_ENV_PATH (see sync_grafana_frontend_env()'s
+    # docstring), and object_cmd.OBJECT_TYPES only knows how to publish the
+    # CLIENT app (services/client/client) to object storage -- the admin
+    # dashboard isn't published anywhere by this pipeline, it's run
+    # directly against its .env by whoever operates it. So there's nothing
+    # to republish here; the write itself is the whole effect.
+    infra.sync_grafana_frontend_env(scenario)
 
     write_lock(scenario_path_display, scenario_hash, env, "active")
     print(f"Scenario '{scenario['name']}' applied: {len(to_kill)} removed, {len(to_start)} reconciled.")

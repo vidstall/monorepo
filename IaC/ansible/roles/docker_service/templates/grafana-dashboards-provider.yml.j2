@@ -1,0 +1,14 @@
+{# Tells Grafana to auto-load dashboard JSON files from the mounted
+   /var/lib/grafana/dashboards directory (files/grafana-dashboard-
+   connection-quality.json is copied there by deploy_one_service.yml). #}
+apiVersion: 1
+
+providers:
+  - name: xaisen
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

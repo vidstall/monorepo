@@ -1,0 +1,15 @@
+{# Provisioned Grafana datasource, mounted into
+   /etc/grafana/provisioning/datasources/ -- Prometheus is never publicly
+   exposed (no Caddy site block, see main.yml's xaisen_public_services),
+   only reachable from Grafana over the shared xaisen-net bridge by
+   container name, same mechanism Caddy uses to reach every other
+   service. #}
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://xaisen-prometheus:9090
+    isDefault: true
+    editable: false

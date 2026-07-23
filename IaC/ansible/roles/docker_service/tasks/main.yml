@@ -54,7 +54,7 @@
 # distinct Caddyfile site block keyed by worker_key).
 - name: Determine which colocated services need the shared Caddy TLS proxy
   ansible.builtin.set_fact:
-    xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'signaling', 'bot']) | list }}"
+    xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'signaling', 'bot', 'grafana']) | list }}"
 
 - name: Ensure Caddy config directory exists
   ansible.builtin.file:

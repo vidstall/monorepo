@@ -81,6 +81,25 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
+# Monitoring stack -- singletons colocated on node-1 alongside bot. Grafana
+# is the admin dashboard's embedded-panel source (VITE_GRAFANA_URL);
+# Prometheus is never publicly exposed, only reachable from Grafana over
+# the shared xaisen-net bridge. Both pulled from pinned upstream images
+# (cli/context.py PINNED_IMAGES), not built from this repo.
+[[workers]]
+host = "node-1"
+service = "prometheus"
+provider = "digitalocean"
+size = "s-2vcpu-2gb"
+worker_index = 1
+
+[[workers]]
+host = "node-1"
+service = "grafana"
+provider = "digitalocean"
+size = "s-2vcpu-2gb"
+worker_index = 1
+
 [[workers]]
 host = "node-2"
 service = "signaling"

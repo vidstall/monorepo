@@ -1,0 +1,85 @@
+{
+  "uid": "connection-quality",
+  "title": "DVConf Call Quality & Performance",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Per-user latency (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "dvconf_relay_peer_latency_ms", "legendFormat": "{{roomId}}/{{peerId}}" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Per-user packet loss",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "dvconf_relay_peer_packet_loss", "legendFormat": "{{roomId}}/{{peerId}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Per-user bitrate (kbps)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "dvconf_relay_peer_bitrate_up_kbps", "legendFormat": "up {{roomId}}/{{peerId}}" },
+        { "expr": "dvconf_relay_peer_bitrate_down_kbps", "legendFormat": "down {{roomId}}/{{peerId}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Worker CPU (core-seconds/sec)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "rate(process_cpu_seconds_total[1m])", "legendFormat": "{{service}} {{instance}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Per-user jitter (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "dvconf_relay_peer_jitter_ms", "legendFormat": "{{roomId}}/{{peerId}}" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Worker memory (RSS)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "process_resident_memory_bytes", "legendFormat": "{{service}} {{instance}}" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Active sessions per worker",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        { "expr": "dvconf_active_sessions", "legendFormat": "{{service}} {{instance}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Relay rooms / bytes forwarded",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        { "expr": "dvconf_relay_room_count", "legendFormat": "rooms {{instance}}" },
+        { "expr": "rate(dvconf_relay_bytes_forwarded_total[1m])", "legendFormat": "bytes/s {{instance}}" }
+      ]
+    }
+  ]
+}

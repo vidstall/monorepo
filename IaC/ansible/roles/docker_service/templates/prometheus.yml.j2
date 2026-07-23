@@ -1,0 +1,51 @@
+{# Fleet-wide scrape config for the singleton Prometheus worker. Iterates
+   every host in the play's inventory group (not just this host -- Ansible
+   makes hostvars for the whole group available regardless of --limit),
+   collecting each host's xaisen_services list (same structure
+   deploy_one_service.yml loops over) and emitting one scrape target per
+   relay/signaling instance's PUBLIC sslip.io endpoint (the same
+   Caddy-fronted hostname RELAY_ENDPOINT_URL/ENDPOINT_URL already use --
+   see Caddyfile.j2). There is no private network between droplets, so
+   scraping happens over the public HTTPS endpoint, gated by the same
+   METRICS_AUTH_TOKEN bearer credential every worker's /metrics(/prom)
+   route checks.
+
+   cp-daemon/validator-daemon are NOT scraped here: they have no
+   SERVICE_PORTS entry and no Caddy site block (see cli/infra.py
+   SERVICE_PORTS, main.yml's xaisen_public_services selector), so their
+   new prom-client /metrics servers have no reachable address across
+   hosts today. Scraping them would require either publishing a host port
+   for them or a private inter-host network, neither of which exists yet
+   -- a known, unaddressed scope limit, not an oversight. #}
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: xaisen
+    scheme: https
+    metrics_path: /metrics/prom
+    authorization:
+      credentials: "{{ xaisen_metrics_auth_token }}"
+    static_configs:
+      - targets:
+{% for host in groups['xaisen'] %}
+{% for svc in hostvars[host].get('xaisen_services', []) %}
+{% if svc.service == 'relay' %}
+          - "{{ svc.worker_key | default(svc.service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"
+{% endif %}
+{% endfor %}
+{% endfor %}
+  - job_name: xaisen-signaling
+    scheme: https
+    metrics_path: /metrics
+    authorization:
+      credentials: "{{ xaisen_metrics_auth_token }}"
+    static_configs:
+      - targets:
+{% for host in groups['xaisen'] %}
+{% for svc in hostvars[host].get('xaisen_services', []) %}
+{% if svc.service == 'signaling' %}
+          - "{{ svc.worker_key | default(svc.service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"
+{% endif %}
+{% endfor %}
+{% endfor %}

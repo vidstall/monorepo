@@ -67,6 +67,58 @@
   no_log: true
   register: xaisen_wallet_credentials_write
 
+# Prometheus/Grafana are pinned upstream images (see cli/context.py
+# PINNED_IMAGES) with no keypair/cap/on-chain-endpoint concept -- they need
+# mounted CONFIG files instead, a need no other service has. Rendered/copied
+# here, before the docker_container task below, so they're in place before
+# the container (re)starts.
+- name: Ensure monitoring config directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  when: xaisen_service_item.service in ['prometheus', 'grafana']
+
+- name: Write Prometheus scrape config
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/prometheus.yml"
+    owner: root
+    group: root
+    mode: "0640"
+  when: xaisen_service_item.service == 'prometheus'
+  register: xaisen_prometheus_config_write
+
+- name: Write Grafana datasource provisioning
+  ansible.builtin.template:
+    src: grafana-datasource.yml.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/datasource.yml"
+    owner: root
+    group: root
+    mode: "0640"
+  when: xaisen_service_item.service == 'grafana'
+
+- name: Write Grafana dashboards-provisioning config
+  ansible.builtin.template:
+    src: grafana-dashboards-provider.yml.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards-provider.yml"
+    owner: root
+    group: root
+    mode: "0640"
+  when: xaisen_service_item.service == 'grafana'
+
+- name: Copy Grafana connection-quality dashboard JSON
+  ansible.builtin.copy:
+    src: grafana-dashboard-connection-quality.json
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboard-connection-quality.json"
+    owner: root
+    group: root
+    mode: "0640"
+  when: xaisen_service_item.service == 'grafana'
+  register: xaisen_grafana_dashboard_write
+
 # Each worker app expects its own differently-named keypair env var
 # (CP_KEYPAIR, SIGNALING_KEYPAIR, PRIVATE_KEY for relay, SUI_PRIVATE_KEY for
 # validator-daemon -- see loadKeypair() calls in each apps/*/src/index.ts),
@@ -159,7 +211,17 @@
     xaisen_relay_pipe_max: "{{ xaisen_relay_pipe_min | int + 99 }}"
   community.docker.docker_container:
     name: "xaisen-{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
-    image: "{{ xaisen_images[xaisen_service_item.service] }}:{{ xaisen_tags[xaisen_service_item.service] }}"
+    # Pinned upstream images (prometheus/grafana, see cli/context.py
+    # PINNED_IMAGES) are pulled straight from Docker Hub via
+    # xaisen_pinned_images -- they never go through cli/registry.py's
+    # build/push flow (no Dockerfile, no repo build context), so
+    # xaisen_images/xaisen_tags have no entry for them.
+    image: >-
+      {{
+        xaisen_pinned_images[xaisen_service_item.service]
+        if (xaisen_pinned_images is defined and xaisen_service_item.service in xaisen_pinned_images)
+        else (xaisen_images[xaisen_service_item.service] ~ ':' ~ xaisen_tags[xaisen_service_item.service])
+      }}
     # cli/registry.py tags images with the git short SHA, which is stable
     # across repeat `vidctl registry publish` runs on an uncommitted branch
     # -- without forcing a pull, a host that already has that tag cached
@@ -171,7 +233,13 @@
     # lets one colocated service be paused/restarted independently of
     # its siblings sharing the host.
     state: "{{ 'started' if xaisen_service_item.desired_state == 'running' else 'stopped' }}"
-    restart: "{{ (xaisen_container_state | default('started')) == 'restarted' or xaisen_wallet_credentials_write is changed }}"
+    restart: >-
+      {{
+        (xaisen_container_state | default('started')) == 'restarted'
+        or xaisen_wallet_credentials_write is changed
+        or (xaisen_prometheus_config_write is defined and xaisen_prometheus_config_write is changed)
+        or (xaisen_grafana_dashboard_write is defined and xaisen_grafana_dashboard_write is changed)
+      }}
     # UDP RTC/pipe ranges are offset per worker_index (100 ports apart) so
     # colocated relay replicas on the same host don't collide -- mirrors how
     # the TCP port below is offset in cli/infra.py's set_vm_defaults().
@@ -184,9 +252,26 @@
            if xaisen_service_item.service == 'relay' else [])
       }}
     env_file: "{{ (xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/service.env') if (xaisen_service_secrets_file.stat.exists | default(false)) else omit }}"
-    volumes:
-      - "{{ xaisen_services_root }}/runtime/contract:{{ xaisen_services_root }}/runtime/contract:ro"
-      - "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}:{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
+    volumes: >-
+      {{
+        [
+          xaisen_services_root ~ '/runtime/contract:' ~ xaisen_services_root ~ '/runtime/contract:ro',
+          xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ ':' ~ xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)),
+        ]
+        + (
+          [xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro']
+          if xaisen_service_item.service == 'prometheus' else []
+        )
+        + (
+          [
+            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro',
+            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/dashboards-provider.yml:/etc/grafana/provisioning/dashboards/dashboards-provider.yml:ro',
+            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/dashboard-connection-quality.json:/var/lib/grafana/dashboards/connection-quality.json:ro',
+            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/grafana-data:/var/lib/grafana',
+          ]
+          if xaisen_service_item.service == 'grafana' else []
+        )
+      }}
     # Joins the shared bridge network (main.yml) instead of Docker's default
     # bridge -- lets this container's Caddy TLS sidecar below reverse_proxy
     # to it by container name (only user-defined networks support
@@ -221,10 +306,18 @@
         | combine({'ANNOUNCED_IP': ansible_host} if xaisen_service_item.service == 'relay' else {})
         | combine({'RTC_MIN_PORT': xaisen_relay_rtc_min, 'RTC_MAX_PORT': xaisen_relay_rtc_max, 'PIPE_PORT_RANGE': xaisen_relay_pipe_min ~ '-' ~ xaisen_relay_pipe_max} if xaisen_service_item.service == 'relay' else {})
         | combine({'REGISTRATION_MODE': 'voting'} if xaisen_service_item.service in ['relay', 'signaling', 'validator-daemon'] else {})
+        | combine({'METRICS_AUTH_TOKEN': xaisen_metrics_auth_token} if (xaisen_metrics_auth_token | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
+        | combine({
+            'GF_SECURITY_ALLOW_EMBEDDING': 'true',
+            'GF_AUTH_ANONYMOUS_ENABLED': 'true',
+            'GF_AUTH_ANONYMOUS_ORG_ROLE': 'Viewer',
+            'GF_SECURITY_COOKIE_SAMESITE': 'none',
+            'GF_SERVER_ROOT_URL': 'https://' ~ xaisen_sslip_host ~ '/',
+          } if xaisen_service_item.service == 'grafana' else {})
       }}
-  when:
-    - xaisen_images is defined and xaisen_service_item.service in xaisen_images
-    - xaisen_tags is defined and xaisen_service_item.service in xaisen_tags
+  when: >-
+    (xaisen_pinned_images is defined and xaisen_service_item.service in xaisen_pinned_images)
+    or (xaisen_images is defined and xaisen_tags is defined and xaisen_service_item.service in xaisen_images and xaisen_service_item.service in xaisen_tags)
   no_log: true
 
 # NOTE: the TLS-terminating Caddy proxy for this service (if it's relay or

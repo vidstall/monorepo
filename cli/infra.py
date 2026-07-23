@@ -18,6 +18,7 @@ from .context import (
     CONTRACT_RUNTIME_DIR,
     DOCKER_SERVICES,
     GENERATED_INVENTORY,
+    PINNED_IMAGES,
     PULUMI_DIR,
     ROOT,
     RUNTIME_HISTORY_TOML,
@@ -40,7 +41,13 @@ REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "NETWORK_REGISTRY_ID")
 # daemons/CLIs, not client-facing servers. bot's port is its own HTTP
 # control API (POST/GET/DELETE /bots), which the admin dashboard calls
 # directly via Caddy -- not a media-plane port like relay/signaling.
-SERVICE_PORTS = {"signaling": 8080, "relay": 4000, "bot": 8095}
+# grafana's UI is reverse-proxied publicly the same way relay/signaling/bot
+# are (see Caddyfile.j2's xaisen_internal_ports map), so it also gets a
+# real published host port. prometheus has no entry here deliberately --
+# it's never publicly exposed, only reachable from grafana over xaisen-net
+# (see deploy_monitoring-adjacent Caddyfile.j2/main.yml changes), so
+# base_port stays 0 for it, same as cp-daemon/validator-daemon.
+SERVICE_PORTS = {"signaling": 8080, "relay": 4000, "bot": 8095, "grafana": 3000}
 VM_INSTANCE_SIZES = {
     "aws": "t3.micro",
     "gcp": "e2-micro",
@@ -264,6 +271,80 @@ def sync_bot_frontend_env(scenario: dict[str, Any]) -> bool:
     return changed
 
 
+def _read_or_generate_secret(path: Path, key: str) -> str:
+    """Shared read-or-generate-and-persist helper, same shape as
+    bot_control_token()'s inline logic, generalized so grafana_admin_password()
+    and metrics_auth_token() below don't each reimplement it."""
+    values = read_env_file(path)
+    value = values.get(key, "")
+    if value:
+        return value
+    value = py_secrets.token_urlsafe(32)
+    values[key] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(f"{k}={v}" for k, v in values.items()) + "\n",
+        encoding="utf-8",
+    )
+    return value
+
+
+def grafana_admin_password() -> str:
+    """Read (or generate + persist) Grafana's real admin login password,
+    from secrets/services/grafana.env -- the SAME file
+    deploy_one_service.yml's generic per-service secrets mechanism copies
+    into the grafana container's env_file for the `service = "grafana"`
+    worker (see PINNED_IMAGES), giving it a real GF_SECURITY_ADMIN_PASSWORD.
+    Used only for editing dashboards directly in Grafana's own UI, separate
+    from the anonymous-viewer role embedded panels use (see
+    GF_AUTH_ANONYMOUS_ENABLED in deploy_one_service.yml)."""
+    return _read_or_generate_secret(SERVICE_SECRETS_DIR / "grafana.env", "GF_SECURITY_ADMIN_PASSWORD")
+
+
+def metrics_auth_token() -> str:
+    """Read (or generate + persist) METRICS_AUTH_TOKEN -- the bearer token
+    gating every worker's Prometheus-format /metrics(/prom) scrape endpoint
+    and the admin's /metrics/summary polling, since Prometheus scrapes
+    every host over the public sslip.io endpoints (no private network
+    exists between droplets). Persisted in secrets/services/monitoring.env
+    (a pure persistence file -- unlike grafana.env/bot.env, nothing copies
+    it verbatim to a host; it's consumed as the xaisen_metrics_auth_token
+    Ansible var, injected into relay/signaling/cp-daemon/validator-daemon's
+    env and into Prometheus's own scrape config via prometheus.yml.j2).
+    Synced into the admin's VITE_METRICS_AUTH_TOKEN by
+    sync_grafana_frontend_env() below."""
+    return _read_or_generate_secret(SERVICE_SECRETS_DIR / "monitoring.env", "METRICS_AUTH_TOKEN")
+
+
+def sync_grafana_frontend_env(scenario: dict[str, Any]) -> bool:
+    """Mirror of sync_bot_frontend_env(), but for Grafana's embedded-panel
+    URL + the admin's metrics-summary bearer token. Client webapp doesn't
+    need either (it only ever calls relay's admission-gated /stats/report,
+    never the token-gated read endpoints), so only ADMIN_ENV_PATH is
+    touched. Only writes when the scenario declares a `service = "grafana"`
+    worker AND that worker's host has a resolved address -- call this AFTER
+    the topology reconcile loop, same ordering requirement as
+    sync_bot_frontend_env()."""
+    workers = scenario.get("workers", [])
+    grafana_worker = next((w for w in workers if w.get("service") == "grafana"), None)
+    if grafana_worker is None:
+        return False
+    address = host_address(str(grafana_worker.get("host", "")))
+    if not address:
+        return False
+    url = f"https://grafana.{address.replace('.', '-')}.sslip.io"
+    token = metrics_auth_token()
+    mapping = {"VITE_GRAFANA_URL": url, "VITE_METRICS_AUTH_TOKEN": token}
+    before = read_env_file(ADMIN_ENV_PATH)
+    was_current = before.get("VITE_GRAFANA_URL") == url and before.get("VITE_METRICS_AUTH_TOKEN") == token
+    changed = False
+    if sync_env_keys(ADMIN_ENV_PATH, mapping):
+        print(f"Synced Grafana URL -> {ADMIN_ENV_PATH}")
+        if not was_current:
+            changed = True
+    return changed
+
+
 def registry_status(host: str, worker_key: str, address: str) -> str:
     key_path = SSH_KEY_ROOT / host / "id_ed25519"
     if not address or not key_path.exists():
@@ -348,7 +429,10 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
         state = registry.read_runtime_registry()
     except ValueError as exc:
         print(f"Skipping docker image deployment: {exc}", file=sys.stderr)
-        return {}
+        # Pinned (prometheus/grafana) images never touch the private
+        # registry read above -- they can still deploy even when no
+        # registry provider has been logged into yet.
+        return {"xaisen_pinned_images": dict(PINNED_IMAGES), "xaisen_metrics_auth_token": metrics_auth_token()}
 
     # loadNetworkConfig() (services/worker/packages/shared/src/chain/client.ts)
     # reads PACKAGE_ID/NETWORK_REGISTRY_ID/etc. straight from process.env --
@@ -387,6 +471,8 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
         "xaisen_tags": state.deployed,
         "xaisen_registry_host": state.host,
         "xaisen_contract_values": contract_values,
+        "xaisen_pinned_images": dict(PINNED_IMAGES),
+        "xaisen_metrics_auth_token": metrics_auth_token(),
     }
     try:
         config = registry.provider_config(state.provider, require_credentials=True)
@@ -423,7 +509,7 @@ def control(
     worker_index: int = 1,
     region: str | None = None,
 ) -> int:
-    if service not in DOCKER_SERVICES:
+    if service not in DOCKER_SERVICES and service not in PINNED_IMAGES:
         print(f"Unknown service: {service}", file=sys.stderr)
         return 2
     if provider not in PROVIDERS:
@@ -722,7 +808,7 @@ def control_many(
         service = str(row["service"])
         worker_index = int(row.get("worker_index") or 1)
         worker_key = service if worker_index == 1 else f"{service}-{worker_index}"
-        if service not in DOCKER_SERVICES:
+        if service not in DOCKER_SERVICES and service not in PINNED_IMAGES:
             print(f"Unknown service: {service}", file=sys.stderr)
             return 2
         if service_backend(service) != "vm":

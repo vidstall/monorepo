@@ -54,6 +54,21 @@ DOCKER_SERVICES = {
 }
 DOCKERFILES = {name: WORKER_DIR / "apps" / name / "Dockerfile" for name in DOCKER_SERVICES}
 
+# Off-the-shelf upstream images, pulled directly rather than built/pushed
+# through cli/registry.py's private-registry flow (there's no Dockerfile,
+# no repo build context for these -- they're vendored images, not services
+# this repo builds). Deliberately NOT part of DOCKER_SERVICES: that dict
+# specifically means "repo-built, registry-tracked image", and
+# registry.py's read_runtime_registry()/each_service() assume every
+# DOCKER_SERVICES member has a real build context. deploy_one_service.yml's
+# "Run the service container" task resolves a pinned service's image
+# straight from this dict (via xaisen_pinned_images) instead of
+# xaisen_images/xaisen_tags.
+PINNED_IMAGES = {
+    "prometheus": "prom/prometheus:v2.53.0",
+    "grafana": "grafana/grafana:11.1.0",
+}
+
 
 def venv_bin(name: str) -> Path:
     return VENV_DIR / ("Scripts" if os.name == "nt" else "bin") / name

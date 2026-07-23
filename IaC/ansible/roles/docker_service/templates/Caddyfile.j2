@@ -1,24 +1,46 @@
-{# One site block per relay/signaling/bot instance colocated on this host.
-   Hostname must exactly match what deploy_one_service.yml injects as
+{# One site block per relay/signaling/bot/grafana instance colocated on this
+   host. Hostname must exactly match what deploy_one_service.yml injects as
    RELAY_ENDPOINT_URL/ENDPOINT_URL (wss://<worker_key>.<ip-dashed>.sslip.io)
-   or the cert Caddy obtains won't match what the client connects to. bot
-   has no such env var (it doesn't register an on-chain endpoint) -- its
-   hostname only needs to match what the admin's VITE_BOT_CONTROL_URL points
-   at.
+   or the cert Caddy obtains won't match what the client connects to. bot/
+   grafana have no such env var -- their hostname only needs to match what
+   the admin's VITE_BOT_CONTROL_URL/VITE_GRAFANA_URL point at.
 
-   The upstream target is each app's FIXED internal listen port (WS_PORT for
-   relay, SIGNALING_PORT for signaling, PORT for bot -- see
-   apps/relay/src/index.ts, apps/signaling/src/index.ts, apps/bot/src/
-   config.ts, none read an env var keyed off worker_index), NOT svc.port --
-   that field is the per-worker_index-offset HOST-published port
-   (cli/infra.py set_vm_defaults), which only matters for the
+   The main upstream target is each app's FIXED internal listen port
+   (WS_PORT for relay, SIGNALING_PORT for signaling, PORT for bot, grafana's
+   own port -- see apps/relay/src/index.ts, apps/signaling/src/index.ts,
+   apps/bot/src/config.ts, none read an env var keyed off worker_index),
+   NOT svc.port -- that field is the per-worker_index-offset HOST-published
+   port (cli/infra.py set_vm_defaults), which only matters for the
    docker_container ports: mapping. Caddy talks to the sibling container
    directly over the shared xaisen-net bridge, bypassing published host
    ports entirely, so every same-service replica on this host listens
-   internally on the SAME fixed port and needs the SAME upstream target. #}
-{% set xaisen_internal_ports = {'relay': 4000, 'signaling': 8080, 'bot': 8095} %}
+   internally on the SAME fixed port and needs the SAME upstream target.
+
+   relay/signaling additionally run a SEPARATE metrics HTTP server on its
+   own port (METRICS_PORT=4001, SIGNALING_METRICS_PORT=8083 -- a distinct
+   Node process listener, not the same server as WS_PORT/SIGNALING_PORT)
+   which has no published host port and no firewall rule of its own (see
+   IaC/pulumi/app/compute/digitalocean.py's per-svc.port inbound rules) --
+   it's reachable ONLY by path-routing a slice of this SAME public hostname
+   to that internal port, which is what xaisen_metrics_ports + the
+   handle blocks below do. Prometheus's scrape targets and the client's
+   POST /stats/report both go through this same public :443 hostname. #}
+{% set xaisen_internal_ports = {'relay': 4000, 'signaling': 8080, 'bot': 8095, 'grafana': 3000} %}
+{% set xaisen_metrics_ports = {'relay': 4001, 'signaling': 8083} %}
 {% for svc in xaisen_public_services %}
 {{ svc.worker_key | default(svc.service) }}.{{ ansible_host | replace('.', '-') }}.sslip.io {
+{% if svc.service in xaisen_metrics_ports %}
+    handle /metrics* {
+        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
+    }
+    handle /stats/* {
+        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
+    }
+    handle {
+        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_internal_ports[svc.service] }}
+    }
+{% else %}
     reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_internal_ports[svc.service] }}
+{% endif %}
 }
 {% endfor %}
