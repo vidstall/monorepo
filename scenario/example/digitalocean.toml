@@ -71,6 +71,16 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
+# Bot control server -- singleton (never colocate a second instance; the
+# admin dashboard's VITE_BOT_CONTROL_URL points at exactly one host). Test/
+# demo tool only, not part of network role economics -- see apps/bot/README.md.
+[[workers]]
+host = "node-1"
+service = "bot"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
 [[workers]]
 host = "node-2"
 service = "signaling"

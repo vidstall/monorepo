@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import secrets as py_secrets
 import shutil
 import subprocess
 import sys
@@ -11,7 +12,9 @@ from typing import Any
 import tomllib
 
 from .context import (
+    ADMIN_ENV_PATH,
     ANSIBLE_DIR,
+    CLIENT_ENV_PATH,
     CONTRACT_RUNTIME_DIR,
     DOCKER_SERVICES,
     GENERATED_INVENTORY,
@@ -19,10 +22,12 @@ from .context import (
     ROOT,
     RUNTIME_HISTORY_TOML,
     RUNTIME_TOPOLOGY_TOML,
+    SERVICE_SECRETS_DIR,
     command_env,
     contract_env_path,
     read_env_file,
     run,
+    sync_env_keys,
     venv_bin,
 )
 
@@ -32,8 +37,10 @@ SERVICE_BACKENDS = {service: "vm" for service in DOCKER_SERVICES}
 REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "NETWORK_REGISTRY_ID")
 # cp-daemon/validator-daemon have no externally-published port
 # (default 0 via SERVICE_PORTS.get(service, 0)) — they're chain-facing
-# daemons/CLIs, not client-facing servers.
-SERVICE_PORTS = {"signaling": 8080, "relay": 4000}
+# daemons/CLIs, not client-facing servers. bot's port is its own HTTP
+# control API (POST/GET/DELETE /bots), which the admin dashboard calls
+# directly via Caddy -- not a media-plane port like relay/signaling.
+SERVICE_PORTS = {"signaling": 8080, "relay": 4000, "bot": 8095}
 VM_INSTANCE_SIZES = {
     "aws": "t3.micro",
     "gcp": "e2-micro",
@@ -195,6 +202,66 @@ def host_address(host: str) -> str:
         return str(host_entry.get("ansible_host", ""))
     except (KeyError, TypeError, AttributeError):
         return ""
+
+
+def bot_control_token() -> str:
+    """Read (or generate + persist) BOT_CONTROL_TOKEN from
+    secrets/services/bot.env -- the SAME file deploy_one_service.yml's
+    generic per-service secrets mechanism already copies into the bot
+    container as its env_file (see "Copy per-service secrets file to host"),
+    so this is the single source of truth for the token on both ends: the
+    server reads it from the container's env, and sync_bot_frontend_env()
+    below reads this same file to push the matching value into the
+    frontends' VITE_BOT_CONTROL_TOKEN. Generated once, on first use."""
+    path = SERVICE_SECRETS_DIR / "bot.env"
+    values = read_env_file(path)
+    token = values.get("BOT_CONTROL_TOKEN", "")
+    if token:
+        return token
+    token = py_secrets.token_urlsafe(32)
+    values["BOT_CONTROL_TOKEN"] = token
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(f"{key}={value}" for key, value in values.items()) + "\n",
+        encoding="utf-8",
+    )
+    return token
+
+
+def sync_bot_frontend_env(scenario: dict[str, Any]) -> bool:
+    """Mirror of contract.sync_frontend_env(), but for the bot control
+    server's URL/token instead of contract object IDs -- bot has no
+    on-chain registry (test/demo tool only, see apps/bot/README.md), so
+    relay/signaling-style on-chain endpoint discovery isn't an option; the
+    admin dashboard needs a static VITE_BOT_CONTROL_URL/TOKEN instead.
+
+    Only writes when the scenario actually declares a `service = "bot"`
+    worker AND that worker's host has a resolved address (i.e. infra.control()/
+    control_many() already ran this apply -- call this AFTER the topology
+    reconcile loop, not before). Returns True if either value actually
+    changed, so the caller knows whether the frontend needs rebuilding --
+    Vite bakes VITE_* in at build time, so a stale build would keep pointing
+    at the old value even after this writes the new one to disk.
+    """
+    workers = scenario.get("workers", [])
+    bot_worker = next((w for w in workers if w.get("service") == "bot"), None)
+    if bot_worker is None:
+        return False
+    address = host_address(str(bot_worker.get("host", "")))
+    if not address:
+        return False
+    url = f"https://bot.{address.replace('.', '-')}.sslip.io"
+    token = bot_control_token()
+    mapping = {"VITE_BOT_CONTROL_URL": url, "VITE_BOT_CONTROL_TOKEN": token}
+    changed = False
+    for path in (CLIENT_ENV_PATH, ADMIN_ENV_PATH):
+        before = read_env_file(path)
+        was_current = before.get("VITE_BOT_CONTROL_URL") == url and before.get("VITE_BOT_CONTROL_TOKEN") == token
+        if sync_env_keys(path, mapping):
+            print(f"Synced bot control URL -> {path}")
+            if not was_current:
+                changed = True
+    return changed
 
 
 def registry_status(host: str, worker_key: str, address: str) -> str:
@@ -1024,11 +1091,11 @@ def set_vm_defaults(
 ) -> None:
     service = str(worker.get("service", ""))
     provider = str(worker.get("provider", ""))
-    # Only relay (4000) and signaling (8080) have a real listening port --
-    # cp-daemon/validator-daemon (SERVICE_PORTS has no entry for them, so
-    # base_port is 0) are exactly the services this count-prefix feature was
-    # built for and have zero port-collision risk regardless of replica
-    # count. For relay/signaling, offset each replica's host port by
+    # relay/signaling/bot have a real listening port -- cp-daemon/
+    # validator-daemon (SERVICE_PORTS has no entry for them, so base_port is
+    # 0) are exactly the services this count-prefix feature was built for
+    # and have zero port-collision risk regardless of replica count. For
+    # services with a real port, offset each replica's host port by
     # (worker_index - 1) so multiple workers on one droplet don't bind
     # the same port. NOTE: this does NOT extend to relay's hardcoded UDP RTC
     # ranges (10000-10100/40000-40100, see deploy_one_service.yml) -- running

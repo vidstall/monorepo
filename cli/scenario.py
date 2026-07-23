@@ -387,6 +387,28 @@ def apply(path_str: str, yes: bool) -> int:
                 )
                 return code
 
+    # Mirror of contract.sync_frontend_env() (run earlier, right after
+    # contract publish) but for the bot control server's URL/token -- bot
+    # has no on-chain registry to discover an endpoint from (test/demo tool
+    # only), so the frontends need a static VITE_BOT_CONTROL_URL/TOKEN
+    # instead. Must run AFTER the host_groups reconcile loop above: only
+    # then does infra.host_address() know the bot worker's actual droplet
+    # IP. Vite bakes VITE_* in at build time, so a stale build would still
+    # point at whatever URL/token was baked in last time -- rebuild+republish
+    # every frontend when the value actually changed (new bot host, or the
+    # very first time BOT_CONTROL_TOKEN gets generated).
+    if infra.sync_bot_frontend_env(scenario):
+        for frontend in scenario["frontends"]:
+            code = object_cmd.publish(frontend["name"], frontend["object"], frontend["provider"])
+            if code != 0:
+                write_lock(scenario_path_display, scenario_hash, env, "failed")
+                print(
+                    f"Scenario apply failed republishing frontend {frontend['name']}"
+                    f"@{frontend['provider']} after bot control env sync (exit {code}).",
+                    file=sys.stderr,
+                )
+                return code
+
     write_lock(scenario_path_display, scenario_hash, env, "active")
     print(f"Scenario '{scenario['name']}' applied: {len(to_kill)} removed, {len(to_start)} reconciled.")
     return 0

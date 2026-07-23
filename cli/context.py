@@ -27,6 +27,11 @@ RUNTIME_IMAGES_TOML = RUNTIME_DIR / "images.toml"
 SECRETS_DIR = ROOT / "secrets" / "cloud"
 REGISTRY_SECRETS_DIR = ROOT / "secrets" / "registry"
 WALLET_SECRETS_DIR = ROOT / "secrets" / "wallets"
+# Per-service secrets files consumed by deploy_one_service.yml's generic
+# "Copy per-service secrets file to host" task (secrets/services/<service>.env
+# -> that container's env_file). Currently only bot.env is vidctl-managed
+# (see infra.bot_control_token()); the mechanism itself is service-agnostic.
+SERVICE_SECRETS_DIR = ROOT / "secrets" / "services"
 ADMIN_WALLET_SECRETS_DIR = CLIENT_WEBUI_DIR / "admin" / "public" / ".secrets"
 CONTRACT_RUNTIME_DIR = RUNTIME_DIR / "contract"
 PULUMI_STATE_DIR = ROOT / "secrets" / "pulumi-state"
@@ -45,6 +50,7 @@ DOCKER_SERVICES = {
     "relay": WORKER_DIR,
     "signaling": WORKER_DIR,
     "validator-daemon": WORKER_DIR,
+    "bot": WORKER_DIR,
 }
 DOCKERFILES = {name: WORKER_DIR / "apps" / name / "Dockerfile" for name in DOCKER_SERVICES}
 

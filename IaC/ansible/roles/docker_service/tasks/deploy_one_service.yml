@@ -108,6 +108,7 @@
       signaling: SIGNALING_KEYPAIR
       cp-daemon: CP_KEYPAIR
       validator-daemon: SUI_PRIVATE_KEY
+      bot: PRIVATE_KEY
     # Set only when cli/wallet.py's checkout_wallet() found this wallet
     # already owns a Cap object on-chain (see wallet.py resolve_cap_id) --
     # tells each daemon's auto-register.ts to skip registration instead of
