@@ -290,6 +290,24 @@ def add_wallet_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
     )
     gc_parser.set_defaults(handler=lambda _args: wallet.gc())
 
+    retire_parser = actions.add_parser(
+        "retire",
+        help=(
+            "Permanently exclude a pooled wallet from future checkouts (e.g. its "
+            "miner_id has a permanent on-chain degraded/slashed history) and "
+            "release it from whatever worker currently holds it."
+        ),
+    )
+    retire_parser.add_argument("wallet", help="Wallet alias or address to retire.")
+    retire_parser.add_argument(
+        "--env",
+        choices=["devnet", "testnet", "mainnet"],
+        default="devnet",
+        help="Sui env the wallet pool belongs to. Default: devnet.",
+    )
+    retire_parser.add_argument("--reason", default="", help="Optional note, e.g. 'NodeDegraded level=2'.")
+    retire_parser.set_defaults(handler=lambda args: wallet.retire(args.wallet, args.env, args.reason))
+
 
 def add_object_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     parser = subparsers.add_parser("object", help="Publish static sites (e.g. the frontend) to object storage.")

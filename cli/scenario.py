@@ -341,7 +341,7 @@ def apply(path_str: str, yes: bool) -> int:
         row = wanted[key]
         host_groups.setdefault((row["host"], row["provider"]), []).append(key)
 
-    COLOCATE_PROVIDERS = {"digitalocean", "upcloud", "akamai"}
+    COLOCATE_PROVIDERS = {"digitalocean", "upcloud", "akamai", "azure"}
     for (host_name, host_provider), keys in host_groups.items():
         if len(keys) > 1 and host_provider in COLOCATE_PROVIDERS and all(
             infra.service_backend(wanted[key]["service"]) == "vm" for key in keys

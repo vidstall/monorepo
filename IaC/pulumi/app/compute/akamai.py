@@ -1,7 +1,25 @@
+import hashlib
 from typing import Any
 
 from ..common.regions import provider_region
 from ..models import TopologyInstance
+
+
+def _firewall_label(name: str) -> str:
+    """Linode Firewall labels are capped at 32 chars -- unlike the Instance
+    label (64 chars), "xaisen-{name}-fw" overflows for longer host names
+    (e.g. image_bake.py's auto-generated "bake-akamai-<region>-<timestamp>"
+    names). Truncate + hash-suffix to stay under the limit while keeping
+    distinct names from colliding."""
+    label = f"xaisen-{name}-fw"
+    if len(label) <= 32:
+        return label
+    digest = hashlib.sha1(name.encode()).hexdigest()[:6]
+    # Linode also rejects consecutive separators ("--", "__", ".."), so a
+    # truncation landing right after a hyphen (e.g. "...us-" + "-<digest>")
+    # must have its trailing separator stripped before rejoining.
+    truncated = name[:15].rstrip("-_.")
+    return f"xaisen-{truncated}-{digest}-fw"
 
 
 def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
@@ -17,8 +35,17 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         if instance.get("service")
         else []
     )
+    # Linode's Firewall API now rejects an inbound rule with no explicit
+    # `addresses` ("[400] rules.inbound[0].addresses] Must be one of: ipv4,
+    # ipv6") -- it no longer defaults to allow-all, so every rule below must
+    # set ipv4s/ipv6s explicitly (open to the world, matching this fleet's
+    # other providers which rely on the app-level auth instead of network
+    # ACLs for these ports).
+    open_v4, open_v6 = ["0.0.0.0/0"], ["::/0"]
     inbounds = [
-        linode.FirewallInboundArgs(action="ACCEPT", label="ssh", protocol="TCP", ports="22"),
+        linode.FirewallInboundArgs(
+            action="ACCEPT", label="ssh", protocol="TCP", ports="22", ipv4s=open_v4, ipv6s=open_v6
+        ),
     ]
     seen_ports: set[int] = set()
     for svc in services:
@@ -31,6 +58,8 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                     label=f"port-{port}",
                     protocol="TCP",
                     ports=str(port),
+                    ipv4s=open_v4,
+                    ipv6s=open_v6,
                 )
             )
     if any(svc.get("service") == "relay" for svc in services):
@@ -39,7 +68,9 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         # port-publish change in docker_service/tasks/main.yml.
         for label, ports in (("relay-rtc", "10000-10100"), ("relay-pipe", "40000-40100")):
             inbounds.append(
-                linode.FirewallInboundArgs(action="ACCEPT", label=label, protocol="UDP", ports=ports)
+                linode.FirewallInboundArgs(
+                    action="ACCEPT", label=label, protocol="UDP", ports=ports, ipv4s=open_v4, ipv6s=open_v6
+                )
             )
     if any(svc.get("service") in ("relay", "signaling") for svc in services):
         # Each relay/signaling instance gets a Caddy TLS sidecar (see
@@ -49,7 +80,9 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         # traffic clients connect to.
         for label, port in (("http", 80), ("https", 443)):
             inbounds.append(
-                linode.FirewallInboundArgs(action="ACCEPT", label=label, protocol="TCP", ports=str(port))
+                linode.FirewallInboundArgs(
+                    action="ACCEPT", label=label, protocol="TCP", ports=str(port), ipv4s=open_v4, ipv6s=open_v6
+                )
             )
 
     region = provider_region("akamai", instance)
@@ -71,7 +104,7 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     )
     linode.Firewall(
         f"{name}-vm-fw",
-        label=f"xaisen-{name}-fw",
+        label=_firewall_label(name),
         inbound_policy="DROP",
         outbound_policy="ACCEPT",
         inbounds=inbounds,

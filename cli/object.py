@@ -179,7 +179,10 @@ def missing_object_storage_provider_keys(provider: str) -> list[str]:
         "digitalocean": ("DIGITALOCEAN_TOKEN",),
         "alibaba": ("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABA_CLOUD_ACCESS_KEY_SECRET", "ALIBABA_CLOUD_REGION"),
         "gcp": (),
-        "azure": (),
+        # Same ambient azure-native provider auth compute VM provisioning
+        # already uses (IaC/pulumi/app/compute/azure.py) -- no separate
+        # object-storage credential exists for Azure.
+        "azure": ("ARM_CLIENT_ID", "ARM_CLIENT_SECRET", "ARM_SUBSCRIPTION_ID", "ARM_TENANT_ID"),
         "tencent": (),
     }.get(provider, ())
     return [key for key in required if not env.get(key)]

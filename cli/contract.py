@@ -46,6 +46,7 @@ FRONTEND_ENV_KEY_MAP: dict[str, str] = {
     "ROOM_MANAGER_ID": "VITE_ROOM_MANAGER_ID",
     "SIGNALING_REGISTRY_ID": "VITE_SIGNALING_REGISTRY_ID",
     "ROLE_VOTE_BOX_ID": "VITE_ROLE_VOTE_BOX_ID",
+    "LIVENESS_VOTE_BOX_ID": "VITE_LIVENESS_VOTE_BOX_ID",
 }
 
 
@@ -257,6 +258,7 @@ def publish(
     network_registry_id = parse_created_object_id(publish_result, "NetworkRegistry")
     miner_store_id = parse_created_object_id(publish_result, "MinerStore")
     role_vote_box_id = parse_created_object_id(publish_result, "RoleVoteBox")
+    liveness_vote_box_id = parse_created_object_id(publish_result, "LivenessVoteBox")
     if not admin_cap_id:
         print("Could not determine AdminCap object ID from publish.", file=sys.stderr)
         return 1
@@ -282,6 +284,7 @@ def publish(
         "NETWORK_REGISTRY_ID": network_registry_id or "",
         "MINER_STORE_ID": miner_store_id or "",
         "ROLE_VOTE_BOX_ID": role_vote_box_id or "",
+        "LIVENESS_VOTE_BOX_ID": liveness_vote_box_id or "",
         **registries,
     }
     write_kv_env_file(contract_env_path(env), new_deployment)
@@ -396,6 +399,25 @@ def upgrade_existing(
     package_id = parse_published_package_id(upgrade_result) or package_id
     upgrade_tx_digest = parse_transaction_digest(upgrade_result)
 
+    # A module ADDED in this upgrade (e.g. liveness_voting) has its `init` run as
+    # part of the SAME upgrade transaction, auto-creating any shared object it
+    # declares -- same as a fresh publish, just discovered in objectChanges here
+    # instead. Falls back to whatever was already recorded (a no-op re-upgrade
+    # after the object already exists, or an env that hasn't upgraded yet).
+    liveness_vote_box_id = parse_created_object_id(upgrade_result, "LivenessVoteBox") or deployment.get(
+        "LIVENESS_VOTE_BOX_ID", ""
+    )
+    # Sui pins an event struct's type to whichever package FIRST DEFINED it,
+    # forever -- not the latest upgraded package. liveness_voting was added in
+    # a later upgrade than the package's original publish, so daemons need
+    # THIS upgrade's package_id (the one where LivenessVoteBox was actually
+    # created) to filter its events, not CONTRACT_ORIGINAL_PACKAGE_ID. Captured
+    # once, on the upgrade that creates it, then carried forward unchanged --
+    # same pattern as CONTRACT_ORIGINAL_PACKAGE_ID.
+    liveness_voting_origin_package_id = deployment.get("LIVENESS_VOTING_ORIGIN_PACKAGE_ID", "")
+    if not liveness_voting_origin_package_id and parse_created_object_id(upgrade_result, "LivenessVoteBox"):
+        liveness_voting_origin_package_id = package_id
+
     registries = {env_key: deployment[env_key] for _, _, _, env_key in REGISTRY_CREATE_SPECS if deployment.get(env_key)}
     if missing_registry_keys:
         created = create_registries(package_id, deployment["CONTRACT_ADMIN_CAP_ID"], gas_budget)
@@ -408,6 +430,7 @@ def upgrade_existing(
         "CONTRACT_CHAIN_ID": deployment.get("CONTRACT_CHAIN_ID", ""),
         "CONTRACT_PACKAGE_ID": package_id,
         "CONTRACT_ORIGINAL_PACKAGE_ID": deployment.get("CONTRACT_ORIGINAL_PACKAGE_ID", deployment["CONTRACT_PACKAGE_ID"]),
+        "LIVENESS_VOTING_ORIGIN_PACKAGE_ID": liveness_voting_origin_package_id,
         "CONTRACT_UPGRADE_CAP_ID": upgrade_cap_id,
         "CONTRACT_DEPLOYER_ADDRESS": deployment.get("CONTRACT_DEPLOYER_ADDRESS", ""),
         "CONTRACT_PUBLISH_TX_DIGEST": deployment.get("CONTRACT_PUBLISH_TX_DIGEST", ""),
@@ -416,6 +439,7 @@ def upgrade_existing(
         "NETWORK_REGISTRY_ID": deployment.get("NETWORK_REGISTRY_ID", ""),
         "MINER_STORE_ID": deployment.get("MINER_STORE_ID", ""),
         "ROLE_VOTE_BOX_ID": deployment.get("ROLE_VOTE_BOX_ID", ""),
+        "LIVENESS_VOTE_BOX_ID": liveness_vote_box_id,
         **registries,
     }
     write_kv_env_file(contract_env_path(env), new_deployment)

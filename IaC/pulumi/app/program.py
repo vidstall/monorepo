@@ -17,8 +17,8 @@ def _group_vm_workers(
 ) -> tuple[dict[str, TopologyInstance], dict[str, TopologyInstance]]:
     """Merge topology rows sharing a VM `host` into one instance per host.
 
-    Colocation-capable providers only (currently digitalocean, upcloud, and
-    akamai): multiple topology rows can share a `host` to colocate several
+    Colocation-capable providers only (currently digitalocean, upcloud,
+    akamai, and azure): multiple topology rows can share a `host` to colocate several
     worker services on one VM (each `vidctl infra start --host X --service Y` call
     writes its own row). Calling create_vm_instance() once per raw row would
     create duplicate Pulumi resource URNs (`{host}-vm`, `{host}-vm-key`,
@@ -39,7 +39,7 @@ def _group_vm_workers(
         groups.setdefault(str(worker.get("host")), []).append(worker)
 
     for host, rows in groups.items():
-        if len(rows) == 1 or rows[0].get("provider") not in ("digitalocean", "upcloud", "akamai"):
+        if len(rows) == 1 or rows[0].get("provider") not in ("digitalocean", "upcloud", "akamai", "azure"):
             # Original behavior, preserved exactly: one create_vm_instance
             # call per row (out of scope for this fix to change).
             for index, row in enumerate(rows):

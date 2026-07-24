@@ -40,6 +40,12 @@ def frontend_site_url(
     if provider == "tencent":
         return os.getenv("TENCENT_COS_PUBLIC_URL", "")
     if provider == "azure":
+        # The real endpoint is only known once StorageAccount.primary_endpoints
+        # resolves during a Pulumi apply (see frontend/azure.py's create_site(),
+        # which exports it as f"{name}_azure_static_url" via `pulumi stack
+        # output`) -- not derivable synchronously here. AZURE_STATIC_WEBSITE_URL
+        # is an operator-set override for scripts/tooling that need the URL
+        # without shelling out to `pulumi stack output`.
         return os.getenv("AZURE_STATIC_WEBSITE_URL", "")
     return ""
 
@@ -76,6 +82,9 @@ def create_frontend_site(instance: TopologyInstance) -> dict[str, Any]:
         objects = create_site(instance, bucket_name, desired_state)
     elif provider == "cloudflare":
         from .cloudflare import create_site
+        objects = create_site(instance, bucket_name, desired_state)
+    elif provider == "azure":
+        from .azure import create_site
         objects = create_site(instance, bucket_name, desired_state)
     else:
         objects = create_metadata_only_site(instance, bucket_name, desired_state)

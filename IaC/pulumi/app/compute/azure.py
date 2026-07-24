@@ -32,10 +32,20 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     from pulumi_azure_native import compute, network
 
     name = instance["host"]
-    port = int(instance.get("port") or 0)
+    # `services` is set for colocated hosts (program.py's group-by-name merge, same
+    # convention as digitalocean.py/akamai.py/upcloud.py) -- fall back to the singular
+    # service/port pair for a single-service instance.
+    services = instance.get("services") or (
+        [{"service": instance.get("service", ""), "port": int(instance.get("port") or 0)}]
+        if instance.get("service")
+        else []
+    )
     location = provider_region("azure", instance)
     instance["region"] = location
     resource_group, subnet = shared_network(location)
+    # NSG rules need a unique name + strictly increasing priority (100-4096) each --
+    # unlike DO's flat inbound-rule list, so priorities are assigned in increments of
+    # 10 starting after the SSH rule to leave room.
     security_rules = [
         network.SecurityRuleArgs(
             name="allow-ssh",
@@ -49,20 +59,66 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
             destination_address_prefix="*",
         ),
     ]
-    if port:
-        security_rules.append(
-            network.SecurityRuleArgs(
-                name="allow-service-port",
-                priority=110,
-                direction="Inbound",
-                access="Allow",
-                protocol="Tcp",
-                source_port_range="*",
-                destination_port_range=str(port),
-                source_address_prefix="*",
-                destination_address_prefix="*",
+    next_priority = 110
+    seen_ports: set[int] = set()
+    for svc in services:
+        port = int(svc.get("port") or 0)
+        if port and port not in seen_ports:
+            seen_ports.add(port)
+            security_rules.append(
+                network.SecurityRuleArgs(
+                    name=f"allow-port-{port}",
+                    priority=next_priority,
+                    direction="Inbound",
+                    access="Allow",
+                    protocol="Tcp",
+                    source_port_range="*",
+                    destination_port_range=str(port),
+                    source_address_prefix="*",
+                    destination_address_prefix="*",
+                )
             )
-        )
+            next_priority += 10
+    # relay's mediasoup RTC/pipe transports -- see digitalocean.py's create_vm() for
+    # the shared rationale (per-worker_index 100-port-wide UDP window). NSG supports
+    # a port RANGE natively via destination_port_range, no per-port expansion needed.
+    for svc in services:
+        if svc.get("service") != "relay":
+            continue
+        offset = (int(svc.get("index") or 1) - 1) * 100
+        for base in (10000, 40000):
+            security_rules.append(
+                network.SecurityRuleArgs(
+                    name=f"allow-relay-udp-{base + offset}",
+                    priority=next_priority,
+                    direction="Inbound",
+                    access="Allow",
+                    protocol="Udp",
+                    source_port_range="*",
+                    destination_port_range=f"{base + offset}-{base + offset + 99}",
+                    source_address_prefix="*",
+                    destination_address_prefix="*",
+                )
+            )
+            next_priority += 10
+    if any(svc.get("service") in ("relay", "signaling") for svc in services):
+        # Each relay/signaling instance gets a Caddy TLS sidecar -- port 80 for the
+        # ACME HTTP-01 challenge, port 443 for the actual wss:// traffic.
+        for tls_port in (80, 443):
+            security_rules.append(
+                network.SecurityRuleArgs(
+                    name=f"allow-tls-{tls_port}",
+                    priority=next_priority,
+                    direction="Inbound",
+                    access="Allow",
+                    protocol="Tcp",
+                    source_port_range="*",
+                    destination_port_range=str(tls_port),
+                    source_address_prefix="*",
+                    destination_address_prefix="*",
+                )
+            )
+            next_priority += 10
     nsg = network.NetworkSecurityGroup(
         f"{name}-vm-nsg",
         resource_group_name=resource_group.name,

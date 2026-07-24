@@ -94,6 +94,26 @@ def checkout_wallet(
 
     for entry in wallets:
         if _matches(entry, host, service, provider, worker_index):
+            if entry.get("retired"):
+                # This worker's previously-bound wallet was flagged (see
+                # retire_wallet()) since its last checkout -- e.g. its
+                # miner_id picked up a permanent on-chain NodeDegraded(level=2)
+                # history, which makes SelfShutdownWatcher self-terminate on
+                # EVERY future boot (services/worker/packages/chain-event-listener/
+                # src/self-shutdown-watcher.ts: a fresh subscriber with no local
+                # cursor replays the module's full event history from genesis,
+                # so this isn't fixable by clearing local state -- the wallet
+                # itself must never be reused). Release the binding instead of
+                # matching, so this call falls through to the free-wallet pick
+                # below and this worker "logs out" of the bad wallet before
+                # "logging in" with a clean one.
+                entry["assigned_host"] = ""
+                entry["assigned_service"] = ""
+                entry["assigned_provider"] = ""
+                entry["assigned_worker_index"] = 0
+                entry["assigned_at"] = ""
+                entry["released_at"] = _timestamp()
+                break
             faucet_if_needed(entry, env_name)
             resolve_cap_id(entry, service, env_name)
             _write_pool(env_name, pool)
@@ -105,6 +125,7 @@ def checkout_wallet(
         if not entry.get("assigned_host")
         and entry.get("registered_role", "") in ("", service)
         and not entry.get("role_mismatch")
+        and not entry.get("retired")
     ]
     created = False
     if free:
@@ -131,6 +152,9 @@ def checkout_wallet(
             "registered_role": "",
             "cap_id": "",
             "cap_id_package": "",
+            "retired": False,
+            "retired_at": "",
+            "retired_reason": "",
         }
         wallets.append(entry)
         created = True
@@ -161,6 +185,37 @@ def release_wallet(
     pool = _read_pool(env_name)
     for entry in pool.get("wallets", []):
         if _matches(entry, host, service, provider, worker_index):
+            entry["assigned_host"] = ""
+            entry["assigned_service"] = ""
+            entry["assigned_provider"] = ""
+            entry["assigned_worker_index"] = 0
+            entry["assigned_at"] = ""
+            entry["released_at"] = _timestamp()
+            _write_pool(env_name, pool)
+            return entry
+    return None
+
+
+def retire_wallet(identifier: str, env_name: str, reason: str = "") -> dict[str, Any] | None:
+    """Permanently exclude a pooled wallet from future checkouts (by alias or
+    address). Registration on-chain is one-time and permanent, and a wallet
+    whose miner_id has picked up a permanent NodeDegraded(level=2)/RelaySlashed
+    history will re-trigger SelfShutdownWatcher on every future boot no matter
+    which worker it's assigned to (a fresh subscriber replays that module's
+    full on-chain event history from genesis when it has no local cursor --
+    see self-shutdown-watcher.ts -- so there is no local fix). Retiring is the
+    only real remedy: the wallet record is kept (never deleted, matching
+    release_wallet()'s "never on-chain cleanup" contract) but permanently
+    skipped by checkout_wallet()'s free-wallet filter, and any worker
+    currently bound to it is released so its next checkout draws a
+    different (or freshly minted) wallet instead. Returns the retired entry,
+    or None if no wallet matched `identifier`."""
+    pool = _read_pool(env_name)
+    for entry in pool.get("wallets", []):
+        if identifier in (entry.get("alias"), entry.get("address")):
+            entry["retired"] = True
+            entry["retired_at"] = _timestamp()
+            entry["retired_reason"] = reason
             entry["assigned_host"] = ""
             entry["assigned_service"] = ""
             entry["assigned_provider"] = ""
@@ -224,15 +279,29 @@ def list_pool(env_name: str | None) -> int:
         print("No pooled wallets yet.")
         return 0
     for env, entries in status.items():
-        free = sum(1 for entry in entries if not entry.get("assigned_host"))
-        print(f"[{env}] {len(entries)} wallet(s), {free} free, {len(entries) - free} assigned")
+        retired = sum(1 for entry in entries if entry.get("retired"))
+        free = sum(1 for entry in entries if not entry.get("assigned_host") and not entry.get("retired"))
+        assigned = len(entries) - free - retired
+        print(f"[{env}] {len(entries)} wallet(s), {free} free, {assigned} assigned, {retired} retired")
         for entry in entries:
-            if entry.get("assigned_host"):
+            if entry.get("retired"):
+                reason = entry.get("retired_reason") or "unspecified"
+                state = f"RETIRED ({reason})"
+            elif entry.get("assigned_host"):
                 state = f"assigned -> {entry['assigned_host']}/{entry['assigned_service']}/{entry['assigned_provider']}"
             else:
                 role = entry.get("registered_role", "")
                 state = f"free (pinned: {role})" if role else "free (unpinned)"
             print(f"  {entry.get('alias', '(no alias)')}  {entry['address']}  {state}")
+    return 0
+
+
+def retire(identifier: str, env_name: str, reason: str) -> int:
+    entry = retire_wallet(identifier, env_name, reason)
+    if entry is None:
+        print(f"No wallet matching '{identifier}' in [{env_name}].", file=sys.stderr)
+        return 1
+    print(f"Retired {entry.get('alias', '(no alias)')}  {entry['address']}")
     return 0
 
 

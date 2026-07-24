@@ -509,7 +509,11 @@ def control(
     worker_index: int = 1,
     region: str | None = None,
 ) -> int:
-    if service not in DOCKER_SERVICES and service not in PINNED_IMAGES:
+    # Lazy import: image_bake.py imports `infra` at module load time, so a
+    # top-level import here would be circular.
+    from .image_bake import BAKE_SERVICE
+
+    if service not in DOCKER_SERVICES and service not in PINNED_IMAGES and service != BAKE_SERVICE:
         print(f"Unknown service: {service}", file=sys.stderr)
         return 2
     if provider not in PROVIDERS:
@@ -539,7 +543,7 @@ def control(
         record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
         return 1
 
-    if backend == "vm" and action in {"start", "restart"} and provider not in {"digitalocean", "upcloud", "akamai"}:
+    if backend == "vm" and action in {"start", "restart"} and provider not in {"digitalocean", "upcloud", "akamai", "azure"}:
         other_active = any(
             item.get("host") == host
             and item.get("provider") == provider
@@ -552,9 +556,9 @@ def control(
         if worker_index > 1 or other_active:
             message = (
                 f"Colocating multiple service workers on one --host is only supported for "
-                f"--provider digitalocean, --provider upcloud, or --provider akamai (got --provider "
-                f"{provider}). Use a separate --host per worker, or redeploy this worker with "
-                "--provider digitalocean, upcloud, or akamai."
+                f"--provider digitalocean, --provider upcloud, --provider akamai, or --provider azure "
+                f"(got --provider {provider}). Use a separate --host per worker, or redeploy this "
+                "worker with --provider digitalocean, upcloud, akamai, or azure."
             )
             print(message, file=sys.stderr)
             record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
@@ -769,11 +773,11 @@ def control_many(
     if provider not in PROVIDERS:
         print(f"Unknown provider: {provider}", file=sys.stderr)
         return 2
-    if len(rows) > 1 and provider not in {"digitalocean", "upcloud", "akamai"}:
+    if len(rows) > 1 and provider not in {"digitalocean", "upcloud", "akamai", "azure"}:
         message = (
             f"Colocating multiple service workers on one --host is only supported for "
-            f"--provider digitalocean, --provider upcloud, or --provider akamai (got --provider "
-            f"{provider})."
+            f"--provider digitalocean, --provider upcloud, --provider akamai, or --provider azure "
+            f"(got --provider {provider})."
         )
         print(message, file=sys.stderr)
         return 1
@@ -808,7 +812,9 @@ def control_many(
         service = str(row["service"])
         worker_index = int(row.get("worker_index") or 1)
         worker_key = service if worker_index == 1 else f"{service}-{worker_index}"
-        if service not in DOCKER_SERVICES and service not in PINNED_IMAGES:
+        from .image_bake import BAKE_SERVICE
+
+        if service not in DOCKER_SERVICES and service not in PINNED_IMAGES and service != BAKE_SERVICE:
             print(f"Unknown service: {service}", file=sys.stderr)
             return 2
         if service_backend(service) != "vm":

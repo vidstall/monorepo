@@ -375,17 +375,42 @@ def _stop_and_create_image(provider: str, address: str, region: str, resource_id
         return True, out.strip(), ""
 
     if provider == "akamai":
-        # UNVERIFIED -- confirm exact linode-cli flags before relying on this
-        # for a real bake (pulumi_linode/linode-cli were not available to
-        # confirm locally).
         code, _, err = run_capture(["linode-cli", "linodes", "shutdown", resource_id])
         if code != 0:
-            return False, "", f"linode-cli linodes shutdown failed (unverified command): {err}"
+            return False, "", f"linode-cli linodes shutdown failed: {err}"
+        # shutdown is async (schedules a job) -- poll until the Linode
+        # actually reports offline before snapshotting its disk, mirroring
+        # aws/gcp's explicit stop-then-wait pattern above.
+        for _ in range(24):
+            code, out, err = run_capture(
+                ["linode-cli", "linodes", "view", resource_id, "--text", "--no-headers", "--format", "status"]
+            )
+            if code == 0 and out.strip() == "offline":
+                break
+            time.sleep(5)
+        else:
+            return False, "", f"Linode {resource_id} did not reach 'offline' status in time: {err}"
+        # `images create` snapshots a specific disk, not the Linode itself --
+        # resolve the boot disk id (excluding the swap disk) rather than
+        # passing the Linode's own id.
         code, out, err = run_capture(
-            ["linode-cli", "images", "create", "--disk_id", resource_id, "--label", image_name, "--text", "--no-headers", "--format", "id"]
+            ["linode-cli", "linodes", "disks-list", resource_id, "--text", "--no-headers", "--format", "id,filesystem"]
         )
         if code != 0 or not out.strip():
-            return False, "", f"linode-cli images create failed (unverified command): {err}"
+            return False, "", f"linode-cli linodes disks-list failed: {err}"
+        disk_id = ""
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[1].strip().lower() != "swap":
+                disk_id = parts[0].strip()
+                break
+        if not disk_id:
+            return False, "", f"Could not resolve a non-swap disk id from disks-list output: {out}"
+        code, out, err = run_capture(
+            ["linode-cli", "images", "create", "--disk_id", disk_id, "--label", image_name, "--text", "--no-headers", "--format", "id"]
+        )
+        if code != 0 or not out.strip():
+            return False, "", f"linode-cli images create failed: {err}"
         return True, out.strip().splitlines()[0], ""
 
     return False, "", f"No image-creation path implemented for provider '{provider}'."
