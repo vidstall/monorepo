@@ -31,4 +31,10 @@ def cloud_credentials() -> dict[str, object]:
         "cloudflare": bool(
             os.getenv("CLOUDFLARE_API_TOKEN") and os.getenv("CLOUDFLARE_ACCOUNT_ID")
         ),
+        "oci": bool(
+            os.getenv("OCI_TENANCY_OCID")
+            and os.getenv("OCI_USER_OCID")
+            and os.getenv("OCI_FINGERPRINT")
+            and os.getenv("OCI_PRIVATE_KEY")
+        ),
     }

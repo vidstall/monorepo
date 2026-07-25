@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -18,18 +19,42 @@ from .context import RUNTIME_IMAGES_TOML, command_env
 # unverified for upcloud/akamai) native stop+create-image CLI path. Distinct
 # from infra.PROVIDERS, which also includes tencent (no VM support at all)
 # and cloudflare (no compute product) -- neither can ever be baked.
-SUPPORTED_PROVIDERS = ("aws", "gcp", "azure", "alibaba", "digitalocean", "upcloud", "akamai")
+#
+# "azure" deliberately excluded -- confirmed live: a managed image captured
+# from a bake VM boots fine on the SAME SKU it was captured from in theory,
+# but Azure rejected it outright on a real "Standard_D2als_v7" VM with
+# InvalidParameter "cannot boot with OS image or disk ... disk controller
+# types", something the stock Canonical marketplace image never hits (3/3
+# hosts using the stock image booted clean). Combined with the per-region
+# LowPriorityCores quota making every bake attempt in an already-occupied
+# region fail outright anyway, baking buys Azure nothing here -- every host
+# just uses the stock image (Ansible installs Docker fresh at first boot,
+# same as it always has for azure-node-1..3).
+SUPPORTED_PROVIDERS = ("aws", "gcp", "alibaba", "digitalocean", "upcloud", "akamai", "oci")
 
-# Best-effort fallback region to auto-bake into when a caller (e.g.
-# cli/scenario.py's apply()) needs to ensure an image exists but the target
-# instance doesn't have a resolved region yet (nothing persisted from a
-# prior deploy, and the scenario file didn't set one explicitly). Mirrors
-# IaC/pulumi/app/common/regions.py's _DEFAULTS -- duplicated deliberately
-# rather than imported, since that module lives under the separate Pulumi
-# program's Python path; NOT the source of truth for an actual VM's region
-# (provider_region() inside the Pulumi program still decides that), only for
-# picking where to bake by default. gcp uses its zone default (matches
+# Env var override per provider -- MUST mirror IaC/pulumi/app/common/
+# regions.py's _ENV_KEYS exactly (same names, duplicated rather than
+# imported since that module lives under the separate Pulumi program's
+# Python path). Verified live: without this, a scenario worker that relies
+# on an env override instead of an explicit per-worker `region` (e.g.
+# azure-node-1 via secrets/cloud/azure.env's AZURE_LOCATION=eastus2) baked
+# into the WRONG region ("eastus", the bare hardcoded default) -- wasting a
+# full bake cycle on a region nothing in the scenario actually targets.
+_BAKE_REGION_ENV_KEYS = {
+    "aws": "AWS_REGION",
+    "gcp": "GCP_REGION",
+    "azure": "AZURE_LOCATION",
+    "alibaba": "ALIBABA_CLOUD_REGION",
+    "digitalocean": "DIGITALOCEAN_REGION",
+    "upcloud": "UPCLOUD_ZONE",
+    "akamai": "AKAMAI_REGION",
+}
+
+# Bare-literal fallback region, used only when neither an explicit
+# scenario-file `region` nor the env var above is set. Mirrors
+# regions.py's _DEFAULTS. gcp uses its zone default (matches
 # provider_zone(), not _DEFAULTS["gcp"]="US" which is a different concern).
+# oci has no known env-var convention yet, so it stays a bare literal.
 DEFAULT_BAKE_REGIONS = {
     "aws": "us-east-1",
     "gcp": "us-central1-a",
@@ -38,6 +63,7 @@ DEFAULT_BAKE_REGIONS = {
     "digitalocean": "nyc3",
     "upcloud": "fi-hel1",
     "akamai": "us-east",
+    "oci": "us-ashburn-1",
 }
 
 BAKE_SERVICE = "__bake__"
@@ -71,6 +97,16 @@ rm -f /root/.bash_history
 
 # Azure requires Linux deprovisioning before `az vm generalize` -- run this
 # right before shutdown, azure-only.
+#
+# `waagent -deprovision+user` deletes the very login account (azureuser) the
+# SSH session is authenticated as -- verified live that systemd's PAM session
+# handling kills the whole login session (and everything under it, including
+# backgrounded/nohup/setsid/disowned children -- systemd's user-session scope
+# doesn't spare them) the moment that account is removed, not just the
+# foreground process. So there is no way to keep this SSH round-trip alive
+# for its own exit code; Microsoft's own docs describe this exact "the
+# connection to the VM will be lost" behavior as normal. See the ssh_run()
+# call below: its result is deliberately NOT treated as fatal.
 AZURE_DEPROVISION_SCRIPT = "waagent -deprovision+user -force"
 
 
@@ -140,7 +176,9 @@ def write_runtime_image(provider: str, region: str, image_id: str, base_image: s
 def lookup_image(provider: str, region: str) -> str | None:
     """Find a baked image for (provider, region), with two provider-specific
     special cases: gcp images are project-global (not region-scoped), and
-    akamai images auto-replicate across regions -- see plan doc for both."""
+    akamai images auto-replicate across regions -- see plan doc for both.
+    oci images are region- AND compartment-scoped (unlike akamai), so they
+    deliberately do NOT get the any-region fallback -- exact match only."""
     images = read_runtime_images()
     if provider == "gcp":
         entry = images.get(image_key("gcp", "global"))
@@ -197,10 +235,19 @@ def provider_cli_env() -> dict[str, str]:
     aliases = {
         "DIGITALOCEAN_ACCESS_TOKEN": "DIGITALOCEAN_TOKEN",  # doctl
         "LINODE_CLI_TOKEN": "LINODE_TOKEN",  # linode-cli
+        "OCI_CLI_TENANCY": "OCI_TENANCY_OCID",  # oci cli
+        "OCI_CLI_USER": "OCI_USER_OCID",
+        "OCI_CLI_FINGERPRINT": "OCI_FINGERPRINT",
+        "OCI_CLI_REGION": "OCI_REGION",
     }
     for new_key, old_key in aliases.items():
         if env.get(old_key) and not env.get(new_key):
             env[new_key] = env[old_key]
+    # OCI_PRIVATE_KEY stores the PEM inline with literal "\n" line breaks
+    # (secrets/cloud/*.env is parsed one KEY=VALUE per line); the oci CLI's
+    # inline-key env var (OCI_CLI_KEY_CONTENT) expects real newlines.
+    if env.get("OCI_PRIVATE_KEY") and not env.get("OCI_CLI_KEY_CONTENT"):
+        env["OCI_CLI_KEY_CONTENT"] = env["OCI_PRIVATE_KEY"].replace("\\n", "\n")
     return env
 
 
@@ -214,7 +261,16 @@ def run_capture(args: list[str], *, timeout: int | None = None) -> tuple[int, st
         return 1, "", str(exc)
 
 
-def ssh_run(address: str, key_path: Path, script: str, *, timeout: int = 300) -> tuple[int, str, str]:
+def ssh_run(
+    address: str, key_path: Path, script: str, *, user: str = "root", timeout: int = 300
+) -> tuple[int, str, str]:
+    # Non-root logins (Azure "azureuser", AWS/GCP/OCI "ubuntu") can't run the
+    # bootstrap/deprovision scripts (apt-get, systemctl, waagent) directly --
+    # route through passwordless sudo, which cloud-init default users have by
+    # design. Root logins (digitalocean/upcloud/akamai/alibaba) run the
+    # script directly, unchanged, since some of those minimal bake images
+    # don't even have a `sudo` binary installed.
+    remote_cmd = "bash -s" if user == "root" else "sudo -n bash -s"
     try:
         result = subprocess.run(
             [
@@ -222,8 +278,8 @@ def ssh_run(address: str, key_path: Path, script: str, *, timeout: int = 300) ->
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "ConnectTimeout=15",
                 "-i", str(key_path),
-                f"root@{address}",
-                "bash -s",
+                f"{user}@{address}",
+                remote_cmd,
             ],
             input=script,
             capture_output=True,
@@ -237,7 +293,9 @@ def ssh_run(address: str, key_path: Path, script: str, *, timeout: int = 300) ->
         return 1, "", str(exc)
 
 
-def wait_for_ssh(address: str, key_path: Path, *, attempts: int = 24, delay_seconds: float = 5.0) -> bool:
+def wait_for_ssh(
+    address: str, key_path: Path, *, user: str = "root", attempts: int = 24, delay_seconds: float = 5.0
+) -> bool:
     """Poll until sshd on a freshly-created VM actually accepts connections.
 
     Cloud APIs commonly report a VM as active with an IP assigned well
@@ -254,7 +312,7 @@ def wait_for_ssh(address: str, key_path: Path, *, attempts: int = 24, delay_seco
                 "-o", "ConnectTimeout=8",
                 "-o", "BatchMode=yes",
                 "-i", str(key_path),
-                f"root@{address}",
+                f"{user}@{address}",
                 "true",
             ],
             timeout=12,
@@ -307,19 +365,70 @@ def _stop_and_create_image(provider: str, address: str, region: str, resource_id
         return True, out.strip(), ""
 
     if provider == "azure":
-        # resource_id here is the deterministic VM name azure.py now sets
-        # (f"{name}-vm"); all azure VMs share the "xaisen-rg" resource
-        # group (azure.py's shared_network(), also now given a deterministic
-        # name) rather than an autogenerated one.
-        resource_group = "xaisen-rg"
+        # resource_id here is the deterministic VM name azure.py sets
+        # (f"{name}-vm"). Resource group naming MUST mirror azure.py's
+        # shared_network()/_LEGACY_LOCATION exactly: "eastus2" (the region
+        # azure-node-1 was originally deployed in, before multi-region
+        # support existed) keeps the bare legacy "xaisen-rg" name; every
+        # other region gets its own "xaisen-rg-{region}" group. Verified
+        # live: hardcoding the bare name unconditionally 404'd baking in
+        # westus2, since that bake VM actually landed in "xaisen-rg-westus2".
+        resource_group = "xaisen-rg" if region == "eastus2" else f"xaisen-rg-{region}"
         code, _, err = run_capture(["az", "vm", "deallocate", "--resource-group", resource_group, "--name", resource_id])
         if code != 0:
             return False, "", f"az vm deallocate failed: {err}"
         code, _, err = run_capture(["az", "vm", "generalize", "--resource-group", resource_group, "--name", resource_id])
         if code != 0:
             return False, "", f"az vm generalize failed: {err}"
+        # The image MUST NOT live in the same resource group as the bake VM
+        # (resource_group above) -- verified live: bake()'s own post-bake
+        # teardown removes the bake host's topology row and re-runs
+        # `pulumi up`, which then sees NOTHING in topology still needing that
+        # region's shared network (azure.py's shared_network()), so it
+        # deletes the whole per-region ResourceGroup/VNet/Subnet -- cascading
+        # the image's deletion too, since deleting a resource group deletes
+        # every resource inside it regardless of what created it (the image
+        # is plain `az` output, entirely untracked by Pulumi). All 3 images
+        # baked in one run vanished this way before this fix.
+        #
+        # Fix: put every region's image in its own Pulumi-unmanaged
+        # "xaisen-images-<region>" resource group instead -- Pulumi never
+        # touches these (doesn't know they exist), so they survive every
+        # reconcile regardless of topology state. One shared RG across
+        # regions does NOT work, though (confirmed live): unlike a plain
+        # resource, a managed image is region-bound to its resource group --
+        # `az image create` rejects a source VM whose region doesn't match
+        # the target RG's location with "Source Virtual Machine ... does not
+        # exist in this Azure location", even though the VM is real and the
+        # RG itself accepts resources from anywhere. So the RG's location
+        # must equal `region` here, which also means each region needs its
+        # own RG (a second `az group create` call with a different
+        # `--location` against an already-existing RG name is separately
+        # rejected outright -- a resource group's location can't change).
+        # `--source` needs the VM's full ARM resource ID (not just its bare
+        # name) since it's no longer in the same resource group as `-g`.
+        images_rg = f"xaisen-images-{region}"
+        code, _, err = run_capture(["az", "group", "create", "--name", images_rg, "--location", region])
+        if code != 0:
+            return False, "", f"az group create (images RG) failed: {err}"
+        code, vm_id, err = run_capture(
+            ["az", "vm", "show", "--resource-group", resource_group, "--name", resource_id, "--query", "id", "-o", "tsv"]
+        )
+        if code != 0 or not vm_id.strip():
+            return False, "", f"az vm show (resolving full VM id) failed: {err}"
+        # --hyper-v-generation is required -- verified live: `az image create`
+        # defaults to V1 and rejects a Gen2 source VM with a mismatch error.
+        # azure.py's create_vm() always uses the "22_04-lts-gen2" SKU, so the
+        # source is unconditionally Gen2, never V1.
         code, out, err = run_capture(
-            ["az", "image", "create", "--resource-group", resource_group, "--name", image_name, "--source", resource_id, "--query", "id", "-o", "tsv"]
+            [
+                "az", "image", "create",
+                "--resource-group", images_rg,
+                "--name", image_name,
+                "--source", vm_id.strip(),
+                "--hyper-v-generation", "V2",
+                "--query", "id", "-o", "tsv",
+            ]
         )
         if code != 0 or not out.strip():
             return False, "", f"az image create failed: {err}"
@@ -363,16 +472,41 @@ def _stop_and_create_image(provider: str, address: str, region: str, resource_id
         return False, "", f"Could not find snapshot '{image_name}' in doctl compute image list output."
 
     if provider == "upcloud":
-        # UNVERIFIED -- confirm exact upctl subcommands/flags before relying
-        # on this for a real bake (pulumi_upcloud/upctl were not available to
-        # confirm locally).
+        # Verified live against the UpCloud API (2026-07-25): `resource_id` is
+        # the SERVER's UUID (persisted by upcloud.py::create_vm), but
+        # `upctl storage clone` needs the boot DISK's own UUID, which is a
+        # different identifier -- `upctl server show <server-uuid> -o json`
+        # resolves it via storage_devices[].storage. create_vm() always
+        # attaches exactly one disk to a bake VM, so there's no ambiguity to
+        # resolve (its `boot_disk` field is unreliably "0" even when it's the
+        # server's only disk -- don't filter on it, just take the one device).
         code, _, err = run_capture(["upctl", "server", "stop", resource_id, "--wait"])
         if code != 0:
-            return False, "", f"upctl server stop failed (unverified command): {err}"
-        code, out, err = run_capture(["upctl", "storage", "clone", resource_id, "--title", image_name, "--zone", region])
+            return False, "", f"upctl server stop failed: {err}"
+        code, out, err = run_capture(["upctl", "server", "show", resource_id, "-o", "json"])
         if code != 0 or not out.strip():
-            return False, "", f"upctl storage clone failed (unverified command): {err}"
-        return True, out.strip(), ""
+            return False, "", f"upctl server show failed while resolving boot disk: {err}"
+        try:
+            devices = json.loads(out).get("storage_devices") or []
+            storage_id = devices[0]["storage"] if devices else None
+        except (json.JSONDecodeError, KeyError, IndexError) as exc:
+            return False, "", f"Could not parse boot disk from 'upctl server show' output: {exc}"
+        if not storage_id:
+            return False, "", "No storage device found on bake server to clone"
+        # `-o json` is required to get a parseable UUID back -- plain/human
+        # output only prints "Cloning storage ... done" progress text, no ID
+        # (verified live: with -o json, that progress text goes to stderr and
+        # stdout is clean single-object JSON with a `uuid` field).
+        code, out, err = run_capture(
+            ["upctl", "storage", "clone", storage_id, "--title", image_name, "--zone", region, "-o", "json"]
+        )
+        if code != 0 or not out.strip():
+            return False, "", f"upctl storage clone failed: {err}"
+        try:
+            new_storage_id = json.loads(out)["uuid"]
+        except (json.JSONDecodeError, KeyError) as exc:
+            return False, "", f"Could not parse cloned storage UUID from 'upctl storage clone' output: {exc}"
+        return True, new_storage_id, ""
 
     if provider == "akamai":
         code, _, err = run_capture(["linode-cli", "linodes", "shutdown", resource_id])
@@ -413,14 +547,43 @@ def _stop_and_create_image(provider: str, address: str, region: str, resource_id
             return False, "", f"linode-cli images create failed: {err}"
         return True, out.strip().splitlines()[0], ""
 
+    if provider == "oci":
+        code, _, err = run_capture(["oci", "compute", "instance", "action", "--instance-id", resource_id, "--action", "STOP"])
+        if code != 0:
+            return False, "", f"oci compute instance action --action STOP failed: {err}"
+        for _ in range(24):
+            code, out, err = run_capture(
+                ["oci", "compute", "instance", "get", "--instance-id", resource_id, "--query", "data.\"lifecycle-state\"", "--raw-output"]
+            )
+            if code == 0 and out.strip() == "STOPPED":
+                break
+            time.sleep(5)
+        else:
+            return False, "", f"OCI instance {resource_id} did not reach 'STOPPED' state in time: {err}"
+        code, out, err = run_capture(
+            ["oci", "compute", "image", "create", "--instance-id", resource_id, "--display-name", image_name, "--query", "data.id", "--raw-output"]
+        )
+        if code != 0 or not out.strip():
+            return False, "", f"oci compute image create failed: {err}"
+        return True, out.strip(), ""
+
     return False, "", f"No image-creation path implemented for provider '{provider}'."
 
 
 def resolve_bake_region(provider: str, region: str | None) -> str:
     """Pick the region to check/bake for when the caller doesn't already
     have a resolved one (e.g. a first-ever deploy with nothing persisted to
-    topology.toml yet). Explicit region wins; otherwise DEFAULT_BAKE_REGIONS."""
-    return region or DEFAULT_BAKE_REGIONS.get(provider, "")
+    topology.toml yet). Explicit region wins; otherwise the same env-var
+    override provider_region() itself would apply; otherwise
+    DEFAULT_BAKE_REGIONS."""
+    if region:
+        return region
+    env_key = _BAKE_REGION_ENV_KEYS.get(provider)
+    if env_key:
+        override = command_env().get(env_key)
+        if override:
+            return override
+    return DEFAULT_BAKE_REGIONS.get(provider, "")
 
 
 def ensure_image(provider: str, region: str | None) -> tuple[bool, str]:
@@ -509,15 +672,21 @@ def bake(provider: str, region: str, yes: bool) -> int:
         )
 
     key_path = infra.SSH_KEY_ROOT / host / "id_ed25519"
+    # Azure/AWS/GCP don't allow root SSH logins (create_vm() configures a
+    # cloud-init default user instead -- azureuser/ubuntu) -- see
+    # inventory.py's ansible_user propagation. Resolve it the same way the
+    # real Ansible deploy path does, instead of the old hardcoded "root"
+    # that only ever worked for digitalocean/upcloud/akamai/alibaba.
+    ssh_user = infra.host_ssh_user(host)
     print(f"Waiting for SSH on {address} ...")
-    if not wait_for_ssh(address, key_path):
+    if not wait_for_ssh(address, key_path, user=ssh_user):
         return _abort(
             f"Bake VM '{host}' ({address}) never became SSH-reachable. Left in place for inspection.",
             remove_row=False,
         )
 
     print(f"Bootstrapping Docker on {address} ...")
-    ssh_code, ssh_out, ssh_err = ssh_run(address, key_path, BOOTSTRAP_SCRIPT)
+    ssh_code, ssh_out, ssh_err = ssh_run(address, key_path, BOOTSTRAP_SCRIPT, user=ssh_user)
     if ssh_code != 0:
         return _abort(
             f"Bake VM '{host}' ({address}) bootstrap script failed (exit {ssh_code}): {ssh_err or ssh_out}. "
@@ -530,12 +699,18 @@ def bake(provider: str, region: str, yes: bool) -> int:
             docker_version = line.split("Docker version", 1)[-1].split(",")[0].strip()
 
     if provider == "azure":
-        ssh_code, _, ssh_err = ssh_run(address, key_path, AZURE_DEPROVISION_SCRIPT)
+        # A dropped connection here (exit 255, "Connection reset by peer" /
+        # "kex_exchange_identification") is the EXPECTED outcome, not a
+        # failure -- see AZURE_DEPROVISION_SCRIPT's comment. Only a clean
+        # non-zero exit with real stderr (e.g. a genuine command error) is
+        # worth surfacing; still non-fatal, since the subsequent `az vm
+        # deallocate` call is the real gate and will fail loudly on its own
+        # if the VM is actually in a bad state.
+        ssh_code, _, ssh_err = ssh_run(address, key_path, AZURE_DEPROVISION_SCRIPT, user=ssh_user)
         if ssh_code != 0:
-            return _abort(
-                f"Bake VM '{host}' ({address}) azure deprovision step failed (exit {ssh_code}): {ssh_err}. "
-                "Left in place for inspection.",
-                remove_row=False,
+            print(
+                f"Azure deprovision SSH round-trip ended without a clean exit (code {ssh_code}: {ssh_err.strip()}) "
+                "-- expected, since deprovisioning tears down its own session. Continuing.",
             )
 
     resource_id = str(resolved.get("resource_id") or host)

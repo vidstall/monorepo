@@ -1,0 +1,106 @@
+name = "upcloud-devnet-sample"
+env = "devnet"
+
+[contract]
+gas_budget = ""
+create_registry_if_missing = false
+force = false
+
+# Reuse the DigitalOcean-hosted registry -- images are already published there
+# (scenario/example/digitalocean.toml); pushing the same images to a second,
+# separately-billed registry would be pure waste. UpCloud instances just pull
+# from it like any other host.
+[registry]
+provider = "digitalocean"
+tag = ""
+
+[[workers]]
+host = "upcloud-node-1"
+service = "signaling"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-1"
+service = "relay"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-1"
+service = "cp-daemon"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-1"
+service = "validator-daemon"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-2"
+service = "signaling"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-2"
+service = "relay"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-2"
+service = "cp-daemon"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-2"
+service = "validator-daemon"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-3"
+service = "cp-daemon"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-3"
+service = "cp-daemon"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 2
+
+[[workers]]
+host = "upcloud-node-3"
+service = "validator-daemon"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-4"
+service = "validator-daemon"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 1
+
+[[workers]]
+host = "upcloud-node-4"
+service = "validator-daemon"
+provider = "upcloud"
+size = "2xCPU-4GB"
+worker_index = 2

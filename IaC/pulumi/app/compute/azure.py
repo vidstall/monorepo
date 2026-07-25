@@ -3,28 +3,49 @@ from typing import Any
 from ..common.regions import provider_region
 from ..models import TopologyInstance
 
-_NETWORK: dict[str, Any] = {}
+_NETWORKS: dict[str, dict[str, Any]] = {}
+
+# "eastus2" already has LIVE resources under these exact bare (unsuffixed)
+# Pulumi logical names -- azure-node-1 was deployed before this module
+# supported multiple regions. Renaming its ResourceGroup's logical name would
+# make Pulumi delete-then-recreate it, cascading a real, currently-running
+# VM's destruction. Every OTHER region gets a location-suffixed name (see
+# below) since there's no legacy resource to stay compatible with.
+_LEGACY_LOCATION = "eastus2"
 
 
 def shared_network(location: str):
-    if _NETWORK:
-        return _NETWORK["resource_group"], _NETWORK["subnet"]
+    # Keyed by location -- NOT a single global singleton. Azure's per-region
+    # LowPriorityCores quota (verified live: a 4-host scenario hit
+    # "OperationNotAllowed ... Current Limit: 3" on its 2nd host in the same
+    # region) means hosts get spread across regions, and a VM's NIC must be
+    # in the same region as its VNet -- reusing one region's network for a
+    # different-region VM would hard-fail (or worse, silently misplace it).
+    cached = _NETWORKS.get(location)
+    if cached:
+        return cached["resource_group"], cached["subnet"]
     from pulumi_azure_native import network, resources
 
-    resource_group = resources.ResourceGroup("xaisen-rg", resource_group_name="xaisen-rg", location=location)
+    if location == _LEGACY_LOCATION:
+        rg_name, vnet_name, subnet_name = "xaisen-rg", "xaisen-vnet", "xaisen-subnet"
+    else:
+        rg_name = f"xaisen-rg-{location}"
+        vnet_name = f"xaisen-vnet-{location}"
+        subnet_name = f"xaisen-subnet-{location}"
+    resource_group = resources.ResourceGroup(rg_name, resource_group_name=rg_name, location=location)
     vnet = network.VirtualNetwork(
-        "xaisen-vnet",
+        vnet_name,
         resource_group_name=resource_group.name,
         location=location,
         address_space=network.AddressSpaceArgs(address_prefixes=["10.10.0.0/16"]),
     )
     subnet = network.Subnet(
-        "xaisen-subnet",
+        subnet_name,
         resource_group_name=resource_group.name,
         virtual_network_name=vnet.name,
         address_prefix="10.10.1.0/24",
     )
-    _NETWORK.update(resource_group=resource_group, subnet=subnet)
+    _NETWORKS[location] = {"resource_group": resource_group, "subnet": subnet}
     return resource_group, subnet
 
 
@@ -193,6 +214,18 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                     version="latest",
                 )
             ),
+            # Explicit, not left to Azure's auto-selection -- confirmed live:
+            # azure-node-4 (westeurope) failed VM creation outright with
+            # "Standard_D2als_v7 cannot boot with OS image or disk ... disk
+            # controller types" even though the marketplace image supports
+            # both SCSI and NVMe and the SKU supports NVMe (confirmed via
+            # `az vm list-skus`/`az vm image show`) -- auto-selection is
+            # apparently not reliable across every region. NVMe is the only
+            # type every region checked (eastus2/westus2/centralus/
+            # westeurope) supports for this SKU, and the marketplace image
+            # supports it everywhere too, so pinning it removes the
+            # ambiguity without narrowing what actually works.
+            disk_controller_type=compute.DiskControllerTypes.NV_ME,
         ),
         network_profile=compute.NetworkProfileArgs(
             network_interfaces=[

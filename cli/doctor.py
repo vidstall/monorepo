@@ -24,6 +24,9 @@ def run() -> int:
         "tencent_credentials": bool(env.get("TENCENTCLOUD_SECRET_ID") and env.get("TENCENTCLOUD_SECRET_KEY")),
         "cloudflare_credentials": bool(env.get("CLOUDFLARE_API_TOKEN") and env.get("CLOUDFLARE_ACCOUNT_ID")),
         "cloudflare_r2_credentials": bool(env.get("CLOUDFLARE_R2_ACCESS_KEY_ID") and env.get("CLOUDFLARE_R2_SECRET_ACCESS_KEY")),
+        "oci_credentials": bool(
+            env.get("OCI_TENANCY_OCID") and env.get("OCI_USER_OCID") and env.get("OCI_FINGERPRINT") and env.get("OCI_PRIVATE_KEY")
+        ),
         "registry_provider_files": REGISTRY_SECRETS_DIR.exists() and any(REGISTRY_SECRETS_DIR.glob("*.env")),
         "mitogen_strategy_plugins": bool(mitogen_strategy_path()),
     }
@@ -42,6 +45,7 @@ def run() -> int:
         "doctl_cli (image-bake)": shutil.which("doctl") is not None,
         "upctl_cli (image-bake)": shutil.which("upctl") is not None,
         "linode_cli (image-bake)": shutil.which("linode-cli") is not None,
+        "oci_cli (image-bake)": shutil.which("oci") is not None,
     }
     for name, ok in optional_checks.items():
         print(f"{name}: {'ok' if ok else 'missing'}")
@@ -50,7 +54,7 @@ def run() -> int:
         imports = (
             "import ansible, ansible_mitogen, pulumi, pulumi_alicloud, "
             "pulumi_aws, pulumi_azure_native, pulumi_digitalocean, pulumi_gcp, "
-            "pulumi_tencentcloud, pulumi_upcloud, pulumi_linode, yaml"
+            "pulumi_tencentcloud, pulumi_upcloud, pulumi_linode, pulumi_oci, yaml"
         )
         checks["python_dependencies"] = subprocess.call([str(venv_bin("python")), "-c", imports], cwd=ROOT, env=env) == 0
     else:

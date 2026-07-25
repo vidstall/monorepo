@@ -113,6 +113,7 @@ def command_env() -> dict[str, str]:
     env.update(read_env_file(SECRETS_DIR / "upcloud.env"))
     env.update(read_env_file(SECRETS_DIR / "akamai.env"))
     env.update(read_env_file(SECRETS_DIR / "alibaba.env"))
+    env.update(read_env_file(SECRETS_DIR / "oci.env"))
     env.update(read_env_file(SECRETS_DIR / "tencent.env"))
     env.update(read_env_file(SECRETS_DIR / "cloudflare.env"))
 

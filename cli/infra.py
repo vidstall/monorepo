@@ -33,7 +33,7 @@ from .context import (
 )
 
 NETWORKS = ("devnet", "testnet", "mainnet")
-PROVIDERS = ("aws", "gcp", "azure", "alibaba", "digitalocean", "upcloud", "akamai", "tencent", "cloudflare")
+PROVIDERS = ("aws", "gcp", "azure", "alibaba", "digitalocean", "upcloud", "akamai", "tencent", "cloudflare", "oci")
 SERVICE_BACKENDS = {service: "vm" for service in DOCKER_SERVICES}
 REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "NETWORK_REGISTRY_ID")
 # cp-daemon/validator-daemon have no externally-published port
@@ -64,6 +64,9 @@ VM_INSTANCE_SIZES = {
     "tencent": "S5.SMALL1",
     "upcloud": "1xCPU-1GB",
     "akamai": "g6-nanode-1",
+    # Fixed (non-flex) shape, Always-Free-eligible -- avoids OCI's
+    # shape_config OCPU/memory sizing complexity for the default case.
+    "oci": "VM.Standard.E2.1.Micro",
 }
 # Per-(provider, service) override, for cases where a role needs more
 # headroom than the provider's cheapest default (e.g. relay/mediasoup under
@@ -209,6 +212,27 @@ def host_address(host: str) -> str:
         return str(host_entry.get("ansible_host", ""))
     except (KeyError, TypeError, AttributeError):
         return ""
+
+
+def host_ssh_user(host: str) -> str:
+    """SSH login user Pulumi's create_vm() configured for this host (root,
+    azureuser, ubuntu, ...) -- see inventory.py's `ansible_user` propagation
+    from each compute/<provider>.py's create_vm() return value. Defaults to
+    "root" (every non-Azure/AWS/GCP provider today) if the inventory hasn't
+    been generated yet or the entry is missing ansible_user.
+    """
+    try:
+        import yaml
+    except ImportError:
+        return "root"
+    if not GENERATED_INVENTORY.exists():
+        return "root"
+    try:
+        data = yaml.safe_load(GENERATED_INVENTORY.read_text(encoding="utf-8"))
+        host_entry = data["all"]["children"]["xaisen"]["hosts"].get(host, {})
+        return str(host_entry.get("ansible_user") or "root")
+    except (KeyError, TypeError, AttributeError):
+        return "root"
 
 
 def bot_control_token() -> str:
@@ -543,7 +567,7 @@ def control(
         record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
         return 1
 
-    if backend == "vm" and action in {"start", "restart"} and provider not in {"digitalocean", "upcloud", "akamai", "azure"}:
+    if backend == "vm" and action in {"start", "restart"} and provider not in {"digitalocean", "upcloud", "akamai", "azure", "oci"}:
         other_active = any(
             item.get("host") == host
             and item.get("provider") == provider
@@ -556,9 +580,9 @@ def control(
         if worker_index > 1 or other_active:
             message = (
                 f"Colocating multiple service workers on one --host is only supported for "
-                f"--provider digitalocean, --provider upcloud, --provider akamai, or --provider azure "
-                f"(got --provider {provider}). Use a separate --host per worker, or redeploy this "
-                "worker with --provider digitalocean, upcloud, akamai, or azure."
+                f"--provider digitalocean, --provider upcloud, --provider akamai, --provider azure, or "
+                f"--provider oci (got --provider {provider}). Use a separate --host per worker, or "
+                "redeploy this worker with --provider digitalocean, upcloud, akamai, azure, or oci."
             )
             print(message, file=sys.stderr)
             record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
@@ -773,11 +797,11 @@ def control_many(
     if provider not in PROVIDERS:
         print(f"Unknown provider: {provider}", file=sys.stderr)
         return 2
-    if len(rows) > 1 and provider not in {"digitalocean", "upcloud", "akamai", "azure"}:
+    if len(rows) > 1 and provider not in {"digitalocean", "upcloud", "akamai", "azure", "oci"}:
         message = (
             f"Colocating multiple service workers on one --host is only supported for "
-            f"--provider digitalocean, --provider upcloud, --provider akamai, or --provider azure "
-            f"(got --provider {provider})."
+            f"--provider digitalocean, --provider upcloud, --provider akamai, --provider azure, or "
+            f"--provider oci (got --provider {provider})."
         )
         print(message, file=sys.stderr)
         return 1
@@ -1134,6 +1158,13 @@ def missing_vm_provider_keys(provider: str) -> list[str]:
         "upcloud": ("UPCLOUD_TOKEN",),
         "akamai": ("LINODE_TOKEN",),
         "tencent": ("TENCENTCLOUD_SECRET_ID", "TENCENTCLOUD_SECRET_KEY", "TENCENTCLOUD_REGION"),
+        "oci": (
+            "OCI_TENANCY_OCID",
+            "OCI_USER_OCID",
+            "OCI_FINGERPRINT",
+            "OCI_PRIVATE_KEY",
+            "OCI_COMPARTMENT_OCID",
+        ),
     }.get(provider, ())
     return [key for key in required if not env.get(key)]
 

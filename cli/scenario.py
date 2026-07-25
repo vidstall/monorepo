@@ -327,9 +327,19 @@ def apply(path_str: str, yes: bool) -> int:
     for provider, region in needed_regions:
         ok, error_message = image_bake.ensure_image(provider, region)
         if not ok:
-            write_lock(scenario_path_display, scenario_hash, env, "failed")
-            print(f"Scenario apply failed ensuring a golden image: {error_message}", file=sys.stderr)
-            return 1
+            # Best-effort only -- a golden image is a boot-time optimization
+            # (skips installing Docker at first boot), not a functional
+            # requirement; Ansible still installs it on a stock image.
+            # Aborting the whole apply over e.g. a quota-blocked bake VM
+            # would refuse to (re)start workers that don't actually need
+            # baking to work (confirmed live: azure-node-1 has run fine
+            # without one since its region's temp-bake-VM quota headroom is
+            # consumed by azure-node-1 itself).
+            print(
+                f"Warning: could not ensure a golden image for {provider}:{region} "
+                f"({error_message}); continuing with the stock image.",
+                file=sys.stderr,
+            )
 
     # Group by (host, provider): colocated services on the same host go
     # through infra.control_many() -- one pulumi_up()+inventory()+configure()
@@ -341,7 +351,7 @@ def apply(path_str: str, yes: bool) -> int:
         row = wanted[key]
         host_groups.setdefault((row["host"], row["provider"]), []).append(key)
 
-    COLOCATE_PROVIDERS = {"digitalocean", "upcloud", "akamai", "azure"}
+    COLOCATE_PROVIDERS = {"digitalocean", "upcloud", "akamai", "azure", "oci"}
     for (host_name, host_provider), keys in host_groups.items():
         if len(keys) > 1 and host_provider in COLOCATE_PROVIDERS and all(
             infra.service_backend(wanted[key]["service"]) == "vm" for key in keys

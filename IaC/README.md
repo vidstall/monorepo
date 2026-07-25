@@ -21,6 +21,7 @@ Credential files are read automatically; do not manually export them.
 - `secrets/cloud/upcloud.env`: expects `UPCLOUD_TOKEN`.
 - `secrets/cloud/akamai.env`: expects `LINODE_TOKEN` (Akamai Cloud Compute is provisioned via the Linode API).
 - `secrets/cloud/alibaba.env`: supports `ALICLOUD_*` cloud variables for the Alibaba admin account.
+- `secrets/cloud/oci.env`: expects `OCI_TENANCY_OCID`, `OCI_USER_OCID`, `OCI_FINGERPRINT`, `OCI_COMPARTMENT_OCID`, and `OCI_PRIVATE_KEY` (the API signing key's PEM content, inline -- not a file path -- with real newlines escaped as literal `\n` since this file is parsed one `KEY=VALUE` per line). Optional `OCI_REGION` (default `us-ashburn-1`).
 - `secrets/cloud/cloudflare.env`: expects `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and for R2 uploads `CLOUDFLARE_R2_ACCESS_KEY_ID` / `CLOUDFLARE_R2_SECRET_ACCESS_KEY`.
 - `secrets/registry/<provider>.env`: stores registry image prefix and Docker login credentials.
 

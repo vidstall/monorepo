@@ -86,9 +86,30 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         hostname=f"xaisen-{name}",
         zone=zone,
         plan=instance.get("size") or "1xCPU-1GB",
+        # Required -- confirmed live: trial-tier UpCloud accounts reject server
+        # creation with "Trial mode firewall cannot be disabled" (TRIAL_FIREWALL,
+        # 403) when this is left at the provider default (unset/false). Also
+        # needed on paid accounts for the FirewallRuleset created below to
+        # actually be enforced -- UpCloud's per-server firewall must be on for
+        # its rules to take effect at all.
+        firewall=True,
+        # Required -- confirmed live: the Ubuntu 22.04 template is cloud-init
+        # based, and UpCloud rejects cloning it with "Metadata must be enabled
+        # when cloning a cloud-init template" (METADATA_DISABLED_ON_CLOUD-INIT,
+        # 409) unless this is explicitly on. Matches the SDK's own docstring
+        # warning, which the original code didn't act on.
+        metadata=True,
         login=upcloud.ServerLoginArgs(user="root", keys=[public_key], create_password=False),
         network_interfaces=[upcloud.ServerNetworkInterfaceArgs(type="public")],
-        template=upcloud.ServerTemplateArgs(storage=instance.get("image") or "Ubuntu Server 22.04 LTS", size=25),
+        # UUID, not the title string -- UpCloud's public template titles carry a
+        # codename suffix ("Ubuntu Server 22.04 LTS (Jammy Jellyfish)") that a
+        # bare "Ubuntu Server 22.04 LTS" no longer matches (confirmed live via
+        # GET /1.3/storage/template -> STORAGE_INVALID on the old string). The
+        # UUID is UpCloud's stable identifier for this template and isn't
+        # affected by future title renames.
+        template=upcloud.ServerTemplateArgs(
+            storage=instance.get("image") or "01000000-0000-4000-8000-000030220200", size=25,
+        ),
     )
     # FirewallRuleset is per-server (server_uuid), unlike DigitalOcean's
     # shared Firewall+droplet_ids resource -- still exactly one resource per

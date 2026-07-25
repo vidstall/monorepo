@@ -1,0 +1,115 @@
+name = "azure-devnet-sample"
+env = "devnet"
+
+[contract]
+gas_budget = ""
+create_registry_if_missing = false
+force = false
+
+# Reuse the DigitalOcean-hosted registry -- images are already published there
+# (scenario/example/digitalocean.toml); pushing the same images to a second,
+# separately-billed registry would be pure waste. Azure instances just pull
+# from it like any other host.
+[registry]
+provider = "digitalocean"
+tag = ""
+
+[[workers]]
+host = "azure-node-1"
+service = "signaling"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+
+[[workers]]
+host = "azure-node-1"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+
+[[workers]]
+host = "azure-node-1"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+
+[[workers]]
+host = "azure-node-1"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+
+[[workers]]
+host = "azure-node-2"
+service = "signaling"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "azure-node-2"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "azure-node-2"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "azure-node-2"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "azure-node-3"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "centralus"
+
+[[workers]]
+host = "azure-node-3"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "centralus"
+
+[[workers]]
+host = "azure-node-3"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "centralus"
+
+[[workers]]
+host = "azure-node-4"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westeurope"
+
+[[workers]]
+host = "azure-node-4"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "westeurope"

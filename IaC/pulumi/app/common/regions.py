@@ -14,6 +14,7 @@ _DEFAULTS = {
     "cloudflare": "apac",
     "upcloud": "fi-hel1",
     "akamai": "us-east",
+    "oci": "us-ashburn-1",
 }
 _ENV_KEYS = {
     "aws": "AWS_REGION",
@@ -25,6 +26,7 @@ _ENV_KEYS = {
     "cloudflare": "CLOUDFLARE_R2_LOCATION",
     "upcloud": "UPCLOUD_ZONE",
     "akamai": "AKAMAI_REGION",
+    "oci": "OCI_REGION",
 }
 
 
