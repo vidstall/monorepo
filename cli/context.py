@@ -16,7 +16,6 @@ ANSIBLE_DIR = IAC_DIR / "ansible"
 CONTRACT_DIR = ROOT / "services" / "contract"
 CLIENT_WEBUI_DIR = ROOT / "services" / "client"
 CLIENT_ENV_PATH = CLIENT_WEBUI_DIR / "client" / ".env"
-ADMIN_ENV_PATH = CLIENT_WEBUI_DIR / "admin" / ".env"
 RUNTIME_DIR = ROOT / "runtime"
 RUNTIME_REGISTRY_TOML = RUNTIME_DIR / "registry.toml"
 RUNTIME_TOPOLOGY_TOML = RUNTIME_DIR / "topology.toml"
@@ -32,7 +31,6 @@ WALLET_SECRETS_DIR = ROOT / "secrets" / "wallets"
 # -> that container's env_file). Currently only bot.env is vidctl-managed
 # (see infra.bot_control_token()); the mechanism itself is service-agnostic.
 SERVICE_SECRETS_DIR = ROOT / "secrets" / "services"
-ADMIN_WALLET_SECRETS_DIR = CLIENT_WEBUI_DIR / "admin" / "public" / ".secrets"
 CONTRACT_RUNTIME_DIR = RUNTIME_DIR / "contract"
 PULUMI_STATE_DIR = ROOT / "secrets" / "pulumi-state"
 PULUMI_PASSPHRASE_FILE = ROOT / "secrets" / "pulumi-passphrase"
@@ -199,10 +197,6 @@ def contract_env_path(network: str) -> Path:
 
 def wallet_secrets_path(env_name: str) -> Path:
     return WALLET_SECRETS_DIR / f"{env_name}.toml"
-
-
-def admin_wallet_secrets_path(env_name: str) -> Path:
-    return ADMIN_WALLET_SECRETS_DIR / f"{env_name}.toml"
 
 
 def write_kv_env_file(path: Path, values: dict[str, str]) -> None:

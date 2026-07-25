@@ -71,9 +71,9 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
-# Bot control server -- singleton (never colocate a second instance; the
-# admin dashboard's VITE_BOT_CONTROL_URL points at exactly one host). Test/
-# demo tool only, not part of network role economics -- see apps/bot/README.md.
+# Bot control server -- singleton (never colocate a second instance; its
+# HTTP control API is reached directly at a single host). Test/demo tool
+# only, not part of network role economics -- see apps/bot/README.md.
 [[workers]]
 host = "node-1"
 service = "bot"
@@ -81,8 +81,8 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
-# Monitoring stack -- singletons colocated on node-1 alongside bot. Grafana
-# is the admin dashboard's embedded-panel source (VITE_GRAFANA_URL);
+# Monitoring stack -- singletons colocated on node-1 alongside bot. Grafana's
+# UI is reached directly (no embedded-panel dashboard consumes it anymore);
 # Prometheus is never publicly exposed, only reachable from Grafana over
 # the shared xaisen-net bridge. Both pulled from pinned upstream images
 # (cli/context.py PINNED_IMAGES), not built from this repo.

@@ -9,7 +9,6 @@ from pathlib import Path
 import tomllib
 
 from .context import (
-    ADMIN_ENV_PATH,
     CLIENT_ENV_PATH,
     CONTRACT_DIR,
     RUNTIME_DIR,
@@ -24,16 +23,16 @@ PUBLISHED_TOML = CONTRACT_DIR / "Published.toml"
 MOVE_TOML = CONTRACT_DIR / "Move.toml"
 
 # Maps runtime/contract/<env>.env keys to the VITE_* keys read by
-# services/client/{client,admin}/src/config.ts. Only keys the frontend apps
-# actually consume are included -- CONTRACT_CHAIN_ID, CONTRACT_UPGRADE_CAP_ID,
+# services/client/client/src/config.ts. Only keys the frontend app
+# actually consumes are included -- CONTRACT_CHAIN_ID, CONTRACT_UPGRADE_CAP_ID,
 # CONTRACT_ADMIN_CAP_ID, etc. are deploy-tooling-only and stay out of the sync.
 #
-# CONTRACT_NETWORK -> VITE_SUI_NETWORK is included for devnet/testnet: both
-# frontends' SuiClientProvider (main.tsx) now wires localnet/devnet/testnet.
-# mainnet is NOT wired into either app yet -- a mainnet publish will still
-# write VITE_SUI_NETWORK=mainnet, which SuiClientProvider will reject at
-# runtime. Add a mainnet network entry to both main.tsx files before
-# publishing to mainnet through vidctl.
+# CONTRACT_NETWORK -> VITE_SUI_NETWORK is included for devnet/testnet: the
+# frontend's SuiClientProvider (main.tsx) now wires localnet/devnet/testnet.
+# mainnet is NOT wired in yet -- a mainnet publish will still write
+# VITE_SUI_NETWORK=mainnet, which SuiClientProvider will reject at runtime.
+# Add a mainnet network entry to main.tsx before publishing to mainnet
+# through vidctl.
 FRONTEND_ENV_KEY_MAP: dict[str, str] = {
     "CONTRACT_NETWORK": "VITE_SUI_NETWORK",
     "CONTRACT_PACKAGE_ID": "VITE_PACKAGE_ID",
@@ -52,20 +51,20 @@ FRONTEND_ENV_KEY_MAP: dict[str, str] = {
 
 def sync_frontend_env(deployment: dict[str, str]) -> None:
     """Push the just-published contract's package/registry object IDs into
-    services/client/{client,admin}/.env as VITE_* vars, leaving every other
-    line (signaling/relay URLs, poll intervals, region, ...) untouched."""
+    services/client/client/.env as VITE_* vars, leaving every other line
+    (signaling/relay URLs, poll intervals, region, ...) untouched."""
     mapping = {vite_key: deployment.get(key, "") for key, vite_key in FRONTEND_ENV_KEY_MAP.items()}
     mapping = {key: value for key, value in mapping.items() if value}
     if not mapping:
         return
-    for path in (CLIENT_ENV_PATH, ADMIN_ENV_PATH):
-        if sync_env_keys(path, mapping):
-            print(f"Synced contract object IDs -> {path}")
-        else:
-            print(
-                f"Note: {path} not found; skipping frontend env sync (copy {path.name}.example to {path.name} first).",
-                file=sys.stderr,
-            )
+    if sync_env_keys(CLIENT_ENV_PATH, mapping):
+        print(f"Synced contract object IDs -> {CLIENT_ENV_PATH}")
+    else:
+        print(
+            f"Note: {CLIENT_ENV_PATH} not found; skipping frontend env sync "
+            f"(copy {CLIENT_ENV_PATH.name}.example to {CLIENT_ENV_PATH.name} first).",
+            file=sys.stderr,
+        )
 
 
 def build(env: str) -> int:
@@ -579,6 +578,40 @@ def parse_json_payload(output: str) -> dict | None:
         if best is None or score > best[0]:
             best = (score, value)
     return best[1] if best else None
+
+
+def fetch_object(object_id: str) -> dict | None:
+    """Read a live on-chain object's current field values via `sui client
+    object <id> --json`. Unlike everything else in this file (which only
+    ever parses `objectChanges` at publish time), this is a read against
+    present chain state -- used by the GUI to show a shared object's
+    current contents, not just its ID."""
+    code, payload, output = run_sui_json(["sui", "client", "object", object_id, "--json"])
+    if code != 0 or payload is None:
+        return None
+    content = payload.get("content") or {}
+    return content.get("fields")
+
+
+def run_sui_json_list(args: list[str]) -> tuple[int, list | None, str]:
+    """Same shape as run_sui_json(), for Sui CLI subcommands (e.g. `sui
+    client objects <address> --json`) whose --json output is a JSON array
+    rather than a single object."""
+    completed = subprocess.run([str(arg) for arg in args], capture_output=True, text=True, check=False)
+    output = f"{completed.stdout}{completed.stderr}"
+    decoder = json.JSONDecoder()
+    payload = None
+    for index, char in enumerate(output):
+        if char != "[":
+            continue
+        try:
+            value, _ = decoder.raw_decode(output[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, list):
+            payload = value
+            break
+    return completed.returncode, payload, output
 
 
 def load_published_metadata(network: str) -> dict | None:

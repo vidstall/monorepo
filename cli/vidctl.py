@@ -34,7 +34,25 @@ def build_parser() -> argparse.ArgumentParser:
     add_object_parser(subparsers)
     add_scenario_parser(subparsers)
     add_utils_parser(subparsers)
+    add_gui_parser(subparsers)
     return parser
+
+
+def add_gui_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    gui_parser = subparsers.add_parser("gui", help="Launch the vidctl desktop GUI (Flet).")
+    gui_parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Serve the GUI in a browser tab instead of opening a native desktop window.",
+    )
+    gui_parser.add_argument("--port", type=int, default=None, help="Port to use with --web (default: pick any free port).")
+
+    def run_gui(args: argparse.Namespace) -> int:
+        from .gui.app import run as run_gui_app
+
+        return run_gui_app(args)
+
+    gui_parser.set_defaults(handler=run_gui)
 
 
 def add_contract_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

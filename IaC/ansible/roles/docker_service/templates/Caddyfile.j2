@@ -2,8 +2,9 @@
    host. Hostname must exactly match what deploy_one_service.yml injects as
    RELAY_ENDPOINT_URL/ENDPOINT_URL (wss://<worker_key>.<ip-dashed>.sslip.io)
    or the cert Caddy obtains won't match what the client connects to. bot/
-   grafana have no such env var -- their hostname only needs to match what
-   the admin's VITE_BOT_CONTROL_URL/VITE_GRAFANA_URL point at.
+   grafana have no such env var -- their hostname is whatever sslip.io
+   address the operator reaches them at directly (bot's control API, and
+   Grafana's normal login-gated UI).
 
    The main upstream target is each app's FIXED internal listen port
    (WS_PORT for relay, SIGNALING_PORT for signaling, PORT for bot, grafana's

@@ -315,10 +315,6 @@
         | combine({'REGISTRATION_MODE': 'voting'} if xaisen_service_item.service in ['relay', 'signaling', 'validator-daemon'] else {})
         | combine({'METRICS_AUTH_TOKEN': xaisen_metrics_auth_token} if (xaisen_metrics_auth_token | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
         | combine({
-            'GF_SECURITY_ALLOW_EMBEDDING': 'true',
-            'GF_AUTH_ANONYMOUS_ENABLED': 'true',
-            'GF_AUTH_ANONYMOUS_ORG_ROLE': 'Viewer',
-            'GF_SECURITY_COOKIE_SAMESITE': 'none',
             'GF_SERVER_ROOT_URL': 'https://' ~ xaisen_sslip_host ~ '/',
           } if xaisen_service_item.service == 'grafana' else {})
       }}

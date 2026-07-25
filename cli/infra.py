@@ -12,9 +12,7 @@ from typing import Any
 import tomllib
 
 from .context import (
-    ADMIN_ENV_PATH,
     ANSIBLE_DIR,
-    CLIENT_ENV_PATH,
     CONTRACT_RUNTIME_DIR,
     DOCKER_SERVICES,
     GENERATED_INVENTORY,
@@ -28,7 +26,6 @@ from .context import (
     contract_env_path,
     read_env_file,
     run,
-    sync_env_keys,
     venv_bin,
 )
 
@@ -39,8 +36,8 @@ REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "NETWORK_REGISTRY_ID")
 # cp-daemon/validator-daemon have no externally-published port
 # (default 0 via SERVICE_PORTS.get(service, 0)) — they're chain-facing
 # daemons/CLIs, not client-facing servers. bot's port is its own HTTP
-# control API (POST/GET/DELETE /bots), which the admin dashboard calls
-# directly via Caddy -- not a media-plane port like relay/signaling.
+# control API (POST/GET/DELETE /bots), reverse-proxied directly via Caddy --
+# not a media-plane port like relay/signaling.
 # grafana's UI is reverse-proxied publicly the same way relay/signaling/bot
 # are (see Caddyfile.j2's xaisen_internal_ports map), so it also gets a
 # real published host port. prometheus has no entry here deliberately --
@@ -239,11 +236,8 @@ def bot_control_token() -> str:
     """Read (or generate + persist) BOT_CONTROL_TOKEN from
     secrets/services/bot.env -- the SAME file deploy_one_service.yml's
     generic per-service secrets mechanism already copies into the bot
-    container as its env_file (see "Copy per-service secrets file to host"),
-    so this is the single source of truth for the token on both ends: the
-    server reads it from the container's env, and sync_bot_frontend_env()
-    below reads this same file to push the matching value into the
-    frontends' VITE_BOT_CONTROL_TOKEN. Generated once, on first use."""
+    container as its env_file (see "Copy per-service secrets file to host").
+    Generated once, on first use."""
     path = SERVICE_SECRETS_DIR / "bot.env"
     values = read_env_file(path)
     token = values.get("BOT_CONTROL_TOKEN", "")
@@ -259,46 +253,11 @@ def bot_control_token() -> str:
     return token
 
 
-def sync_bot_frontend_env(scenario: dict[str, Any]) -> bool:
-    """Mirror of contract.sync_frontend_env(), but for the bot control
-    server's URL/token instead of contract object IDs -- bot has no
-    on-chain registry (test/demo tool only, see apps/bot/README.md), so
-    relay/signaling-style on-chain endpoint discovery isn't an option; the
-    admin dashboard needs a static VITE_BOT_CONTROL_URL/TOKEN instead.
-
-    Only writes when the scenario actually declares a `service = "bot"`
-    worker AND that worker's host has a resolved address (i.e. infra.control()/
-    control_many() already ran this apply -- call this AFTER the topology
-    reconcile loop, not before). Returns True if either value actually
-    changed, so the caller knows whether the frontend needs rebuilding --
-    Vite bakes VITE_* in at build time, so a stale build would keep pointing
-    at the old value even after this writes the new one to disk.
-    """
-    workers = scenario.get("workers", [])
-    bot_worker = next((w for w in workers if w.get("service") == "bot"), None)
-    if bot_worker is None:
-        return False
-    address = host_address(str(bot_worker.get("host", "")))
-    if not address:
-        return False
-    url = f"https://bot.{address.replace('.', '-')}.sslip.io"
-    token = bot_control_token()
-    mapping = {"VITE_BOT_CONTROL_URL": url, "VITE_BOT_CONTROL_TOKEN": token}
-    changed = False
-    for path in (CLIENT_ENV_PATH, ADMIN_ENV_PATH):
-        before = read_env_file(path)
-        was_current = before.get("VITE_BOT_CONTROL_URL") == url and before.get("VITE_BOT_CONTROL_TOKEN") == token
-        if sync_env_keys(path, mapping):
-            print(f"Synced bot control URL -> {path}")
-            if not was_current:
-                changed = True
-    return changed
-
-
 def _read_or_generate_secret(path: Path, key: str) -> str:
     """Shared read-or-generate-and-persist helper, same shape as
-    bot_control_token()'s inline logic, generalized so grafana_admin_password()
-    and metrics_auth_token() below don't each reimplement it."""
+    bot_control_token()'s inline logic, generalized so
+    grafana_admin_password() and metrics_auth_token() below don't each
+    reimplement it."""
     values = read_env_file(path)
     value = values.get(key, "")
     if value:
@@ -327,46 +286,15 @@ def grafana_admin_password() -> str:
 
 def metrics_auth_token() -> str:
     """Read (or generate + persist) METRICS_AUTH_TOKEN -- the bearer token
-    gating every worker's Prometheus-format /metrics(/prom) scrape endpoint
-    and the admin's /metrics/summary polling, since Prometheus scrapes
-    every host over the public sslip.io endpoints (no private network
-    exists between droplets). Persisted in secrets/services/monitoring.env
-    (a pure persistence file -- unlike grafana.env/bot.env, nothing copies
-    it verbatim to a host; it's consumed as the xaisen_metrics_auth_token
-    Ansible var, injected into relay/signaling/cp-daemon/validator-daemon's
-    env and into Prometheus's own scrape config via prometheus.yml.j2).
-    Synced into the admin's VITE_METRICS_AUTH_TOKEN by
-    sync_grafana_frontend_env() below."""
+    gating every worker's Prometheus-format /metrics(/prom) scrape endpoint,
+    since Prometheus scrapes every host over the public sslip.io endpoints
+    (no private network exists between droplets). Persisted in
+    secrets/services/monitoring.env (a pure persistence file -- unlike
+    grafana.env/bot.env, nothing copies it verbatim to a host; it's consumed
+    as the xaisen_metrics_auth_token Ansible var, injected into
+    relay/signaling/cp-daemon/validator-daemon's env and into Prometheus's
+    own scrape config via prometheus.yml.j2)."""
     return _read_or_generate_secret(SERVICE_SECRETS_DIR / "monitoring.env", "METRICS_AUTH_TOKEN")
-
-
-def sync_grafana_frontend_env(scenario: dict[str, Any]) -> bool:
-    """Mirror of sync_bot_frontend_env(), but for Grafana's embedded-panel
-    URL + the admin's metrics-summary bearer token. Client webapp doesn't
-    need either (it only ever calls relay's admission-gated /stats/report,
-    never the token-gated read endpoints), so only ADMIN_ENV_PATH is
-    touched. Only writes when the scenario declares a `service = "grafana"`
-    worker AND that worker's host has a resolved address -- call this AFTER
-    the topology reconcile loop, same ordering requirement as
-    sync_bot_frontend_env()."""
-    workers = scenario.get("workers", [])
-    grafana_worker = next((w for w in workers if w.get("service") == "grafana"), None)
-    if grafana_worker is None:
-        return False
-    address = host_address(str(grafana_worker.get("host", "")))
-    if not address:
-        return False
-    url = f"https://grafana.{address.replace('.', '-')}.sslip.io"
-    token = metrics_auth_token()
-    mapping = {"VITE_GRAFANA_URL": url, "VITE_METRICS_AUTH_TOKEN": token}
-    before = read_env_file(ADMIN_ENV_PATH)
-    was_current = before.get("VITE_GRAFANA_URL") == url and before.get("VITE_METRICS_AUTH_TOKEN") == token
-    changed = False
-    if sync_env_keys(ADMIN_ENV_PATH, mapping):
-        print(f"Synced Grafana URL -> {ADMIN_ENV_PATH}")
-        if not was_current:
-            changed = True
-    return changed
 
 
 def registry_status(host: str, worker_key: str, address: str) -> str:

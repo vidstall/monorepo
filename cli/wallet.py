@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import json
 import random
-import re
 import subprocess
 import sys
 import tempfile
@@ -14,7 +13,6 @@ from typing import Any
 from .context import (
     RUNTIME_WALLET_TOML,
     WALLET_SECRETS_DIR,
-    admin_wallet_secrets_path,
     run,
     wallet_secrets_path,
 )
@@ -481,15 +479,15 @@ def find_cap_id(address: str, env_name: str) -> tuple[str, str] | None:
     deployment = contract.load_deployment(env_name)
     original_package_id = deployment.get("CONTRACT_ORIGINAL_PACKAGE_ID", "") or deployment.get("CONTRACT_PACKAGE_ID", "")
 
-    result = subprocess.run(
-        ["sui", "client", "objects", address],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    object_ids = re.findall(r"objectId\s*\│\s*(0x[0-9a-fA-F]+)", result.stdout)
-    object_types = re.findall(r"objectType\s*\│\s*(\S+)", result.stdout)
-    for object_id, object_type in zip(object_ids, object_types):
+    code, objects, output = contract.run_sui_json_list(["sui", "client", "objects", address, "--json"])
+    if code != 0 or objects is None:
+        raise RuntimeError(f"could not list objects for {address}: {output}")
+    for entry in objects:
+        data = entry.get("data") or {}
+        object_id = data.get("objectId", "")
+        object_type = data.get("type", "") or ""
+        if not object_id or not object_type:
+            continue
         for struct_name in ("ControlPlaneCap", "MinerCap"):
             if not object_type.endswith(f"::caps::{struct_name}"):
                 continue
@@ -600,7 +598,6 @@ def _write_pool(env_name: str, pool: dict[str, Any]) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
     path.chmod(0o600)
     _refresh_public_view()
-    _refresh_admin_secrets_view(env_name)
 
 
 def _all_pool_envs() -> list[str]:
@@ -644,26 +641,6 @@ def _refresh_public_view() -> None:
         lines.append("")
     RUNTIME_WALLET_TOML.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_WALLET_TOML.write_text("\n".join(lines), encoding="utf-8")
-
-
-def _refresh_admin_secrets_view(env_name: str) -> None:
-    """Sync the FULL (secret-including) wallet records for one env to
-    services/client/admin/public/.secrets/<env>.toml, so the admin SPA can
-    fetch and display them client-side. Testbed-only: private key material is
-    included deliberately. The output dir is gitignored."""
-    from .infra import toml_value
-
-    entries = _read_pool(env_name).get("wallets", [])
-    lines: list[str] = []
-    for entry in entries:
-        lines.append("[[wallets]]")
-        for key, value in entry.items():
-            lines.append(f"{key} = {toml_value(value)}")
-        lines.append("")
-    path = admin_wallet_secrets_path(env_name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines), encoding="utf-8")
-    path.chmod(0o600)
 
 
 def _timestamp() -> str:

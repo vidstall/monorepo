@@ -90,57 +90,5 @@ class MonitoringSecretsTests(unittest.TestCase):
         self.assertNotEqual(password, token)
 
 
-class SyncGrafanaFrontendEnvTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
-        self.admin_env = self.root / "admin" / ".env"
-        _write(self.admin_env, "VITE_EXISTING_KEY=keep-me\n")
-        self.inventory = self.root / "hosts.generated.yml"
-        _write(
-            self.inventory,
-            "\n".join(
-                [
-                    "all:",
-                    "  children:",
-                    "    xaisen:",
-                    "      hosts:",
-                    "        node-1:",
-                    "          ansible_host: 203.0.113.9",
-                ]
-            ),
-        )
-        self.patches = [
-            patch.object(infra, "SERVICE_SECRETS_DIR", self.root / "secrets" / "services"),
-            patch.object(infra, "ADMIN_ENV_PATH", self.admin_env),
-            patch.object(infra, "GENERATED_INVENTORY", self.inventory),
-        ]
-        for p in self.patches:
-            p.start()
-        self.addCleanup(lambda: [p.stop() for p in self.patches])
-
-    def test_no_grafana_worker_is_a_noop(self) -> None:
-        changed = infra.sync_grafana_frontend_env({"workers": [{"service": "relay", "host": "node-1"}]})
-        self.assertFalse(changed)
-        self.assertNotIn("VITE_GRAFANA_URL", self.admin_env.read_text(encoding="utf-8"))
-
-    def test_grafana_worker_with_unresolved_host_is_a_noop(self) -> None:
-        changed = infra.sync_grafana_frontend_env({"workers": [{"service": "grafana", "host": "node-unknown"}]})
-        self.assertFalse(changed)
-
-    def test_grafana_worker_writes_url_and_token_and_is_idempotent(self) -> None:
-        scenario_dict = {"workers": [{"service": "grafana", "host": "node-1"}]}
-
-        first = infra.sync_grafana_frontend_env(scenario_dict)
-        self.assertTrue(first)
-        contents = self.admin_env.read_text(encoding="utf-8")
-        self.assertIn("VITE_GRAFANA_URL=https://grafana.203-0-113-9.sslip.io", contents)
-        self.assertIn("VITE_METRICS_AUTH_TOKEN=", contents)
-        self.assertIn("VITE_EXISTING_KEY=keep-me", contents)
-
-        second = infra.sync_grafana_frontend_env(scenario_dict)
-        self.assertFalse(second)
-
-
 if __name__ == "__main__":
     unittest.main()
