@@ -17,96 +17,108 @@ tag = ""
 # All workers deliberately omit `region` and rely on OCI_REGION's default
 # (secrets/cloud/oci.env) -- verified live (list_region_subscriptions) that
 # this tenancy has exactly one subscribed region, ap-singapore-1 (its home
-# region). Unlike azure.toml's multi-region example, spreading nodes across
-# additional OCI regions here would just fail at apply time.
+# region).
+#
+# Single host, all 13 workers colocated -- not the 4-host split
+# azure.toml/upcloud.toml use. Confirmed live: this tenancy's ap-singapore-1
+# has exactly one availability domain (list_availability_domains), and it
+# returned a hard "500-InternalError, Out of host capacity" for BOTH the
+# free-tier "VM.Standard.E2.1.Micro" shape AND the paid x86
+# "VM.Standard.E4.Flex" shape, with no alternate AD to retry against --
+# an AD-wide x86 capacity shortage, not a shape-tier problem. Switched to
+# "VM.Standard.A1.Flex" (Ampere/ARM, confirmed available via list_shapes),
+# which draws from a separate capacity pool than the x86 E-series. compute/
+# oci.py defaults a ".Flex" shape's shape_config to
+# 2 OCPU / 4GB (matching the "2cpu-4gb" sizing the other example scenarios
+# use) since per-worker OCPU/memory isn't plumbed through scenario TOML.
 
 [[workers]]
 host = "oracle-node-1"
 service = "signaling"
 provider = "oci"
-size = "VM.Standard.E2.1.Micro"
+size = "VM.Standard.A1.Flex"
+worker_index = 1
+
+[[workers]]
+host = "oracle-node-1"
+service = "signaling"
+provider = "oci"
+size = "VM.Standard.A1.Flex"
+worker_index = 2
+
+[[workers]]
+host = "oracle-node-1"
+service = "relay"
+provider = "oci"
+size = "VM.Standard.A1.Flex"
 worker_index = 1
 
 [[workers]]
 host = "oracle-node-1"
 service = "relay"
 provider = "oci"
-size = "VM.Standard.E2.1.Micro"
+size = "VM.Standard.A1.Flex"
+worker_index = 2
+
+[[workers]]
+host = "oracle-node-1"
+service = "cp-daemon"
+provider = "oci"
+size = "VM.Standard.A1.Flex"
 worker_index = 1
 
 [[workers]]
 host = "oracle-node-1"
 service = "cp-daemon"
 provider = "oci"
-size = "VM.Standard.E2.1.Micro"
+size = "VM.Standard.A1.Flex"
+worker_index = 2
+
+[[workers]]
+host = "oracle-node-1"
+service = "cp-daemon"
+provider = "oci"
+size = "VM.Standard.A1.Flex"
+worker_index = 3
+
+[[workers]]
+host = "oracle-node-1"
+service = "cp-daemon"
+provider = "oci"
+size = "VM.Standard.A1.Flex"
+worker_index = 4
+
+[[workers]]
+host = "oracle-node-1"
+service = "validator-daemon"
+provider = "oci"
+size = "VM.Standard.A1.Flex"
 worker_index = 1
 
 [[workers]]
 host = "oracle-node-1"
 service = "validator-daemon"
 provider = "oci"
-size = "VM.Standard.E2.1.Micro"
-worker_index = 1
-
-[[workers]]
-host = "oracle-node-2"
-service = "signaling"
-provider = "oci"
-size = "VM.Standard.E2.1.Micro"
-worker_index = 1
-
-[[workers]]
-host = "oracle-node-2"
-service = "relay"
-provider = "oci"
-size = "VM.Standard.E2.1.Micro"
-worker_index = 1
-
-[[workers]]
-host = "oracle-node-2"
-service = "cp-daemon"
-provider = "oci"
-size = "VM.Standard.E2.1.Micro"
-worker_index = 1
-
-[[workers]]
-host = "oracle-node-2"
-service = "validator-daemon"
-provider = "oci"
-size = "VM.Standard.E2.1.Micro"
-worker_index = 1
-
-[[workers]]
-host = "oracle-node-3"
-service = "cp-daemon"
-provider = "oci"
-size = "VM.Standard.E2.1.Micro"
-worker_index = 1
-
-[[workers]]
-host = "oracle-node-3"
-service = "cp-daemon"
-provider = "oci"
-size = "VM.Standard.E2.1.Micro"
+size = "VM.Standard.A1.Flex"
 worker_index = 2
 
 [[workers]]
-host = "oracle-node-3"
+host = "oracle-node-1"
 service = "validator-daemon"
 provider = "oci"
-size = "VM.Standard.E2.1.Micro"
-worker_index = 1
+size = "VM.Standard.A1.Flex"
+worker_index = 3
 
 [[workers]]
-host = "oracle-node-4"
+host = "oracle-node-1"
 service = "validator-daemon"
 provider = "oci"
-size = "VM.Standard.E2.1.Micro"
-worker_index = 1
+size = "VM.Standard.A1.Flex"
+worker_index = 4
 
 [[workers]]
-host = "oracle-node-4"
+host = "oracle-node-1"
 service = "validator-daemon"
 provider = "oci"
-size = "VM.Standard.E2.1.Micro"
-worker_index = 2
+size = "VM.Standard.A1.Flex"
+worker_index = 5

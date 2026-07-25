@@ -202,11 +202,24 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
     # simplification -- doesn't spread workers across ADs within a region.
     availability_domain = availability_domains.availability_domains[0].name
 
+    # Flex shapes (name ends in ".Flex", e.g. VM.Standard.E4.Flex) require an
+    # explicit OCPU/memory shape_config -- fixed shapes (VM.Standard.E2.1.Micro)
+    # reject it outright, so only pass it when the shape actually needs one.
+    shape_config = (
+        oci.core.InstanceShapeConfigArgs(
+            ocpus=float(instance.get("ocpus") or 2),
+            memory_in_gbs=float(instance.get("memory_gb") or 4),
+        )
+        if shape.endswith(".Flex")
+        else None
+    )
+
     server = oci.core.Instance(
         f"{name}-vm",
         availability_domain=availability_domain,
         compartment_id=compartment_id,
         shape=shape,
+        shape_config=shape_config,
         display_name=f"xaisen-{name}",
         create_vnic_details=oci.core.InstanceCreateVnicDetailsArgs(
             subnet_id=subnet.id,
@@ -216,7 +229,7 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         metadata={"ssh_authorized_keys": public_key},
         source_details=oci.core.InstanceSourceDetailsArgs(
             source_type="image",
-            image_id=image_id,
+            source_id=image_id,
         ),
         state="RUNNING" if instance.get("desired_state") != "stopped" else "STOPPED",
         opts=opts,

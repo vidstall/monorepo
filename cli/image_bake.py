@@ -48,13 +48,13 @@ _BAKE_REGION_ENV_KEYS = {
     "digitalocean": "DIGITALOCEAN_REGION",
     "upcloud": "UPCLOUD_ZONE",
     "akamai": "AKAMAI_REGION",
+    "oci": "OCI_REGION",
 }
 
 # Bare-literal fallback region, used only when neither an explicit
 # scenario-file `region` nor the env var above is set. Mirrors
 # regions.py's _DEFAULTS. gcp uses its zone default (matches
 # provider_zone(), not _DEFAULTS["gcp"]="US" which is a different concern).
-# oci has no known env-var convention yet, so it stays a bare literal.
 DEFAULT_BAKE_REGIONS = {
     "aws": "us-east-1",
     "gcp": "us-central1-a",
