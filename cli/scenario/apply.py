@@ -1,196 +1,23 @@
 from __future__ import annotations
 
-import hashlib
 import sys
 from pathlib import Path
 from typing import Any
 
-import tomllib
-
-from . import contract, image_bake, infra, registry
-from . import object as object_cmd
-from .context import ROOT, RUNTIME_SCENARIO_LOCK, contract_env_path
-
-SCENARIO_DIR = ROOT / "scenario"
-
-WorkerKey = tuple[str, str, str, str, int]
-FrontendKey = tuple[str, str, str]
-
-
-def load_scenario(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        raise ValueError(f"Scenario file not found: {path}")
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
-
-    env = str(data.get("env", ""))
-    if env not in infra.NETWORKS:
-        raise ValueError(f"Scenario env must be one of {', '.join(infra.NETWORKS)}, got {env!r}.")
-
-    raw_workers = data.get("workers", [])
-    if not isinstance(raw_workers, list) or not raw_workers:
-        raise ValueError("Scenario must declare at least one [[workers]] entry.")
-
-    seen: set[WorkerKey] = set()
-    workers: list[dict[str, Any]] = []
-    for row in raw_workers:
-        host = str(row.get("host", ""))
-        service = str(row.get("service", ""))
-        provider = str(row.get("provider", ""))
-        worker_index = int(row.get("worker_index", 1) or 1)
-        if not host:
-            raise ValueError("Every scenario worker needs a 'host'.")
-        if service not in infra.DOCKER_SERVICES and service not in infra.PINNED_IMAGES:
-            raise ValueError(f"Unknown service '{service}' for worker on host '{host}'.")
-        if provider not in infra.PROVIDERS:
-            raise ValueError(f"Unknown provider '{provider}' for worker on host '{host}'.")
-        key: WorkerKey = (host, service, provider, env, worker_index)
-        if key in seen:
-            raise ValueError(
-                f"Duplicate scenario worker: host={host} service={service} "
-                f"provider={provider} worker_index={worker_index}."
-            )
-        seen.add(key)
-        workers.append(
-            {
-                "host": host,
-                "service": service,
-                "provider": provider,
-                "worker_index": worker_index,
-                "size": row.get("size") or None,
-                "region": row.get("region") or None,
-            }
-        )
-
-    raw_frontends = data.get("frontends", [])
-    if not isinstance(raw_frontends, list):
-        raise ValueError("Scenario 'frontends' must be an array of tables ([[frontends]]).")
-
-    seen_frontends: set[FrontendKey] = set()
-    frontends: list[dict[str, Any]] = []
-    for row in raw_frontends:
-        name = str(row.get("name", ""))
-        object_type = str(row.get("object") or "frontend")
-        provider = str(row.get("provider", ""))
-        if not name:
-            raise ValueError("Every scenario frontend needs a 'name'.")
-        if object_type not in object_cmd.OBJECT_TYPES:
-            raise ValueError(f"Unknown object type '{object_type}' for frontend '{name}'.")
-        if provider not in object_cmd.PROVIDERS:
-            raise ValueError(f"Unknown provider '{provider}' for frontend '{name}'.")
-        key: FrontendKey = (name, object_type, provider)
-        if key in seen_frontends:
-            raise ValueError(f"Duplicate scenario frontend: name={name} object={object_type} provider={provider}.")
-        seen_frontends.add(key)
-        frontends.append({"name": name, "object": object_type, "provider": provider})
-
-    contract_opts = data.get("contract", {})
-    contract_opts = contract_opts if isinstance(contract_opts, dict) else {}
-    registry_opts = data.get("registry", {})
-    registry_opts = registry_opts if isinstance(registry_opts, dict) else {}
-
-    return {
-        "name": str(data.get("name") or path.stem),
-        "env": env,
-        "contract": {
-            "gas_budget": contract_opts.get("gas_budget") or None,
-            "create_registry_if_missing": bool(contract_opts.get("create_registry_if_missing", False)),
-            "force": bool(contract_opts.get("force", False)),
-        },
-        "registry": {
-            "provider": registry_opts.get("provider") or None,
-            "tag": registry_opts.get("tag") or None,
-        },
-        "frontends": frontends,
-        "workers": workers,
-    }
-
-
-def scenario_hash_of(path: Path) -> str:
-    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def read_lock() -> dict[str, Any] | None:
-    if not RUNTIME_SCENARIO_LOCK.exists():
-        return None
-    return tomllib.loads(RUNTIME_SCENARIO_LOCK.read_text(encoding="utf-8"))
-
-
-def write_lock(scenario_path: str, scenario_hash: str, env: str, status: str) -> None:
-    RUNTIME_SCENARIO_LOCK.parent.mkdir(parents=True, exist_ok=True)
-    existing = read_lock()
-    # Preserve the original applied_at across a same-scenario (same path)
-    # re-apply (drift reconcile) so `status` can show "held since"; a
-    # genuinely new scenario (different path) gets a fresh applied_at.
-    applied_at = (
-        existing["applied_at"]
-        if existing and existing.get("scenario_path") == scenario_path and existing.get("applied_at")
-        else infra.timestamp()
-    )
-    lines = [
-        f"scenario_path = {infra.toml_value(scenario_path)}",
-        f"scenario_hash = {infra.toml_value(scenario_hash)}",
-        f"env = {infra.toml_value(env)}",
-        f"status = {infra.toml_value(status)}",
-        f"applied_at = {infra.toml_value(applied_at)}",
-        f"updated_at = {infra.toml_value(infra.timestamp())}",
-        "",
-    ]
-    RUNTIME_SCENARIO_LOCK.write_text("\n".join(lines), encoding="utf-8")
-
-
-def clear_lock() -> None:
-    RUNTIME_SCENARIO_LOCK.unlink(missing_ok=True)
-
-
-def guard_manual_infra(action: str) -> int | None:
-    """Called from cli/vidctl.py's infra handlers only -- the scenario runner
-    itself calls infra.control()/contract.publish()/registry.publish()
-    directly as plain Python calls, never through those CLI handlers, so it
-    never hits this guard."""
-    lock = read_lock()
-    if lock is None or lock.get("status") not in {"active", "applying"}:
-        return None
-    print(
-        f"Refusing manual 'vidctl infra {action}': scenario '{lock.get('scenario_path')}' "
-        f"currently owns the infra (status={lock.get('status')}). Run 'vidctl scenario status' "
-        "to inspect it, or 'vidctl scenario destroy' to release it before using manual infra commands.",
-        file=sys.stderr,
-    )
-    return 3
-
-
-def diff_workers(
-    wanted: dict[WorkerKey, dict[str, Any]],
-    current: dict[WorkerKey, dict[str, Any]],
-) -> tuple[list[WorkerKey], list[WorkerKey]]:
-    to_kill = sorted(current.keys() - wanted.keys())
-    to_start = list(wanted.keys())
-    return to_kill, to_start
-
-
-def _topology_worker_key(item: dict[str, Any], default_env: str) -> WorkerKey:
-    return (
-        str(item.get("host")),
-        str(item.get("service")),
-        str(item.get("provider")),
-        str(item.get("env", default_env)),
-        int(item.get("worker_index", 1) or 1),
-    )
-
-
-def _active_workers_for_env(env: str) -> list[dict[str, Any]]:
-    # ensure_topology (not read_topology) since topology.toml may not exist
-    # yet on a first-ever `scenario apply` (normally created by `vidctl infra
-    # init`, which a scenario apply doesn't require running first).
-    topology = infra.ensure_topology(env)
-    return [
-        item
-        for item in topology.get("workers", [])
-        if item.get("env", env) == env and item.get("desired_state") != "deleted"
-    ]
+from .. import contract, image_bake, infra, registry
+from .. import object as object_cmd
+from .lock import clear_lock, read_lock, write_lock
+from .spec import WorkerKey, load_scenario, scenario_hash_of
+from .status import _active_workers_for_env, _topology_worker_key, diff_workers
 
 
 def apply(path_str: str, yes: bool) -> int:
+    # Deferred self-import: contract_env_path is patched by tests as a flat
+    # cli.scenario attribute -- looking it up through the package at call
+    # time is what makes that patch take effect here. Aliased since `scenario`
+    # is also used below as the local name for the loaded scenario dict.
+    from .. import scenario as scenario_pkg
+
     if not yes:
         print("Refusing to apply a scenario without --yes.", file=sys.stderr)
         return 2
@@ -242,12 +69,12 @@ def apply(path_str: str, yes: bool) -> int:
         print(f"Scenario apply failed at contract publish (exit {code}).", file=sys.stderr)
         return code
 
-    missing = infra.missing_contract_keys(contract_env_path(env))
+    missing = infra.missing_contract_keys(scenario_pkg.contract_env_path(env))
     if missing:
         write_lock(scenario_path_display, scenario_hash, env, "failed")
         print(
             f"Contract publish succeeded but {', '.join(missing)} still missing from "
-            f"{contract_env_path(env)}; aborting.",
+            f"{scenario_pkg.contract_env_path(env)}; aborting.",
             file=sys.stderr,
         )
         return 1
@@ -382,35 +209,6 @@ def apply(path_str: str, yes: bool) -> int:
 
     write_lock(scenario_path_display, scenario_hash, env, "active")
     print(f"Scenario '{scenario['name']}' applied: {len(to_kill)} removed, {len(to_start)} reconciled.")
-    return 0
-
-
-def status(_args: Any) -> int:
-    lock = read_lock()
-    if lock is None:
-        print("No scenario is currently active.")
-        return 0
-
-    print(f"Active scenario: {lock.get('scenario_path')}")
-    print(f"  env:      {lock.get('env')}")
-    print(f"  status:   {lock.get('status')}")
-    print(f"  hash:     {lock.get('scenario_hash', '')}")
-    print(f"  applied:  {lock.get('applied_at')}")
-    print(f"  updated:  {lock.get('updated_at')}")
-
-    env = str(lock.get("env", ""))
-    rows = _active_workers_for_env(env)
-    if not rows:
-        print("No managed workers.")
-        return 0
-
-    print("Workers:")
-    for item in sorted(rows, key=lambda r: (str(r.get("host")), str(r.get("service")), int(r.get("worker_index", 1) or 1))):
-        worker_index = int(item.get("worker_index", 1) or 1)
-        label = str(item.get("service")) if worker_index == 1 else f"{item.get('service')}-{worker_index}"
-        state = item.get("last_status") or item.get("desired_state")
-        error = f" ERROR: {item.get('last_error')}" if item.get("last_error") else ""
-        print(f"  {item.get('host')}/{label}@{item.get('provider')}: {state}{error}")
     return 0
 
 
