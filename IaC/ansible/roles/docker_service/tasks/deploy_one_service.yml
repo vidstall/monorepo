@@ -39,13 +39,19 @@
     mode: "0640"
   when: xaisen_service_secrets_file.stat.exists | default(false)
 
-# xaisen_operator_wallets is a dict keyed by worker_key, but only ever
-# contains the ONE instance that was just checked out by the current
-# `vidctl infra start`/`restart` call (see cli/infra.py control()) -- other
-# colocated services/replicas simply aren't in the dict this round, so this
-# task is a no-op for them (their wallet file is left untouched, whatever it
-# currently holds -- correct, since only ITS OWN start/restart call ever
-# refreshes it).
+# xaisen_operator_wallets is a dict NESTED by host then worker_key --
+# {inventory_hostname: {worker_key: wallet_json}} -- because a single
+# `vidctl scenario apply` batch pass (see cli/infra.py control_many_hosts())
+# can cover MANY hosts in one Ansible run, and a flat worker_key-only dict
+# would collide whenever two different hosts share a worker_key (e.g.
+# "cp-daemon" exists on nearly every host in a multi-host scenario) --
+# writing one host's wallet onto another host's container. Nesting by
+# inventory_hostname keeps each host's lookup isolated even when many hosts
+# share the same playbook run. Only ever contains entries for instances
+# checked out by the current call; other colocated services/replicas simply
+# aren't in the dict this round, so this task is a no-op for them (their
+# wallet file is left untouched, whatever it currently holds -- correct,
+# since only ITS OWN start/restart call ever refreshes it).
 #
 # ALWAYS overwrite when this instance's entry IS present this round -- do NOT
 # skip just because a file already exists at this path. cli/infra.py's
@@ -60,10 +66,11 @@
     owner: root
     group: root
     mode: "0600"
-    content: "{{ xaisen_operator_wallets[xaisen_service_item.worker_key | default(xaisen_service_item.service)] }}"
+    content: "{{ xaisen_operator_wallets[inventory_hostname][xaisen_service_item.worker_key | default(xaisen_service_item.service)] }}"
   when:
     - xaisen_operator_wallets is defined
-    - (xaisen_service_item.worker_key | default(xaisen_service_item.service)) in xaisen_operator_wallets
+    - inventory_hostname in xaisen_operator_wallets
+    - (xaisen_service_item.worker_key | default(xaisen_service_item.service)) in xaisen_operator_wallets[inventory_hostname]
   no_log: true
   register: xaisen_wallet_credentials_write
 

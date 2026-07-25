@@ -1,0 +1,469 @@
+# Straight merge of digitalocean.toml + akamai.toml + azure.toml -- one
+# scenario spanning three providers at once. DigitalOcean's hosts are
+# renamed node-1/2/3 -> do-node-1/2/3 here for consistency with the other
+# two providers' <provider>-node-N convention; the topology/inventory
+# resolve host identity dynamically at deploy time, so nothing else needed
+# to change for the rename. Every other field (service/size/worker_index/
+# region) is carried over unchanged from its source file.
+name = "multicloud-devnet-sample"
+env = "devnet"
+
+[contract]
+gas_budget = ""
+create_registry_if_missing = false
+force = false
+
+[registry]
+provider = "digitalocean"
+tag = ""
+
+[[frontends]]
+name = "site-2-bucket"
+object = "frontend"
+provider = "alibaba"
+
+# --- DigitalOcean (from digitalocean.toml, node-1/2/3 -> do-node-1/2/3) ---
+
+[[workers]]
+host = "do-node-1"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-1"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "do-node-1"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-1"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "do-node-1"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-1"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "do-node-1"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-1"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+# Bot control server -- singleton (never colocate a second instance; the
+# admin dashboard's VITE_BOT_CONTROL_URL points at exactly one host). Test/
+# demo tool only, not part of network role economics -- see apps/bot/README.md.
+[[workers]]
+host = "do-node-1"
+service = "bot"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+# Monitoring stack -- singletons colocated on do-node-1 alongside bot.
+# Grafana is the admin dashboard's embedded-panel source
+# (VITE_GRAFANA_URL); Prometheus is never publicly exposed, only reachable
+# from Grafana over the shared xaisen-net bridge. Both pulled from pinned
+# upstream images (cli/context.py PINNED_IMAGES), not built from this repo.
+[[workers]]
+host = "do-node-1"
+service = "prometheus"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-1"
+service = "grafana"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-2"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-2"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "do-node-2"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-2"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "do-node-2"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-2"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "do-node-2"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-2"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "do-node-3"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-3"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "do-node-3"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-3"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "do-node-3"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-3"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "do-node-3"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "do-node-3"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+# --- Akamai (from akamai.toml, unchanged) ---
+
+[[workers]]
+host = "akamai-node-1"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-1"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-1"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-1"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "akamai-node-1"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-2"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-2"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-2"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-2"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "akamai-node-2"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-3"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-3"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-3"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-3"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "akamai-node-3"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+# Dedicated validator host -- boosts the live validator count so the
+# liveness-voting quorum (2/3 of ALL registered active validators, live or
+# not) stays reachable. See akamai.toml for the full rationale.
+[[workers]]
+host = "akamai-node-4"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "akamai-node-4"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "akamai-node-4"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 3
+
+[[workers]]
+host = "akamai-node-4"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 4
+
+[[workers]]
+host = "akamai-node-4"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 5
+
+# --- Azure (from azure.toml, unchanged, multi-region) ---
+
+[[workers]]
+host = "azure-node-1"
+service = "signaling"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+
+[[workers]]
+host = "azure-node-1"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+
+[[workers]]
+host = "azure-node-1"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+
+[[workers]]
+host = "azure-node-1"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+
+[[workers]]
+host = "azure-node-2"
+service = "signaling"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "azure-node-2"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "azure-node-2"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "azure-node-2"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "azure-node-3"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "centralus"
+
+[[workers]]
+host = "azure-node-3"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "centralus"
+
+[[workers]]
+host = "azure-node-3"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "centralus"
+
+[[workers]]
+host = "azure-node-4"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westeurope"
+
+[[workers]]
+host = "azure-node-4"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "westeurope"

@@ -90,14 +90,14 @@ worker_index = 1
 host = "node-1"
 service = "prometheus"
 provider = "digitalocean"
-size = "s-2vcpu-2gb"
+size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
 host = "node-1"
 service = "grafana"
 provider = "digitalocean"
-size = "s-2vcpu-2gb"
+size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]

@@ -341,61 +341,44 @@ def apply(path_str: str, yes: bool) -> int:
                 file=sys.stderr,
             )
 
-    # Group by (host, provider): colocated services on the same host go
-    # through infra.control_many() -- one pulumi_up()+inventory()+configure()
-    # pass for the whole host instead of one full pass per service (see
-    # control_many's docstring). Singleton hosts and non-colocation-capable
-    # providers keep using infra.control() one row at a time, unchanged.
+    # Group by (host, provider), then start EVERY host group in one shot via
+    # infra.control_many_hosts() -- one pulumi_up()+inventory()+configure()
+    # pass across the whole batch instead of looping one full pass per host
+    # (which was the dominant cost on multi-host scenarios: each host paid
+    # its own full-stack pulumi diff plus its own ansible-playbook startup).
+    # Whether a group is colocated (multiple vm-backed services on one host,
+    # colocation-capable provider) or a singleton doesn't matter here -- that
+    # distinction only affects Pulumi's OWN resource grouping in
+    # IaC/pulumi/app/program.py (which reads topology.toml directly), not
+    # how many Python-level calls produced it. See control_many_hosts()'s
+    # docstring for the full rationale.
     host_groups: dict[tuple[str, str], list[WorkerKey]] = {}
     for key in to_start:
         row = wanted[key]
         host_groups.setdefault((row["host"], row["provider"]), []).append(key)
 
-    COLOCATE_PROVIDERS = {"digitalocean", "upcloud", "akamai", "azure", "oci"}
-    for (host_name, host_provider), keys in host_groups.items():
-        if len(keys) > 1 and host_provider in COLOCATE_PROVIDERS and all(
-            infra.service_backend(wanted[key]["service"]) == "vm" for key in keys
-        ):
-            batch_rows = [
-                {
-                    "service": wanted[key]["service"],
-                    "size": wanted[key].get("size"),
-                    "worker_index": wanted[key]["worker_index"],
-                    "region": wanted[key].get("region"),
-                }
-                for key in keys
-            ]
-            code = infra.control_many("start", host_name, host_provider, batch_rows, yes=True)
-            if code != 0:
-                write_lock(scenario_path_display, scenario_hash, env, "failed")
-                print(
-                    f"Scenario apply failed starting host {host_name}@{host_provider} (exit {code}).",
-                    file=sys.stderr,
-                )
-                return code
-            continue
-
-        for key in keys:
-            row = wanted[key]
-            host, service, provider, worker_index = row["host"], row["service"], row["provider"], row["worker_index"]
-            code = infra.control(
-                "start",
-                host,
-                service,
-                provider,
-                yes=True,
-                size=row.get("size"),
-                worker_index=worker_index,
-                region=row.get("region"),
+    if host_groups:
+        groups = [
+            (
+                host_name,
+                host_provider,
+                [
+                    {
+                        "service": wanted[key]["service"],
+                        "size": wanted[key].get("size"),
+                        "worker_index": wanted[key]["worker_index"],
+                        "region": wanted[key].get("region"),
+                    }
+                    for key in keys
+                ],
             )
-            if code != 0:
-                write_lock(scenario_path_display, scenario_hash, env, "failed")
-                print(
-                    f"Scenario apply failed starting worker {host}/{service}/{provider}"
-                    f"#{worker_index} (exit {code}).",
-                    file=sys.stderr,
-                )
-                return code
+            for (host_name, host_provider), keys in host_groups.items()
+        ]
+        code = infra.control_many_hosts("start", groups, yes=True)
+        if code != 0:
+            write_lock(scenario_path_display, scenario_hash, env, "failed")
+            print(f"Scenario apply failed starting the host batch (exit {code}).", file=sys.stderr)
+            return code
 
     # Mirror of contract.sync_frontend_env() (run earlier, right after
     # contract publish) but for the bot control server's URL/token -- bot
