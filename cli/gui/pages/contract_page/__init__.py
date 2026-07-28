@@ -14,6 +14,7 @@ from .render import (
     ROLE_COLORS,
     SHARED_OBJECTS,
     WALLET_FILTERS,
+    _chart_status_key,
     _format_sui,
     _format_ts,
     _last_action,
@@ -107,9 +108,9 @@ def build_contract_page(state) -> ft.Control:
         role_counts: dict[str, int] = {}
         role_balances: dict[str, float] = {}
         for entry in wallets:
-            status_key = _wallet_status_key(entry)
-            role_counts[status_key] = role_counts.get(status_key, 0) + 1
-            role_balances[status_key] = role_balances.get(status_key, 0.0) + float(entry.get("last_balance_mist", 0) or 0) / 1_000_000_000
+            chart_key = _chart_status_key(entry)
+            role_counts[chart_key] = role_counts.get(chart_key, 0) + 1
+            role_balances[chart_key] = role_balances.get(chart_key, 0.0) + float(entry.get("last_balance_mist", 0) or 0) / 1_000_000_000
         role_chart.content = _role_pie_chart(role_counts)
         balance_chart.content = _role_balance_bar_chart(role_balances)
 

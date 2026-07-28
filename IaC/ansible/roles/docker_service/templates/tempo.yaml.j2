@@ -1,0 +1,33 @@
+{# Single-binary Tempo config for the singleton monitoring host. No
+   auth of its own (see observer-caddyfile.j2's bearer-gated reverse proxy
+   in front of the OTLP receiver, and deploy_one_service.yml's loopback-only
+   ports: mapping) -- local disk storage only, no S3/GCS backend needed at
+   this scale. block_retention below is deliberately short: this is a
+   thesis-scale single box the operator manages themselves, not a
+   production long-term trace archive. #}
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+        http:
+
+ingester:
+  trace_idle_period: 10s
+  max_block_bytes: 1_000_000
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 72h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal

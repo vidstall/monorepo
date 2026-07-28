@@ -11,13 +11,11 @@ REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "NETWORK_REGISTRY_ID")
 # daemons/CLIs, not client-facing servers. bot's port is its own HTTP
 # control API (POST/GET/DELETE /bots), reverse-proxied directly via Caddy --
 # not a media-plane port like relay/signaling.
-# grafana's UI is reverse-proxied publicly the same way relay/signaling/bot
-# are (see Caddyfile.j2's xaisen_internal_ports map), so it also gets a
-# real published host port. prometheus has no entry here deliberately --
-# it's never publicly exposed, only reachable from grafana over xaisen-net
-# (see deploy_monitoring-adjacent Caddyfile.j2/main.yml changes), so
-# base_port stays 0 for it, same as cp-daemon/validator-daemon.
-SERVICE_PORTS = {"signaling": 8080, "relay": 4000, "bot": 8095, "grafana": 3000}
+# prometheus has no entry here deliberately -- it's never publicly exposed
+# (Grafana, the only thing that used to reach it over xaisen-net, is no
+# longer managed here -- it's self-hosted by the operator), so base_port
+# stays 0 for it, same as cp-daemon/validator-daemon.
+SERVICE_PORTS = {"signaling": 8080, "relay": 4000, "bot": 8095}
 VM_INSTANCE_SIZES = {
     "aws": "t3.micro",
     "gcp": "e2-micro",

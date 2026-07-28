@@ -32,7 +32,6 @@ SERVICE_ICONS = {
     "validator-daemon": ft.Icons.VERIFIED_USER,
     "bot": ft.Icons.SMART_TOY,
     "prometheus": ft.Icons.MONITOR_HEART,
-    "grafana": ft.Icons.INSIGHTS,
 }
 
 

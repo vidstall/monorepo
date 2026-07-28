@@ -1,14 +1,13 @@
-{# One site block per relay/signaling/bot/grafana instance colocated on this
+{# One site block per relay/signaling/bot instance colocated on this
    host. Hostname must exactly match what deploy_one_service.yml injects as
    RELAY_ENDPOINT_URL/ENDPOINT_URL (wss://<worker_key>.<ip-dashed>.sslip.io)
-   or the cert Caddy obtains won't match what the client connects to. bot/
-   grafana have no such env var -- their hostname is whatever sslip.io
-   address the operator reaches them at directly (bot's control API, and
-   Grafana's normal login-gated UI).
+   or the cert Caddy obtains won't match what the client connects to. bot
+   has no such env var -- its hostname is whatever sslip.io address the
+   operator reaches it at directly (bot's control API).
 
    The main upstream target is each app's FIXED internal listen port
-   (WS_PORT for relay, SIGNALING_PORT for signaling, PORT for bot, grafana's
-   own port -- see apps/relay/src/index.ts, apps/signaling/src/index.ts,
+   (WS_PORT for relay, SIGNALING_PORT for signaling, PORT for bot --
+   see apps/relay/src/index.ts, apps/signaling/src/index.ts,
    apps/bot/src/config.ts, none read an env var keyed off worker_index),
    NOT svc.port -- that field is the per-worker_index-offset HOST-published
    port (cli/infra.py set_vm_defaults), which only matters for the
@@ -26,7 +25,7 @@
    to that internal port, which is what xaisen_metrics_ports + the
    handle blocks below do. Prometheus's scrape targets and the client's
    POST /stats/report both go through this same public :443 hostname. #}
-{% set xaisen_internal_ports = {'relay': 4000, 'signaling': 8080, 'bot': 8095, 'grafana': 3000} %}
+{% set xaisen_internal_ports = {'relay': 4000, 'signaling': 8080, 'bot': 8095} %}
 {% set xaisen_metrics_ports = {'relay': 4001, 'signaling': 8083} %}
 {% for svc in xaisen_public_services %}
 {{ svc.worker_key | default(svc.service) }}.{{ ansible_host | replace('.', '-') }}.sslip.io {

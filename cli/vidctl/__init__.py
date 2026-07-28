@@ -7,6 +7,7 @@ from ..context import bootstrap
 from .contract_cmd import add_contract_parser
 from .infra_cmd import add_infra_parser
 from .misc_cmd import add_gui_parser, add_object_parser, add_registry_parser
+from .observer_cmd import add_observer_parser
 from .scenario_cmd import add_scenario_parser
 from .utils_cmd import add_utils_parser
 from .wallet_cmd import add_wallet_parser
@@ -39,4 +40,5 @@ def build_parser() -> argparse.ArgumentParser:
     add_scenario_parser(subparsers)
     add_utils_parser(subparsers)
     add_gui_parser(subparsers)
+    add_observer_parser(subparsers)
     return parser

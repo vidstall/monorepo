@@ -34,9 +34,8 @@ def bot_control_token() -> str:
 
 def _read_or_generate_secret(path: Path, key: str) -> str:
     """Shared read-or-generate-and-persist helper, same shape as
-    bot_control_token()'s inline logic, generalized so
-    grafana_admin_password() and metrics_auth_token() below don't each
-    reimplement it."""
+    bot_control_token()'s inline logic, generalized so metrics_auth_token()
+    below doesn't reimplement it."""
     values = read_env_file(path)
     value = values.get(key, "")
     if value:
@@ -51,18 +50,29 @@ def _read_or_generate_secret(path: Path, key: str) -> str:
     return value
 
 
-def grafana_admin_password() -> str:
-    """Read (or generate + persist) Grafana's real admin login password,
-    from secrets/services/grafana.env -- the SAME file
-    deploy_one_service.yml's generic per-service secrets mechanism copies
-    into the grafana container's env_file for the `service = "grafana"`
-    worker (see PINNED_IMAGES), giving it a real GF_SECURITY_ADMIN_PASSWORD.
-    Used only for editing dashboards directly in Grafana's own UI, separate
-    from the anonymous-viewer role embedded panels use (see
-    GF_AUTH_ANONYMOUS_ENABLED in deploy_one_service.yml)."""
+def otel_exporter_vars() -> dict[str, str]:
+    """Read (never generate) OTEL_EXPORTER_OTLP_ENDPOINT/HEADERS from
+    secrets/services/otel.env -- a plain, hand-seeded file, not a
+    read-or-generate-and-persist secret like the others in this module.
+    There's nothing for `vidctl infra` to generate here: the actual
+    endpoint/token belong to `vidctl observer`'s tempo deployment (see
+    cli/observer/secrets.py's tempo_auth_token(), and the ingest URL
+    `vidctl observer deploy` prints on success) -- the operator copies
+    those into this file once, by hand, keeping `cli/infra` and
+    `cli/observer` decoupled (no direct import between the two packages).
+    Returns {} if the file or either key is missing, so every call site
+    stays a graceful no-op until the operator actually seeds it."""
     from .. import infra
 
-    return _read_or_generate_secret(infra.SERVICE_SECRETS_DIR / "grafana.env", "GF_SECURITY_ADMIN_PASSWORD")
+    values = read_env_file(infra.SERVICE_SECRETS_DIR / "otel.env")
+    endpoint = values.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+    headers = values.get("OTEL_EXPORTER_OTLP_HEADERS", "")
+    if not endpoint:
+        return {}
+    result = {"OTEL_EXPORTER_OTLP_ENDPOINT": endpoint}
+    if headers:
+        result["OTEL_EXPORTER_OTLP_HEADERS"] = headers
+    return result
 
 
 def metrics_auth_token() -> str:
@@ -71,7 +81,7 @@ def metrics_auth_token() -> str:
     since Prometheus scrapes every host over the public sslip.io endpoints
     (no private network exists between droplets). Persisted in
     secrets/services/monitoring.env (a pure persistence file -- unlike
-    grafana.env/bot.env, nothing copies it verbatim to a host; it's consumed
+    bot.env, nothing copies it verbatim to a host; it's consumed
     as the xaisen_metrics_auth_token Ansible var, injected into
     relay/signaling/cp-daemon/validator-daemon's env and into Prometheus's
     own scrape config via prometheus.yml.j2)."""

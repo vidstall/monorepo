@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets as py_secrets
+import shutil
 import subprocess
 import venv
 from pathlib import Path
@@ -23,6 +24,7 @@ RUNTIME_HISTORY_TOML = RUNTIME_DIR / "history.toml"
 RUNTIME_WALLET_TOML = RUNTIME_DIR / "wallet.toml"
 RUNTIME_SCENARIO_LOCK = RUNTIME_DIR / "scenario.lock"
 RUNTIME_IMAGES_TOML = RUNTIME_DIR / "images.toml"
+RUNTIME_OBSERVER_TOML = RUNTIME_DIR / "observer.toml"
 SECRETS_DIR = ROOT / "secrets" / "cloud"
 REGISTRY_SECRETS_DIR = ROOT / "secrets" / "registry"
 WALLET_SECRETS_DIR = ROOT / "secrets" / "wallets"
@@ -35,6 +37,14 @@ CONTRACT_RUNTIME_DIR = RUNTIME_DIR / "contract"
 PULUMI_STATE_DIR = ROOT / "secrets" / "pulumi-state"
 PULUMI_PASSPHRASE_FILE = ROOT / "secrets" / "pulumi-passphrase"
 GENERATED_INVENTORY = ANSIBLE_DIR / "inventory" / "hosts.generated.yml"
+# `vidctl observer`'s own generated inventory -- a THIRD file listed in
+# ansible.cfg's `inventory =` setting, entirely separate from
+# GENERATED_INVENTORY (which `vidctl infra inventory` regenerates wholesale
+# from Pulumi's stack output on every call). Keeping this one distinct means
+# a static/bring-your-own host registered via `vidctl observer add-host`
+# never gets clobbered by an unrelated `vidctl infra inventory` refresh, and
+# vice versa -- Pulumi never reads or writes this file at all.
+GENERATED_OBSERVER_INVENTORY = ANSIBLE_DIR / "inventory" / "observer.generated.yml"
 
 WORKER_DIR = ROOT / "services" / "worker"
 
@@ -64,7 +74,8 @@ DOCKERFILES = {name: WORKER_DIR / "apps" / name / "Dockerfile" for name in DOCKE
 # xaisen_images/xaisen_tags.
 PINNED_IMAGES = {
     "prometheus": "prom/prometheus:v2.53.0",
-    "grafana": "grafana/grafana:11.1.0",
+    "tempo": "grafana/tempo:2.5.0",
+    "grafana": "grafana/grafana:11.2.0",
 }
 
 
@@ -173,9 +184,36 @@ def bootstrap() -> int:
     code = run([venv_bin("python"), "-m", "pip", "install", "-r", IAC_DIR / "requirements.txt"])
     if code != 0:
         return code
-    return run(
+    code = run(
         [venv_bin("ansible-galaxy"), "collection", "install", "-r", ANSIBLE_DIR / "requirements.yml"]
     )
+    if code != 0:
+        return code
+    ensure_docker_ready()
+    return 0
+
+
+def ensure_docker_ready() -> None:
+    """Best-effort: get a docker daemon reachable regardless of backend.
+
+    Docker Desktop can't be started headlessly, so we only auto-start Colima
+    (when installed) -- otherwise just leave doctor to report the gap.
+    """
+    if shutil.which("docker") is None:
+        return
+    reachable = subprocess.run(
+        ["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+    ).returncode == 0
+    if reachable:
+        return
+    if shutil.which("colima") is None:
+        return
+    running = subprocess.run(
+        ["colima", "status"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+    ).returncode == 0
+    if not running:
+        print("docker daemon unreachable, colima detected -- running `colima start`...")
+        run(["colima", "start"])
 
 
 def git_short_sha() -> str:

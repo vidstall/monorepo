@@ -8,7 +8,6 @@
     name: docker.io
     state: present
     update_cache: true
-    cache_valid_time: 3600
 
 - name: Ensure Docker service is running
   ansible.builtin.systemd:
@@ -36,6 +35,29 @@
     name: xaisen-net
     state: present
 
+# Best-effort cache warm: fire every distinct image this host needs
+# concurrently (backgrounded `docker pull` + `wait`, plain shell -- not
+# Ansible async/poll, which mitogen's connection layer special-cases and is
+# less battle-tested) instead of paying each colocated service's pull
+# serially in the per-service loop below. Only matters when content
+# genuinely changed (deploy_one_service.yml's xaisen_needs_pull digest check
+# skips the pull entirely on a no-op reconcile) -- this just makes the
+# unavoidable-transfer case faster too, by overlapping N pulls into
+# ~max(N) instead of ~sum(N). Never fails the play: a slow/failed prefetch
+# just means the per-service task does its own (correctness-gating) pull.
+- name: Prefetch this host's needed images concurrently
+  ansible.builtin.shell: |
+    set +e
+    {% for svc in (xaisen_services | map(attribute='service') | unique | list) %}
+    {% if xaisen_images is defined and svc in xaisen_images and xaisen_tags is defined and svc in xaisen_tags %}
+    docker pull {{ xaisen_images[svc] }}:{{ xaisen_tags[svc] }} &
+    {% endif %}
+    {% endfor %}
+    wait
+  when: xaisen_images is defined and xaisen_tags is defined
+  changed_when: false
+  ignore_errors: true
+
 # One host can run several services (colocation). Everything below is
 # per-service (its own state dir, secrets file, wallet file, container),
 # so it's isolated in an included task file run once per xaisen_services
@@ -47,6 +69,25 @@
     loop_var: xaisen_service_item
     label: "{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
 
+# deploy_one_service.yml's "Run the service container" task fires each
+# container start with poll:0 (see its own comment) rather than waiting for
+# each one before starting the next -- this collects on all of them here,
+# once per host, so this host's N container creates/starts (and any real
+# pulls) run concurrently instead of paying N sequential waits. Failures
+# still propagate normally (no ignore_errors) -- this is the actual
+# correctness-bearing container start, unlike the best-effort prefetch above.
+- name: Wait for all this host's service containers to finish starting
+  ansible.builtin.async_status:
+    jid: "{{ item.job.ansible_job_id }}"
+  register: xaisen_container_wait_results
+  until: xaisen_container_wait_results.finished
+  retries: 60
+  delay: 2
+  loop: "{{ xaisen_container_jobs | default([]) }}"
+  loop_control:
+    label: "{{ item.label }}"
+  when: xaisen_container_jobs is defined
+
 # Every relay/signaling instance on this host shares ONE Caddy TLS proxy --
 # ports 80/443 can only be bound once per host, so this can't be a
 # per-instance sidecar (see deploy_one_service.yml's endpoint-URL comment
@@ -54,7 +95,7 @@
 # distinct Caddyfile site block keyed by worker_key).
 - name: Determine which colocated services need the shared Caddy TLS proxy
   ansible.builtin.set_fact:
-    xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'signaling', 'bot', 'grafana']) | list }}"
+    xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'signaling', 'bot']) | list }}"
 
 - name: Ensure Caddy config directory exists
   ansible.builtin.file:
@@ -92,3 +133,58 @@
       - "{{ xaisen_services_root }}/runtime/caddy/data:/data"
       - "{{ xaisen_services_root }}/runtime/caddy/config:/config"
   when: xaisen_public_services | length > 0
+
+# Tempo's OTLP/HTTP receiver is loopback-only (see deploy_one_service.yml's
+# ports: mapping) -- unlike relay/signaling/bot, it must still be reachable
+# from every fleet VM to receive PUSHED spans, so it gets its OWN small
+# bearer-token-gated ingress proxy here, entirely separate from the shared
+# xaisen-caddy above (which is keyed to relay/signaling/bot's public-service
+# convention and has no concept of auth-gating a route). Tempo's query API
+# (3200) is NOT proxied here -- it stays SSH-tunnel-only, like Prometheus.
+# Grafana (also loopback-only) shares this same ingress container -- it
+# needs no bearer gate (Grafana has its own login), just a plain reverse
+# proxy, so it gets a second site block in the same Caddyfile.
+- name: Determine whether this host runs tempo (observer ingress needed)
+  ansible.builtin.set_fact:
+    xaisen_observer_tempo_service: "{{ xaisen_services | selectattr('service', 'equalto', 'tempo') | list }}"
+
+- name: Determine whether this host runs grafana (observer ingress needed)
+  ansible.builtin.set_fact:
+    xaisen_observer_grafana_service: "{{ xaisen_services | selectattr('service', 'equalto', 'grafana') | list }}"
+
+- name: Ensure observer ingress Caddy config directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/observer-caddy"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0)
+
+- name: Write observer ingress Caddyfile (tempo's bearer-gated OTLP receiver + grafana's plain proxy)
+  ansible.builtin.template:
+    src: observer-caddyfile.j2
+    dest: "{{ xaisen_services_root }}/runtime/observer-caddy/Caddyfile"
+    owner: root
+    group: root
+    mode: "0640"
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0)
+  register: xaisen_observer_caddyfile_write
+
+- name: Run the observer ingress Caddy container
+  community.docker.docker_container:
+    name: xaisen-observer-caddy
+    image: "caddy:2-alpine"
+    restart_policy: unless-stopped
+    state: started
+    restart: "{{ xaisen_observer_caddyfile_write is changed }}"
+    networks:
+      - name: xaisen-net
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "{{ xaisen_services_root }}/runtime/observer-caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
+      - "{{ xaisen_services_root }}/runtime/observer-caddy/data:/data"
+      - "{{ xaisen_services_root }}/runtime/observer-caddy/config:/config"
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0)

@@ -1,0 +1,27 @@
+---
+# `vidctl observer clean` -- removes the monitoring containers AND wipes
+# their data directories (permanent history loss, unlike
+# observer_destroy.yml). Never touches the host/VM itself -- no
+# destroy/reboot semantics exist anywhere in this file.
+- name: Remove the monitoring containers and their data
+  hosts: xaisen
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Remove monitoring containers
+      community.docker.docker_container:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - xaisen-prometheus
+        - xaisen-tempo
+        - xaisen-grafana
+
+    - name: Wipe monitoring data directories
+      ansible.builtin.file:
+        path: "{{ xaisen_services_root }}/runtime/{{ item }}/data"
+        state: absent
+      loop:
+        - prometheus
+        - tempo
+        - grafana

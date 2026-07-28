@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from ..context import DOCKER_SERVICES, PINNED_IMAGES
@@ -183,19 +184,31 @@ def control_many(
 
     if code == 0:
         address = infra.host_address(host)
-        for item in prepared:
+        reportable = [item for item in prepared if item["wallet_entry"] is not None]
+
+        # Same rationale as control_fleet.control_many_hosts(): each item
+        # does a devnet RPC balance lookup plus an SSH probe (up to a 20s
+        # timeout each) -- I/O-bound, so run them concurrently rather than
+        # one colocated service at a time.
+        def _gather(item: dict[str, Any]) -> tuple[str, int, str]:
             wallet_entry = item["wallet_entry"]
-            if wallet_entry is None:
-                continue
             wallet_address = str(wallet_entry.get("address", ""))
             try:
                 balance_mist = wallet.current_balance_mist(wallet_address)
             except (subprocess.CalledProcessError, json.JSONDecodeError):
                 balance_mist = int(wallet_entry.get("last_balance_mist", 0))
-            print(f"IP:      {address or 'unknown'}")
-            print(f"Wallet:  {wallet_address[:8]}...")
-            print(f"Balance: {balance_mist / 1_000_000_000:.4f} SUI")
-            print(f"Registry: {registry_status(host, item['worker_key'], address)}")
+            registry = registry_status(host, item["worker_key"], address)
+            return wallet_address, balance_mist, registry
+
+        if reportable:
+            with ThreadPoolExecutor(max_workers=min(16, len(reportable))) as pool:
+                results = list(pool.map(_gather, reportable))
+
+            for wallet_address, balance_mist, registry in results:
+                print(f"IP:      {address or 'unknown'}")
+                print(f"Wallet:  {wallet_address[:8]}...")
+                print(f"Balance: {balance_mist / 1_000_000_000:.4f} SUI")
+                print(f"Registry: {registry}")
 
     for item in prepared:
         worker = item["worker"]

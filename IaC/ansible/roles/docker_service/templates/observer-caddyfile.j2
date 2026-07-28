@@ -1,0 +1,32 @@
+{# Bearer-token-gated public ingress for tempo's OTLP/HTTP receiver --
+   tempo has no authentication of its own. Every relay/signaling/cp-daemon/
+   validator-daemon VM in the fleet pushes spans here (see cli/infra's
+   OTEL_EXPORTER_OTLP_ENDPOINT/HEADERS env injection), matching this SAME
+   xaisen_tempo_auth_token (cli/observer/secrets.py's tempo_auth_token(),
+   passed as the xaisen_tempo_auth_token extra var). Requests without a
+   matching Authorization header get a plain 401, never reach tempo.
+
+   Tempo's query API (3200) is deliberately NOT proxied here -- it stays
+   loopback-only, reached by grafana (colocated on this same host, over the
+   shared xaisen-net bridge by container name) or an SSH tunnel for direct
+   debug access. Only the ingest path needs public reachability, since it's
+   PUSHED to, unlike Prometheus/Tempo's query APIs which are PULLED from. #}
+{% if xaisen_observer_tempo_service | length > 0 %}
+tempo.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    @authorized {
+        header Authorization "Bearer {{ xaisen_tempo_auth_token }}"
+    }
+    reverse_proxy @authorized xaisen-tempo:4318
+    respond 401
+}
+{% endif %}
+
+{# Grafana gets a plain reverse proxy, no bearer gate -- it has its own
+   login screen (GF_SECURITY_ADMIN_PASSWORD, see cli/observer/secrets.py's
+   grafana_admin_password()) guarding access, unlike tempo's auth-less
+   OTLP receiver above. #}
+{% if xaisen_observer_grafana_service | length > 0 %}
+grafana.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    reverse_proxy xaisen-grafana:3000
+}
+{% endif %}

@@ -149,6 +149,7 @@ override.tf.json
 IaC/.venv/
 IaC/ansible/tmp/
 IaC/ansible/inventory/hosts.generated.yml
+IaC/ansible/inventory/observer.generated.yml
 secrets/pulumi-state/
 secrets/pulumi-passphrase
 
@@ -209,3 +210,4 @@ temp/
 .devcontainer/.cache/
 .serena
 .local/
+data/

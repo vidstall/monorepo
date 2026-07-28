@@ -34,10 +34,10 @@ ROLE_COLORS = {
     "validator-daemon": ft.Colors.PURPLE,
     "bot": ft.Colors.PINK_600,
     "prometheus": ft.Colors.BROWN_400,
-    "grafana": ft.Colors.CYAN_700,
 }
 FREE_COLOR = ft.Colors.GREY_400
 RETIRED_COLOR = ft.Colors.RED_300
+IDLE_COLOR = ft.Colors.GREY_600
 
 WALLET_FILTERS = ["All", "Free", "Retired"] + list(ROLE_COLORS.keys())
 
@@ -47,6 +47,29 @@ def _wallet_status_key(entry: dict) -> str:
         return "retired"
     if entry.get("registered_role"):
         return entry["registered_role"]
+    return "free"
+
+
+def _chart_status_key(entry: dict) -> str:
+    """Role bucket for the two summary charts only (see _wallet_status_key
+    for the wallet table/filter's role-pinned semantics, which intentionally
+    keeps idle-but-role-pinned wallets under their role name).
+
+    `registered_role` is permanent once set (see pool.py's checkout_wallet
+    docstring) and survives release_wallet(), so a pool sized for a larger
+    past scenario leaves plenty of role-pinned wallets sitting unassigned.
+    Counting those under their role name here would make the charts look
+    like that many workers are currently running, when they're just idle
+    pool inventory -- so only a wallet with a live assigned_host counts
+    toward its role; everything else idle (but not retired) buckets into
+    "idle" instead.
+    """
+    if entry.get("retired"):
+        return "retired"
+    if entry.get("assigned_host"):
+        return entry.get("registered_role") or "free"
+    if entry.get("registered_role"):
+        return "idle"
     return "free"
 
 
@@ -89,9 +112,9 @@ def _tile(label: str, content: ft.Control) -> ft.Container:
 def _role_pie_chart(role_counts: dict[str, int]) -> ft.Control:
     if not role_counts:
         return ft.Text("No wallets to chart.", color=ft.Colors.OUTLINE)
-    palette = {**ROLE_COLORS, "free": FREE_COLOR, "retired": RETIRED_COLOR, "unassigned": FREE_COLOR}
+    palette = {**ROLE_COLORS, "free": FREE_COLOR, "retired": RETIRED_COLOR, "unassigned": FREE_COLOR, "idle": IDLE_COLOR}
     total = sum(role_counts.values())
-    # Largest slice first so small ones (e.g. a lone bot/prometheus/grafana
+    # Largest slice first so small ones (e.g. a lone bot/prometheus
     # wallet) end up adjacent rather than scattered between big ones.
     items = sorted(role_counts.items(), key=lambda kv: kv[1], reverse=True)
     sections = [
@@ -133,7 +156,7 @@ def _role_pie_chart(role_counts: dict[str, int]) -> ft.Control:
 
 
 def _role_balance_bar_chart(role_balances: dict[str, float]) -> ft.Control:
-    palette = {**ROLE_COLORS, "free": FREE_COLOR, "retired": RETIRED_COLOR, "unassigned": FREE_COLOR}
+    palette = {**ROLE_COLORS, "free": FREE_COLOR, "retired": RETIRED_COLOR, "unassigned": FREE_COLOR, "idle": IDLE_COLOR}
     active = {role: balance for role, balance in role_balances.items() if balance > 0}
     if not active:
         return ft.Text("No balance to chart.", color=ft.Colors.OUTLINE)

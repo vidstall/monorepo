@@ -1,0 +1,21 @@
+---
+# `vidctl observer destroy` -- removes the monitoring containers themselves
+# (docker rm) but deliberately leaves their bind-mounted data directories
+# on disk (see deploy_one_service.yml's volumes: for those mounts), so a
+# later `vidctl observer start`/`deploy` recreates them with history intact.
+# Use observer_clean.yml to also wipe that data.
+# Never touches the host/VM itself -- no destroy/reboot semantics exist
+# anywhere in this file.
+- name: Remove the monitoring containers (data preserved)
+  hosts: xaisen
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Remove monitoring containers
+      community.docker.docker_container:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - xaisen-prometheus
+        - xaisen-tempo
+        - xaisen-grafana

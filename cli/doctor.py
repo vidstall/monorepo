@@ -32,7 +32,12 @@ def run() -> int:
     }
 
     for name, ok in checks.items():
-        print(f"{name}: {'ok' if ok else 'missing'}")
+        if ok:
+            print(f"{name}: ok")
+        elif name == "docker_daemon":
+            print(f"docker_daemon: missing{docker_daemon_hint()}")
+        else:
+            print(f"{name}: missing")
 
     # Provider CLIs used only by `vidctl utils image-bake` -- optional,
     # never gate the overall doctor exit code, since most workflows never
@@ -70,12 +75,33 @@ def run() -> int:
 def docker_daemon_ok() -> bool:
     if shutil.which("docker") is None:
         return False
+    # Backend-agnostic: `docker info` talks through whatever the active
+    # `docker` CLI context / DOCKER_HOST points at, so this works the same
+    # whether the daemon is Docker Desktop, Colima, or anything else.
     return subprocess.run(
         ["docker", "info"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         check=False,
     ).returncode == 0
+
+
+def docker_daemon_hint() -> str:
+    """Extra detail for the `docker_daemon: missing` line, since the fix
+    differs by backend (Colima vs. Docker Desktop vs. no docker at all)."""
+    if shutil.which("colima") is not None:
+        status = subprocess.run(
+            ["colima", "status"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if status.returncode != 0:
+            return " (colima detected but not running -- run `colima start`)"
+        return " (colima is running but the active docker context/DOCKER_HOST doesn't point at it -- run `docker context use colima`)"
+    if shutil.which("docker") is not None:
+        return " (docker CLI found but daemon unreachable -- start Docker Desktop or another docker backend)"
+    return ""
 
 
 def ansible_inventory_ok() -> bool:

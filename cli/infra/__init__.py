@@ -36,7 +36,7 @@ from .pulumi import (
     set_vm_defaults,
     stack_has_urns,
 )
-from .secrets import bot_control_token, grafana_admin_password, metrics_auth_token
+from .secrets import bot_control_token, metrics_auth_token, otel_exporter_vars
 from .topology import (
     active_stack,
     default_topology,
@@ -103,8 +103,8 @@ __all__ = [
     "set_vm_defaults",
     "stack_has_urns",
     "bot_control_token",
-    "grafana_admin_password",
     "metrics_auth_token",
+    "otel_exporter_vars",
     "active_stack",
     "default_topology",
     "ensure_topology",

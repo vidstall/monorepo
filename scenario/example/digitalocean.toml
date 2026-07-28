@@ -81,24 +81,12 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
-# Monitoring stack -- singletons colocated on node-1 alongside bot. Grafana's
-# UI is reached directly (no embedded-panel dashboard consumes it anymore);
-# Prometheus is never publicly exposed, only reachable from Grafana over
-# the shared xaisen-net bridge. Both pulled from pinned upstream images
-# (cli/context.py PINNED_IMAGES), not built from this repo.
-[[workers]]
-host = "node-1"
-service = "prometheus"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "node-1"
-service = "grafana"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
+# Monitoring is NOT a scenario worker anymore -- prometheus now runs on a
+# dedicated, operator-owned static host managed entirely by `vidctl
+# observer` (see `vidctl observer add-host`/`deploy`), not a disposable
+# Pulumi-provisioned VM colocated with the rest of this scenario.
+# `vidctl infra start --service prometheus` is rejected for exactly this
+# reason (see cli/infra/control.py).
 
 [[workers]]
 host = "node-2"

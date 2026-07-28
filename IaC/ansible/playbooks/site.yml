@@ -3,7 +3,19 @@
   hosts: xaisen
   gather_facts: false
   become: true
-  strategy: linear
+  # Tried mitogen_free and mitogen_linear (see git history) hoping to pick up
+  # mitogen's persistent-connection speedup, since ansible.cfg's mitogen
+  # default was silently overridden by this play's own strategy: -- but BOTH
+  # mitogen variants reproducibly fail here with a mitogen broker-lifecycle
+  # error ("Broker.shutdown() too early", identical across all 3 hosts)
+  # during the very first wait_for_connection pre-task. Root cause: this repo
+  # runs ansible-core 2.18.18 with mitogen 0.3.51, well past mitogen's tested
+  # compatibility ceiling -- not fixable without downgrading ansible-core.
+  # Using plain (non-mitogen) `free` instead: no persistent-connection reuse,
+  # but it does remove the cross-host lockstep that `linear` enforces, so a
+  # lightly-loaded host no longer waits on the fleet's busiest host at every
+  # task boundary.
+  strategy: free
   pre_tasks:
     - name: Wait for the host to accept SSH connections
       ansible.builtin.wait_for_connection:

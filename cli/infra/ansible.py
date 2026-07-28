@@ -6,7 +6,7 @@ from typing import Any
 
 from ..context import ANSIBLE_DIR, CONTRACT_RUNTIME_DIR, PINNED_IMAGES, read_env_file, venv_bin
 from .history import record_history
-from .secrets import metrics_auth_token
+from .secrets import metrics_auth_token, otel_exporter_vars
 from .topology import active_stack
 
 
@@ -62,6 +62,19 @@ def configure(
     return code
 
 
+def _otel_extra_vars() -> dict[str, str]:
+    """Flat xaisen_otel_exporter_endpoint/headers vars, same style as
+    xaisen_metrics_auth_token, derived from otel_exporter_vars()'s
+    OTEL_EXPORTER_OTLP_ENDPOINT/HEADERS -- empty strings (not omitted keys)
+    when unset, so deploy_one_service.yml's env: combine() can uniformly
+    check truthiness without an `is defined` guard."""
+    values = otel_exporter_vars()
+    return {
+        "xaisen_otel_exporter_endpoint": values.get("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+        "xaisen_otel_exporter_headers": values.get("OTEL_EXPORTER_OTLP_HEADERS", ""),
+    }
+
+
 def docker_deploy_extra_vars() -> dict[str, Any]:
     from .. import registry
 
@@ -69,10 +82,14 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
         state = registry.read_runtime_registry()
     except ValueError as exc:
         print(f"Skipping docker image deployment: {exc}", file=sys.stderr)
-        # Pinned (prometheus/grafana) images never touch the private
-        # registry read above -- they can still deploy even when no
-        # registry provider has been logged into yet.
-        return {"xaisen_pinned_images": dict(PINNED_IMAGES), "xaisen_metrics_auth_token": metrics_auth_token()}
+        # Pinned (prometheus) images never touch the private registry read
+        # above -- they can still deploy even when no registry provider has
+        # been logged into yet.
+        return {
+            "xaisen_pinned_images": dict(PINNED_IMAGES),
+            "xaisen_metrics_auth_token": metrics_auth_token(),
+            **_otel_extra_vars(),
+        }
 
     # loadNetworkConfig() (services/worker/packages/shared/src/chain/client.ts)
     # reads PACKAGE_ID/NETWORK_REGISTRY_ID/etc. straight from process.env --
@@ -109,10 +126,12 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
     extra_vars: dict[str, Any] = {
         "xaisen_images": state.images,
         "xaisen_tags": state.deployed,
+        "xaisen_image_digests": state.digests,
         "xaisen_registry_host": state.host,
         "xaisen_contract_values": contract_values,
         "xaisen_pinned_images": dict(PINNED_IMAGES),
         "xaisen_metrics_auth_token": metrics_auth_token(),
+        **_otel_extra_vars(),
     }
     try:
         config = registry.provider_config(state.provider, require_credentials=True)
