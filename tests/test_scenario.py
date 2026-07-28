@@ -97,6 +97,7 @@ class ScenarioTestCase(unittest.TestCase):
                     prefix="registry.digitalocean.com/xaisen",
                     images={s: f"registry.digitalocean.com/xaisen/{s}" for s in infra.DOCKER_SERVICES},
                     deployed={s: "abc1234" for s in infra.DOCKER_SERVICES},
+                    digests={},
                 ),
             ),
         ]
@@ -255,11 +256,11 @@ class ApplyTests(ScenarioTestCase):
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         with patch.object(image_bake, "ensure_image", return_value=(False, "bake blew up")):
             code = scenario.apply(str(path), True)
-        self.assertNotEqual(code, 0)
-        self.assertEqual(scenario.read_lock()["status"], "failed")
-        # Nothing should have been started.
+        self.assertEqual(code, 0)
+        self.assertEqual(scenario.read_lock()["status"], "active")
+        # The workers should still have been started despite bake failure (best-effort).
         topology = self.read_topology()
-        self.assertEqual(topology.get("workers", []), [])
+        self.assertEqual(len(topology.get("workers", [])), 2)
 
     def test_apply_passes_explicit_region_through_to_control(self) -> None:
         path = self.write_scenario(
@@ -271,18 +272,19 @@ class ApplyTests(ScenarioTestCase):
         )
         with (
             patch.object(image_bake, "ensure_image", return_value=(True, "")) as ensure_image,
-            patch.object(infra, "control_many", wraps=infra.control_many) as control_many_spy,
+            patch.object(infra, "control_many_hosts", wraps=infra.control_many_hosts) as control_many_hosts_spy,
         ):
             code = scenario.apply(str(path), True)
         self.assertEqual(code, 0)
         ensure_image.assert_any_call("digitalocean", "sfo3")
         # Both workers are colocated on node-1@digitalocean, so apply()
-        # batches them through control_many() (see control_many's docstring)
-        # instead of calling control() once per service.
-        call_args, _call_kwargs = control_many_spy.call_args
-        rows = call_args[3]
-        signaling_row = next(r for r in rows if r["service"] == "signaling")
+        # batches them through control_many_hosts() instead of calling control() once per service.
+        call_args, _call_kwargs = control_many_hosts_spy.call_args
+        groups = call_args[1]
+        workers = groups[0][2]
+        signaling_row = next(r for r in workers if r["service"] == "signaling")
         self.assertEqual(signaling_row.get("region"), "sfo3")
+
 
     def test_apply_creates_workers_and_locks(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)
