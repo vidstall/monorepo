@@ -24,6 +24,18 @@ def add_scenario_parser(subparsers: argparse._SubParsersAction[argparse.Argument
     )
     apply_parser.set_defaults(handler=lambda args: scenario.apply(args.path, args.yes))
 
+    run_parser = actions.add_parser(
+        "run",
+        help="Run a scenario's [[actions]] timeline (bot room lifecycle, worker join/leave) against the active scenario.",
+    )
+    run_parser.add_argument("path", help="Path to a scenario TOML file (e.g. scenario/example.toml).")
+    run_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm running the scenario's actions timeline.",
+    )
+    run_parser.set_defaults(handler=lambda args: scenario.run(args.path, args.yes))
+
     status_parser = actions.add_parser("status", help="Show the active scenario lock and its workers' current state.")
     status_parser.set_defaults(handler=lambda args: scenario.status(args))
 

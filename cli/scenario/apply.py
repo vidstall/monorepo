@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from .. import contract, image_bake, infra, registry
+from .. import contract, image_bake, infra, observer, registry
 from .. import object as object_cmd
 from .lock import clear_lock, read_lock, write_lock
 from .spec import WorkerKey, load_scenario, scenario_hash_of
@@ -35,6 +35,58 @@ def _timed(timings: list[tuple[str, float]], label: str) -> Iterator[None]:
         yield
     finally:
         timings.append((label, time.monotonic() - start))
+
+
+# Both helpers below are deliberately best-effort: `vidctl observer` is a
+# fully decoupled, optional module (see cli/infra/secrets.py's
+# otel_exporter_vars() docstring on why cli/infra never imports it) -- a
+# scenario apply/destroy must succeed for the fleet exactly as before even
+# when no observer host is registered, or it's unreachable. Silently no-op
+# when nothing is registered (the common case); print a warning, never
+# raise/propagate a failure, when a registered host errors.
+def _refresh_observer_stack() -> None:
+    """Called once the new/reconciled worker set is live (see apply()) --
+    re-runs `vidctl observer deploy` per registered host so Prometheus's
+    scrape config (rendered from the CURRENT merged Ansible inventory)
+    picks up the just-applied worker set, and so any containers a prior
+    `scenario destroy` cleaned away come back. Never touches stored data."""
+    try:
+        hosts = observer.read_hosts()
+    except Exception as exc:
+        print(f"Warning: could not read observer hosts, skipping observer refresh: {exc}", file=sys.stderr)
+        return
+    for host in hosts:
+        name = str(host.get("name", ""))
+        try:
+            code = observer.deploy(name)
+        except Exception as exc:
+            print(f"Warning: observer refresh failed for {name!r}: {exc}", file=sys.stderr)
+            continue
+        if code != 0:
+            print(f"Warning: observer refresh failed for {name!r} (exit {code}).", file=sys.stderr)
+
+
+def _clean_observer_stack() -> None:
+    """Called once the fleet is fully torn down (see destroy()) -- wipes
+    Prometheus/Tempo's stored history via `vidctl observer clean` per
+    registered host, so the NEXT `apply()` (via _refresh_observer_stack())
+    starts observing a genuinely fresh scenario instead of mixing in dead
+    workers' old metrics/traces. Grafana's own data (dashboards, logins)
+    is left alone -- see observer_clean.yml."""
+    try:
+        hosts = observer.read_hosts()
+    except Exception as exc:
+        print(f"Warning: could not read observer hosts, skipping observer data cleanup: {exc}", file=sys.stderr)
+        return
+    for host in hosts:
+        name = str(host.get("name", ""))
+        try:
+            code = observer.clean(name)
+        except Exception as exc:
+            print(f"Warning: observer data cleanup failed for {name!r}: {exc}", file=sys.stderr)
+            continue
+        if code != 0:
+            print(f"Warning: observer data cleanup failed for {name!r} (exit {code}).", file=sys.stderr)
 
 
 def apply(path_str: str, yes: bool) -> int:
@@ -259,6 +311,8 @@ def apply(path_str: str, yes: bool) -> int:
             return code
 
     write_lock(scenario_path_display, scenario_hash, env, "active")
+    with _timed(timings, "observer refresh"):
+        _refresh_observer_stack()
     print(f"Scenario '{scenario['name']}' applied: {len(to_kill)} removed, {len(to_start)} reconciled.")
     _print_timings(timings)
     return 0
@@ -293,6 +347,7 @@ def destroy(_args: Any) -> int:
             )
             return code
 
+    _clean_observer_stack()
     clear_lock()
     print(f"Scenario '{scenario_path_display}' destroyed; lock released.")
     return 0

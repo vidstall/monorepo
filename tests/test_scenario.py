@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cli import contract, image_bake, infra, registry, scenario
+from cli import bot_client, contract, context, image_bake, infra, observer, registry, scenario
 from cli import object as object_cmd
 from cli.registry import RegistryState
 
@@ -73,6 +73,12 @@ class ScenarioTestCase(unittest.TestCase):
             patch.object(infra, "configure", return_value=0),
             patch.object(infra, "persist_vm_resolution", return_value=None),
             patch.object(infra, "GENERATED_INVENTORY", self.root / "runtime" / "hosts.generated.yml"),
+            # No observer host registered by default -- apply()/destroy()'s
+            # best-effort observer refresh/cleanup should be a silent no-op
+            # for every test in this file unless a test explicitly registers
+            # one. Isolated from the real repo's runtime/observer.toml so
+            # these tests never depend on (or corrupt) real operator state.
+            patch.object(context, "RUNTIME_OBSERVER_TOML", self.root / "runtime" / "observer.toml"),
             # set_vm_defaults()'s ensure_ssh_keypair() does real ssh-keygen
             # file I/O against SSH_KEY_ROOT regardless of the pulumi_up/
             # inventory/configure mocks above -- these scenarios use worker
@@ -192,6 +198,82 @@ class LoadScenarioTests(ScenarioTestCase):
         parsed2 = scenario.load_scenario(path2)
         self.assertEqual(parsed2["registry"]["provider"], "digitalocean")
 
+    def test_empty_actions_allowed(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        parsed = scenario.load_scenario(path)
+        self.assertEqual(parsed["actions"], [])
+
+    def test_actions_parse(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML
+            + '\n[[actions]]\nid = "room1"\ntype = "bot.create_room"\ntimestamp = "+10s"\nhost = "node-1"\n'
+            + '\n[[actions]]\ntype = "bot.delete_room"\ntimestamp = "+1m"\nhost = "node-1"\nbot_id = "$room1.botId"\n',
+        )
+        parsed = scenario.load_scenario(path)
+        self.assertEqual(len(parsed["actions"]), 2)
+        self.assertEqual(parsed["actions"][0]["offset_seconds"], 10)
+        self.assertEqual(parsed["actions"][1]["offset_seconds"], 60)
+        self.assertEqual(parsed["actions"][1]["bot_id"], "$room1.botId")
+
+    def test_action_unknown_type_rejected(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML + '\n[[actions]]\ntype = "bogus"\ntimestamp = "+1s"\nhost = "node-1"\n',
+        )
+        with self.assertRaises(ValueError):
+            scenario.load_scenario(path)
+
+    def test_action_bad_timestamp_rejected(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "10s"\nhost = "node-1"\n',
+        )
+        with self.assertRaises(ValueError):
+            scenario.load_scenario(path)
+
+    def test_action_missing_required_field_rejected(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML + '\n[[actions]]\ntype = "bot.join_room"\ntimestamp = "+1s"\nhost = "node-1"\n',
+        )
+        with self.assertRaises(ValueError):
+            scenario.load_scenario(path)
+
+    def test_duplicate_action_id_rejected(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML
+            + '\n[[actions]]\nid = "a"\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+            + '\n[[actions]]\nid = "a"\ntype = "bot.create_room"\ntimestamp = "+2s"\nhost = "node-1"\n',
+        )
+        with self.assertRaises(ValueError):
+            scenario.load_scenario(path)
+
+    def test_worker_join_leave_actions_parse(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML
+            + '\n[[actions]]\ntype = "worker.leave"\ntimestamp = "+1s"\nhost = "node-1"\n'
+            + 'service = "relay"\nprovider = "akamai"\n'
+            + '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+2s"\n'
+            + 'service = "relay"\nprovider = "akamai"\n',
+        )
+        parsed = scenario.load_scenario(path)
+        self.assertEqual(parsed["actions"][0]["type"], "worker.leave")
+        self.assertEqual(parsed["actions"][1]["type"], "worker.join")
+        self.assertIsNone(parsed["actions"][1]["host"])
+
+    def test_out_of_order_timestamps_warn_not_error(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML
+            + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+10s"\nhost = "node-1"\n'
+            + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n',
+        )
+        parsed = scenario.load_scenario(path)  # must not raise
+        self.assertEqual(len(parsed["actions"]), 2)
+
 
 class LockTests(ScenarioTestCase):
     def test_round_trip(self) -> None:
@@ -298,6 +380,29 @@ class ApplyTests(ScenarioTestCase):
         lock = scenario.read_lock()
         self.assertEqual(lock["status"], "active")
         self.assertEqual(lock["scenario_hash"], scenario.scenario_hash_of(path))
+
+    def test_apply_refreshes_observer_stack_for_each_registered_host(self) -> None:
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key")
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(observer, "deploy", return_value=0) as observer_deploy:
+            code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        observer_deploy.assert_called_once_with("bourbon")
+
+    def test_apply_skips_observer_refresh_when_none_registered(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(observer, "deploy") as observer_deploy:
+            code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        observer_deploy.assert_not_called()
+
+    def test_apply_survives_observer_refresh_failure(self) -> None:
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key")
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(observer, "deploy", side_effect=RuntimeError("unreachable")):
+            code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        self.assertEqual(scenario.read_lock()["status"], "active")
 
     def test_apply_publishes_frontends_before_registry(self) -> None:
         path = self.write_scenario(
@@ -455,6 +560,38 @@ class StatusDestroyTests(ScenarioTestCase):
         self.assertEqual(scenario.apply(str(path), True), 0)
         self.assertEqual(scenario.status(None), 0)
 
+    def test_destroy_cleans_observer_stack_for_each_registered_host(self) -> None:
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key")
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(observer, "deploy", return_value=0):
+            self.assertEqual(scenario.apply(str(path), True), 0)
+
+        with patch.object(observer, "clean", return_value=0) as observer_clean:
+            code = scenario.destroy(None)
+        self.assertEqual(code, 0)
+        observer_clean.assert_called_once_with("bourbon")
+        self.assertIsNone(scenario.read_lock())
+
+    def test_destroy_skips_observer_cleanup_when_none_registered(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        self.assertEqual(scenario.apply(str(path), True), 0)
+
+        with patch.object(observer, "clean") as observer_clean:
+            code = scenario.destroy(None)
+        self.assertEqual(code, 0)
+        observer_clean.assert_not_called()
+
+    def test_destroy_survives_observer_cleanup_failure(self) -> None:
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key")
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(observer, "deploy", return_value=0):
+            self.assertEqual(scenario.apply(str(path), True), 0)
+
+        with patch.object(observer, "clean", side_effect=RuntimeError("unreachable")):
+            code = scenario.destroy(None)
+        self.assertEqual(code, 0)
+        self.assertIsNone(scenario.read_lock())
+
 
 class GuardManualInfraTests(ScenarioTestCase):
     def test_guard_allows_when_unlocked(self) -> None:
@@ -467,6 +604,159 @@ class GuardManualInfraTests(ScenarioTestCase):
     def test_guard_ignores_failed_status(self) -> None:
         scenario.write_lock("scenario/s.toml", "sha256:abc", "devnet", "failed")
         self.assertIsNone(scenario.guard_manual_infra("start"))
+
+
+class ActionsExecutionTests(ScenarioTestCase):
+    """Unit-tests cli.scenario.actions.run_actions() directly, patching
+    time.sleep/time.monotonic so tests don't actually wait, and bot_client/
+    infra.control so no real HTTP/pulumi/ansible calls happen -- same
+    "mock the boundary, assert the dispatch" style as ApplyTests above."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sleep_patch = patch("cli.scenario.actions.time.sleep", return_value=None)
+        self.sleep_patch.start()
+        self.addCleanup(self.sleep_patch.stop)
+
+    def _scenario(self, actions_toml: str) -> dict:
+        path = self.write_scenario("s.toml", SCENARIO_TOML + "\n" + actions_toml)
+        return scenario.load_scenario(path)
+
+    def test_bot_create_room_dispatches(self) -> None:
+        parsed = self._scenario(
+            '[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+        )
+        with patch.object(bot_client, "create_room", return_value={"botId": "b1", "roomId": "r1"}) as create_room:
+            code = scenario.run_actions(parsed, "devnet")
+        self.assertEqual(code, 0)
+        create_room.assert_called_once_with("node-1", "both", None)
+
+    def test_bot_delete_room_resolves_id_reference(self) -> None:
+        parsed = self._scenario(
+            '[[actions]]\nid = "room1"\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+            '\n[[actions]]\ntype = "bot.delete_room"\ntimestamp = "+2s"\nhost = "node-1"\nbot_id = "$room1.botId"\n'
+        )
+        with (
+            patch.object(bot_client, "create_room", return_value={"botId": "b1", "roomId": "r1"}),
+            patch.object(bot_client, "delete_room", return_value={}) as delete_room,
+        ):
+            code = scenario.run_actions(parsed, "devnet")
+        self.assertEqual(code, 0)
+        delete_room.assert_called_once_with("node-1", "b1")
+
+    def test_unresolved_reference_fails_cleanly(self) -> None:
+        parsed = self._scenario(
+            '[[actions]]\ntype = "bot.delete_room"\ntimestamp = "+1s"\nhost = "node-1"\nbot_id = "$missing.botId"\n'
+        )
+        code = scenario.run_actions(parsed, "devnet")
+        self.assertNotEqual(code, 0)
+
+    def test_bot_action_failure_stops_run(self) -> None:
+        parsed = self._scenario(
+            '[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+            '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+2s"\nhost = "node-1"\n'
+        )
+        with patch.object(bot_client, "create_room", return_value=None) as create_room:
+            code = scenario.run_actions(parsed, "devnet")
+        self.assertNotEqual(code, 0)
+        create_room.assert_called_once()
+
+    def test_worker_join_provisions_fresh_when_pool_empty(self) -> None:
+        parsed = self._scenario(
+            '[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            'service = "relay"\nprovider = "akamai"\nhost = "akamai-node-9"\n'
+        )
+        with patch.object(infra, "control", return_value=0) as control:
+            code = scenario.run_actions(parsed, "devnet")
+        self.assertEqual(code, 0)
+        control.assert_called_once_with(
+            "start", "akamai-node-9", "relay", "akamai", yes=True, size=None, worker_index=1, region=None
+        )
+
+    def test_worker_join_without_host_and_empty_pool_fails(self) -> None:
+        parsed = self._scenario(
+            '[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\nservice = "relay"\nprovider = "akamai"\n'
+        )
+        code = scenario.run_actions(parsed, "devnet")
+        self.assertNotEqual(code, 0)
+
+    def test_worker_leave_pauses_worker(self) -> None:
+        parsed = self._scenario(
+            '[[actions]]\ntype = "worker.leave"\ntimestamp = "+1s"\n'
+            'host = "akamai-node-1"\nservice = "relay"\nprovider = "akamai"\n'
+        )
+        with patch.object(infra, "control", return_value=0) as control:
+            code = scenario.run_actions(parsed, "devnet")
+        self.assertEqual(code, 0)
+        control.assert_called_once_with("pause", "akamai-node-1", "relay", "akamai", yes=True, worker_index=1)
+
+    def test_worker_join_reuses_pooled_worker_over_provisioning(self) -> None:
+        topology = infra.ensure_topology("devnet")
+        topology["workers"].append(
+            {
+                "host": "akamai-node-1",
+                "service": "relay",
+                "provider": "akamai",
+                "env": "devnet",
+                "worker_index": 1,
+                "desired_state": "stopped",
+            }
+        )
+        infra.write_topology(topology)
+
+        parsed = self._scenario(
+            '[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\nservice = "relay"\nprovider = "akamai"\n'
+        )
+        with patch.object(infra, "control", return_value=0) as control:
+            code = scenario.run_actions(parsed, "devnet")
+        self.assertEqual(code, 0)
+        control.assert_called_once_with(
+            "restart", "akamai-node-1", "relay", "akamai", yes=True, worker_index=1
+        )
+
+
+class RunTests(ScenarioTestCase):
+    def test_run_without_yes_is_refused(self) -> None:
+        path = self.write_scenario(
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+        )
+        code = scenario.run(str(path), False)
+        self.assertEqual(code, 2)
+
+    def test_run_without_active_lock_is_refused(self) -> None:
+        path = self.write_scenario(
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+        )
+        code = scenario.run(str(path), True)
+        self.assertEqual(code, 1)
+
+    def test_run_against_different_locked_scenario_is_refused(self) -> None:
+        actions_toml = '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+        path_a = self.write_scenario("a.toml", SCENARIO_TOML + actions_toml)
+        path_b = self.write_scenario("b.toml", SCENARIO_TOML_ONE_INSTANCE + actions_toml)
+        self.assertEqual(scenario.apply(str(path_a), True), 0)
+
+        code = scenario.run(str(path_b), True)
+        self.assertEqual(code, 1)
+
+    def test_run_executes_actions_against_active_scenario(self) -> None:
+        path = self.write_scenario(
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+        )
+        self.assertEqual(scenario.apply(str(path), True), 0)
+
+        with (
+            patch("cli.scenario.actions.time.sleep", return_value=None),
+            patch.object(bot_client, "create_room", return_value={"botId": "b1"}) as create_room,
+        ):
+            code = scenario.run(str(path), True)
+        self.assertEqual(code, 0)
+        create_room.assert_called_once()
+
+    def test_run_with_no_actions_is_a_noop(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        self.assertEqual(scenario.apply(str(path), True), 0)
+        self.assertEqual(scenario.run(str(path), True), 0)
 
 
 if __name__ == "__main__":

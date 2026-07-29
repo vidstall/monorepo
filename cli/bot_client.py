@@ -49,6 +49,11 @@ def _request(host: str, method: str, path: str, body: dict | None = None) -> obj
         print(f"bot {host}: {method} {path} failed -- {exc}")
         return None
 
+    if not payload:
+        # e.g. DELETE /bots/:id returns 204 with no body -- treat as a
+        # successful empty result rather than a JSON parse failure.
+        return {}
+
     try:
         return json.loads(payload)
     except json.JSONDecodeError as exc:
@@ -78,3 +83,22 @@ def join_room(host: str, room_id: str, media_mode: str) -> dict | None:
         {"roomMode": "join", "roomId": room_id, "mediaMode": media_mode},
     )
     return result if isinstance(result, dict) else None
+
+
+def create_room(host: str, media_mode: str, mp4_path: str | None = None) -> dict | None:
+    """POST /bots {roomMode: 'create', mediaMode} -- makes this bot create
+    a brand new room and join it. Response includes `roomId`/`joinUrl` for
+    a real user to open, and `botId` to later stop the session via
+    delete_room(). Spends real gas and spawns a real ffmpeg/mediasoup
+    process on the worker, same caveats as join_room()."""
+    body: dict[str, str] = {"roomMode": "create", "mediaMode": media_mode}
+    if mp4_path:
+        body["mp4Path"] = mp4_path
+    result = _request(host, "POST", "/bots", body)
+    return result if isinstance(result, dict) else None
+
+
+def delete_room(host: str, bot_id: str) -> dict | None:
+    """DELETE /bots/:id -- stops and removes a bot session (leaves its
+    room). Returns {} on success (204 has no body), None on failure."""
+    return _request(host, "DELETE", f"/bots/{bot_id}")

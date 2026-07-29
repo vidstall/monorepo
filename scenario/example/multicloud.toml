@@ -455,3 +455,50 @@ provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 2
 region = "westeurope"
+
+# --- Actions timeline (run separately via `vidctl scenario run`, only
+# against an already-`apply`'d + active scenario -- `apply` never executes
+# these) --------------------------------------------------------------
+#
+# `timestamp` is a "+<duration>" offset from when `scenario run` starts
+# (NOT chained off the previous action), e.g. "+10s", "+5m", "+1h30m".
+# `id` lets a later action reference an earlier one's result via
+# "$id.key" (see bot.delete_room's bot_id below).
+
+# 10s in: have the bot spin up and create a fresh room.
+[[actions]]
+id = "room1"
+type = "bot.create_room"
+timestamp = "+10s"
+host = "do-node-1"
+media_mode = "both"
+
+# 30s in: take one akamai relay out of the network. It's paused (VM stays
+# up, container stopped), not destroyed -- it becomes available in the
+# scenario's worker pool for a later worker.join to reclaim. Note:
+# pause/restart currently only work for --provider alibaba/akamai.
+[[actions]]
+type = "worker.leave"
+timestamp = "+30s"
+host = "akamai-node-3"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+
+# 2m in: bring a relay back for this (service, provider) pair. Since the
+# worker paused above matches, this reclaims it via restart instead of
+# provisioning a brand new one -- `host` is deliberately omitted so pool
+# reuse is tried first; it would only be required as a fallback if the
+# pool had no match.
+[[actions]]
+type = "worker.join"
+timestamp = "+2m"
+service = "relay"
+provider = "akamai"
+
+# 5m in: tear down the room the bot created at t+10s.
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+5m"
+host = "do-node-1"
+bot_id = "$room1.botId"
