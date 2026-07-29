@@ -22,7 +22,7 @@ def build_infra_page(state) -> ft.Control:
     chart_container = ft.Container()
     provider_list = ft.Column(spacing=6)
     instances_list = ft.Column(spacing=6)
-    detail_column = ft.Column(spacing=8, expand=True)
+    detail_column = ft.Column(spacing=8, expand=True, scroll=ft.ScrollMode.AUTO)
     detail_column.controls = [ft.Text("Select an instance to see its workers.", color=ft.Colors.OUTLINE)]
     selected = {"provider": None}
     # Tracks whichever instance's worker list is currently open in the detail

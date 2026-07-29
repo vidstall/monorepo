@@ -97,6 +97,39 @@ def copyable_id(value: str, page: ft.Page) -> ft.Row:
     )
 
 
+def masked_secret(value: str, page: ft.Page) -> ft.Row:
+    """Like copyable_id, but for values that shouldn't sit on-screen by
+    default (bearer tokens, admin passwords) -- masked with a fixed-length
+    placeholder (doesn't leak the real length) until the eye icon toggles
+    it visible. Copy always copies the real value, whether or not it's
+    currently revealed."""
+    if not value:
+        return ft.Row([ft.Text("-", size=12)])
+    revealed = {"value": False}
+    mask = "•" * 12
+    text = ft.Text(mask, size=12, font_family="monospace", selectable=True)
+
+    def toggle_reveal(e: ft.ControlEvent) -> None:
+        revealed["value"] = not revealed["value"]
+        text.value = value if revealed["value"] else mask
+        e.control.icon = ft.Icons.VISIBILITY_OFF if revealed["value"] else ft.Icons.VISIBILITY
+        page.update()
+
+    async def do_copy(_: ft.ControlEvent) -> None:
+        await ft.Clipboard().set(value)
+        page.show_dialog(ft.SnackBar(content=ft.Text("Copied to clipboard"), duration=1200))
+
+    return ft.Row(
+        [
+            text,
+            ft.IconButton(icon=ft.Icons.VISIBILITY, icon_size=14, tooltip="Reveal", on_click=toggle_reveal),
+            ft.IconButton(icon=ft.Icons.CONTENT_COPY, icon_size=14, tooltip="Copy full value", on_click=do_copy),
+        ],
+        spacing=0,
+        tight=True,
+    )
+
+
 def provider_icon(provider: str) -> ft.Icon:
     return ft.Icon(ft.Icons.CLOUD, color=PROVIDER_COLORS.get(provider, ft.Colors.BLUE_GREY_500))
 

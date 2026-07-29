@@ -7,6 +7,7 @@ import flet as ft
 from .. import infra
 from .pages.contract_page import build_contract_page
 from .pages.infra_page import build_infra_page
+from .pages.observation_page import build_observation_page
 from .pages.scenario_page import build_scenario_page
 from .runner import ActionRunner
 
@@ -16,6 +17,7 @@ NAV_DESTINATIONS = (
     ("Contract", ft.Icons.DESCRIPTION_OUTLINED, ft.Icons.DESCRIPTION),
     ("Infra", ft.Icons.DNS_OUTLINED, ft.Icons.DNS),
     ("Scenario", ft.Icons.LAYERS_OUTLINED, ft.Icons.LAYERS),
+    ("Observation", ft.Icons.MONITOR_HEART_OUTLINED, ft.Icons.MONITOR_HEART),
 )
 
 
@@ -41,6 +43,14 @@ def main(page: ft.Page) -> None:
     page.title = "vidctl"
     page.theme = ft.Theme(color_scheme_seed=ft.Colors.INDIGO, use_material3=True)
     page.theme_mode = ft.ThemeMode.LIGHT
+    # Registered globally (Flet has no per-page font scope), but only the
+    # Observation page's own Text controls ever reference these family
+    # names -- Contract/Infra/Scenario are unaffected. See
+    # pages/observation_page/theme.py for where/why.
+    page.fonts = {
+        "Chakra Petch": "https://raw.githubusercontent.com/google/fonts/main/ofl/chakrapetch/ChakraPetch-SemiBold.ttf",
+        "IBM Plex Mono": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Regular.ttf",
+    }
     page.padding = 0
     page.window.width = 1280
     page.window.height = 860
@@ -52,6 +62,7 @@ def main(page: ft.Page) -> None:
         build_contract_page(state),
         build_infra_page(state),
         build_scenario_page(state),
+        build_observation_page(state),
     ]
     body = ft.Container(content=pages[0], expand=True, padding=0)
 
