@@ -3,16 +3,16 @@
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0755"
 
 - name: Ensure Xaisen runtime contract directory exists
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/contract"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0750"
   when: xaisen_contract_env is defined and xaisen_contract_env | length > 0
 
@@ -20,7 +20,7 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../../{{ xaisen_contract_env }}"
     dest: "{{ xaisen_services_root }}/runtime/contract/{{ xaisen_env }}.env"
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0640"
   when: xaisen_contract_env is defined and xaisen_contract_env | length > 0

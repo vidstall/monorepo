@@ -3,20 +3,14 @@
    makes hostvars for the whole group available regardless of --limit),
    collecting each host's xaisen_services list (same structure
    deploy_one_service.yml loops over) and emitting one scrape target per
-   relay/signaling instance's PUBLIC sslip.io endpoint (the same
-   Caddy-fronted hostname RELAY_ENDPOINT_URL/ENDPOINT_URL already use --
-   see Caddyfile.j2). There is no private network between droplets, so
+   instance's PUBLIC sslip.io endpoint (the same Caddy-fronted hostname
+   RELAY_ENDPOINT_URL/ENDPOINT_URL already use for relay/signaling -- see
+   Caddyfile.j2). There is no private network between droplets, so
    scraping happens over the public HTTPS endpoint, gated by the same
    METRICS_AUTH_TOKEN bearer credential every worker's /metrics(/prom)
-   route checks.
-
-   cp-daemon/validator-daemon are NOT scraped here: they have no
-   SERVICE_PORTS entry and no Caddy site block (see cli/infra.py
-   SERVICE_PORTS, main.yml's xaisen_public_services selector), so their
-   new prom-client /metrics servers have no reachable address across
-   hosts today. Scraping them would require either publishing a host port
-   for them or a private inter-host network, neither of which exists yet
-   -- a known, unaddressed scope limit, not an oversight. #}
+   route checks. cp-daemon/validator-daemon/bot all use the shared
+   packages/shared/src/metrics-prom.ts helper (plain GET /metrics, same as
+   signaling), unlike relay's own hand-rolled /metrics/prom server. #}
 global:
   scrape_interval: 15s
 
@@ -49,3 +43,60 @@ scrape_configs:
 {% endif %}
 {% endfor %}
 {% endfor %}
+  - job_name: xaisen-cp-daemon
+    scheme: https
+    metrics_path: /metrics
+    authorization:
+      credentials: "{{ xaisen_metrics_auth_token }}"
+    static_configs:
+      - targets:
+{% for host in groups['xaisen'] %}
+{% for svc in hostvars[host].get('xaisen_services', []) %}
+{% if svc.service == 'cp-daemon' %}
+          - "{{ svc.worker_key | default(svc.service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"
+{% endif %}
+{% endfor %}
+{% endfor %}
+  - job_name: xaisen-validator-daemon
+    scheme: https
+    metrics_path: /metrics
+    authorization:
+      credentials: "{{ xaisen_metrics_auth_token }}"
+    static_configs:
+      - targets:
+{% for host in groups['xaisen'] %}
+{% for svc in hostvars[host].get('xaisen_services', []) %}
+{% if svc.service == 'validator-daemon' %}
+          - "{{ svc.worker_key | default(svc.service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"
+{% endif %}
+{% endfor %}
+{% endfor %}
+  - job_name: xaisen-bot
+    scheme: https
+    metrics_path: /metrics
+    authorization:
+      credentials: "{{ xaisen_metrics_auth_token }}"
+    static_configs:
+      - targets:
+{% for host in groups['xaisen'] %}
+{% for svc in hostvars[host].get('xaisen_services', []) %}
+{% if svc.service == 'bot' %}
+          - "{{ svc.worker_key | default(svc.service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"
+{% endif %}
+{% endfor %}
+{% endfor %}
+  # Pushgateway is colocated on THIS SAME observer host (see
+  # cli/observer/inventory.py's _host_entry()), reachable directly over the
+  # internal xaisen-net bridge by container name -- no public hostname/
+  # bearer-token dance needed here, unlike the fleet-wide jobs above (this
+  # template renders once per observer host, so "this host's own
+  # xaisen-pushgateway" is always the right, and only, target).
+  # honor_labels keeps whatever job/instance labels the pushing client set
+  # (e.g. scripts/eval/measure-onchain-cost.ts) instead of Prometheus
+  # overwriting them with this scrape target's own -- the standard
+  # Pushgateway scrape convention.
+  - job_name: xaisen-pushgateway
+    honor_labels: true
+    static_configs:
+      - targets:
+          - "xaisen-pushgateway:9091"

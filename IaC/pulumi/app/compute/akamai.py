@@ -72,11 +72,13 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                     action="ACCEPT", label=label, protocol="UDP", ports=ports, ipv4s=open_v4, ipv6s=open_v6
                 )
             )
-    if any(svc.get("service") in ("relay", "signaling") for svc in services):
-        # Each relay/signaling instance gets a Caddy TLS sidecar (see
-        # docker_service/tasks/deploy_one_service.yml) that terminates HTTPS
-        # via a free Let's Encrypt cert on an sslip.io hostname -- port 80
-        # for the ACME HTTP-01 challenge, port 443 for the actual wss://
+    if any(svc.get("service") in ("relay", "signaling", "bot", "cp-daemon", "validator-daemon") for svc in services):
+        # Each relay/signaling/bot instance, plus cp-daemon/validator-daemon (whose
+        # only surface is a metrics endpoint), gets a Caddy TLS sidecar (see
+        # docker_service/tasks/deploy_one_service.yml) that terminates HTTPS via a
+        # free Let's Encrypt cert on an sslip.io hostname -- port 80 for the ACME
+        # HTTP-01 challenge, port 443 for the actual traffic (wss:// for relay/
+        # signaling, plain HTTPS for the others)
         # traffic clients connect to.
         for label, port in (("http", 80), ("https", 443)):
             inbounds.append(

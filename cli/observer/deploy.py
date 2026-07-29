@@ -20,9 +20,12 @@ def _tempo_ingest_url(host: dict[str, Any]) -> str:
 
 def _grafana_url(host: dict[str, Any]) -> str:
     """The public URL for this host's Grafana UI -- same sslip.io trick,
-    matching observer-caddyfile.j2's grafana site block's hostname."""
+    matching observer-caddyfile.j2's grafana site block's hostname. Links
+    straight at the provisioned "Xaisen Fleet" dashboard (fixed uid
+    "xaisen-fleet", see grafana-dashboard-provider.yml.j2 +
+    xaisen-fleet-dashboard.json.j2), not Grafana's bare landing page."""
     dashed = str(host["address"]).replace(".", "-")
-    return f"https://grafana.{dashed}.sslip.io/"
+    return f"https://grafana.{dashed}.sslip.io/d/xaisen-fleet/xaisen-fleet"
 
 
 def deploy(host: str | None = None) -> int:

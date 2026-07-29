@@ -112,7 +112,7 @@ def control(
             record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
             return 1
         if backend == "vm":
-            if service in ("prometheus", "tempo", "grafana"):
+            if service in ("prometheus", "tempo", "grafana", "pushgateway"):
                 message = (
                     f"{service} is no longer deployed via `vidctl infra` -- it now runs on a dedicated, "
                     "operator-owned monitoring host managed by `vidctl observer` (see `vidctl observer --help`), "

@@ -30,3 +30,22 @@ grafana.{{ ansible_host | replace('.', '-') }}.sslip.io {
     reverse_proxy xaisen-grafana:3000
 }
 {% endif %}
+
+{# Pushgateway has no authentication of its own either -- same bearer gate
+   as tempo above, reusing the SAME xaisen_metrics_auth_token every other
+   metrics surface in this system already checks (not a separate token),
+   since this is conceptually just another metrics-write path, not a
+   distinct trust boundary. Eval-harness scripts running on a dev machine
+   (scripts/eval/measure-onchain-cost.ts, measure-chain-latency.ts,
+   run-scale-ramp.ts) PUT/POST their one-shot results here. Prometheus
+   itself never uses this public route -- it scrapes xaisen-pushgateway
+   directly over the internal xaisen-net bridge (see prometheus.yml.j2). #}
+{% if xaisen_observer_pushgateway_service | length > 0 %}
+pushgateway.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    @authorized {
+        header Authorization "Bearer {{ xaisen_metrics_auth_token }}"
+    }
+    reverse_proxy @authorized xaisen-pushgateway:9091
+    respond 401
+}
+{% endif %}

@@ -1,0 +1,119 @@
+{# Fixed uid "xaisen-fleet" so cli/gui/pages/observation_page and
+   cli/observer/deploy.py can link straight at /d/xaisen-fleet/... instead of
+   Grafana's bare landing page. Datasources are referenced by NAME
+   ("Prometheus" / "Tempo", matching grafana-datasource.yml.j2's provisioned
+   names) rather than by uid -- grafana-datasource.yml.j2 never pins a uid,
+   so a uid-based reference here would be guessing at an auto-generated
+   value. Wrapped in {% raw %} because this is plain JSON with no templated
+   values -- letting Jinja scan it risks misparsing adjacent braces from
+   pretty-printed nested objects as `{{ }}` expression syntax. #}
+{% raw %}
+{
+  "uid": "xaisen-fleet",
+  "title": "Xaisen Fleet",
+  "tags": ["xaisen"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Targets up",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "up{job=~\"xaisen.*\"}",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name" }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Active sessions",
+      "description": "dvconf_active_sessions -- relay/signaling/bot's live concurrency gauge (packages/shared/src/metrics-prom.ts).",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "dvconf_active_sessions",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "CPU usage (5m rate)",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "rate(process_cpu_seconds_total{job=~\"xaisen.*\"}[5m])",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Resident memory",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "expr": "process_resident_memory_bytes{job=~\"xaisen.*\"}",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "id": 5,
+      "type": "traces",
+      "title": "Recent traces",
+      "description": "relay/signaling/cp-daemon/validator-daemon spans (bot has metrics only, no tracing) -- see otel-bootstrap.ts and secrets/services/otel.env.",
+      "datasource": { "type": "tempo", "uid": "Tempo" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 22 },
+      "targets": [
+        {
+          "datasource": { "type": "tempo", "uid": "Tempo" },
+          "queryType": "traceql",
+          "query": "{}",
+          "limit": 20,
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
+{% endraw %}

@@ -34,6 +34,16 @@ _TEMPO_OTLP_PORT = 4318
 # SSH tunnel), same reasoning as tempo's ports above.
 _GRAFANA_PORT = 3000
 
+# Pushgateway's own default port. Prometheus scrapes it over the internal
+# xaisen-net bridge by container name (same host, no TLS/bearer needed --
+# see prometheus.yml.j2's xaisen-pushgateway job), same as prometheus could
+# scrape itself. Eval-harness scripts running on a dev machine (not on the
+# fleet) still need a way to PUSH results in, though -- that's the one
+# write path this observer host exposes externally, bearer-gated through
+# observer-caddyfile.j2 reusing xaisen_metrics_auth_token, same pattern as
+# tempo's OTLP ingest.
+_PUSHGATEWAY_PORT = 9091
+
 
 def _host_entry(host: dict[str, Any]) -> dict[str, Any]:
     desired_state = host.get("desired_state", "running")
@@ -41,6 +51,15 @@ def _host_entry(host: dict[str, Any]) -> dict[str, Any]:
         "ansible_host": host["address"],
         "ansible_user": host["ssh_user"],
         "ansible_ssh_private_key_file": host["ssh_key"],
+        # Static hosts are operator-provisioned, not Pulumi-managed --
+        # deploy_one_service.yml's ssh user typically has no sudo (e.g.
+        # bourbon's), unlike cloud-init'd fleet VMs. Host vars here override
+        # both site.yml's play-level `become: true` and group_vars/all's
+        # `/opt/xaisen` default, redirecting everything into a directory
+        # this user already owns so no privilege escalation is ever needed
+        # (see IaC/ansible roles' `xaisen_provider != 'static'` guards).
+        "ansible_become": False,
+        "xaisen_services_root": f"/home/{host['ssh_user']}/xaisen",
         # Informational only -- nothing in the Ansible role reads this
         # singular field (xaisen_services, plural, below is what actually
         # drives deploy_one_service.yml).
@@ -75,6 +94,14 @@ def _host_entry(host: dict[str, Any]) -> dict[str, Any]:
                 "desired_state": desired_state,
                 "index": 1,
                 "worker_key": "grafana",
+            },
+            {
+                "service": "pushgateway",
+                "port": _PUSHGATEWAY_PORT,
+                "host_port": _PUSHGATEWAY_PORT,
+                "desired_state": desired_state,
+                "index": 1,
+                "worker_key": "pushgateway",
             },
         ],
         "xaisen_provider": "static",

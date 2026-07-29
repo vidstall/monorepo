@@ -3,17 +3,23 @@
    are never publicly exposed themselves (no Caddy site block for either),
    only reachable from grafana over the shared xaisen-net bridge by
    container name, same mechanism the observer ingress Caddy/fleet Caddy
-   use to reach every other service. #}
+   use to reach every other service. uid is pinned (not left to Grafana's
+   auto-generated random default) because xaisen-fleet-dashboard.json.j2's
+   panels reference these datasources by this exact uid -- an unpinned uid
+   would leave the dashboard's panels unable to resolve their datasource
+   (a random uid every fresh provision, invisible until you check). #}
 apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: Prometheus
     type: prometheus
     access: proxy
     url: http://xaisen-prometheus:9090
     isDefault: true
     editable: false
   - name: Tempo
+    uid: Tempo
     type: tempo
     access: proxy
     url: http://xaisen-tempo:3200

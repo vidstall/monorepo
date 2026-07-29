@@ -6,10 +6,16 @@
 # Use observer_clean.yml to also wipe that data.
 # Never touches the host/VM itself -- no destroy/reboot semantics exist
 # anywhere in this file.
+# No become: this playbook only ever targets operator-provisioned static
+# hosts (host_limit is always a registered observer host, see
+# cli/observer/lifecycle.py), whose services_root/files are owned by the
+# SSH user itself (see cli/observer/inventory.py's _host_entry()) -- and
+# container removal only needs Docker-socket access, which that user's
+# docker group membership already covers.
 - name: Remove the monitoring containers (data preserved)
   hosts: xaisen
   gather_facts: false
-  become: true
+  become: false
   tasks:
     - name: Remove monitoring containers
       community.docker.docker_container:
@@ -19,3 +25,4 @@
         - xaisen-prometheus
         - xaisen-tempo
         - xaisen-grafana
+        - xaisen-pushgateway

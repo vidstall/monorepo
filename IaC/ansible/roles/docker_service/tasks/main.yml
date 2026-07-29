@@ -3,17 +3,22 @@
   ansible.builtin.meta: end_host
   when: xaisen_services is not defined or xaisen_services | length == 0
 
+# Skipped for static hosts (bourbon): operator-provisioned, Docker already
+# installed/running, and no become available to run apt/systemd here (see
+# cli/observer/inventory.py's ansible_become: false).
 - name: Install Docker
   ansible.builtin.apt:
     name: docker.io
     state: present
     update_cache: true
+  when: xaisen_provider != 'static'
 
 - name: Ensure Docker service is running
   ansible.builtin.systemd:
     name: docker
     state: started
     enabled: true
+  when: xaisen_provider != 'static'
 
 - name: Log in to the container registry
   community.docker.docker_login:
@@ -92,17 +97,24 @@
 # ports 80/443 can only be bound once per host, so this can't be a
 # per-instance sidecar (see deploy_one_service.yml's endpoint-URL comment
 # for why each instance still gets its own sslip.io hostname/cert via a
-# distinct Caddyfile site block keyed by worker_key).
+# distinct Caddyfile site block keyed by worker_key). cp-daemon/
+# validator-daemon are chain-facing daemons with no client-facing surface
+# of their own, but they DO already run a Prometheus /metrics server (see
+# packages/shared/src/metrics-prom.ts) -- with no private network between
+# fleet droplets, a public (bearer-token-gated, same as relay/signaling's
+# metrics) Caddy site block is the only way to reach it. See Caddyfile.j2's
+# xaisen_metrics_ports for how their site block ends up metrics-only (no
+# generic fallback route, since they have nothing else to proxy to).
 - name: Determine which colocated services need the shared Caddy TLS proxy
   ansible.builtin.set_fact:
-    xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'signaling', 'bot']) | list }}"
+    xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'signaling', 'bot', 'cp-daemon', 'validator-daemon']) | list }}"
 
 - name: Ensure Caddy config directory exists
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/caddy"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0750"
   when: xaisen_public_services | length > 0
 
@@ -110,8 +122,8 @@
   ansible.builtin.template:
     src: Caddyfile.j2
     dest: "{{ xaisen_services_root }}/runtime/caddy/Caddyfile"
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0644"
   when: xaisen_public_services | length > 0
   register: xaisen_caddyfile_write
@@ -143,7 +155,12 @@
 # (3200) is NOT proxied here -- it stays SSH-tunnel-only, like Prometheus.
 # Grafana (also loopback-only) shares this same ingress container -- it
 # needs no bearer gate (Grafana has its own login), just a plain reverse
-# proxy, so it gets a second site block in the same Caddyfile.
+# proxy, so it gets a second site block in the same Caddyfile. Pushgateway
+# (also loopback-only, see deploy_one_service.yml's ports: mapping) gets a
+# THIRD site block, bearer-gated the same way as tempo -- eval-harness
+# scripts (scripts/eval/measure-onchain-cost.ts etc.) run on a dev machine
+# against a local Sui node, not on the fleet, so they need a public (but
+# gated) path to push their one-shot results in.
 - name: Determine whether this host runs tempo (observer ingress needed)
   ansible.builtin.set_fact:
     xaisen_observer_tempo_service: "{{ xaisen_services | selectattr('service', 'equalto', 'tempo') | list }}"
@@ -152,23 +169,27 @@
   ansible.builtin.set_fact:
     xaisen_observer_grafana_service: "{{ xaisen_services | selectattr('service', 'equalto', 'grafana') | list }}"
 
+- name: Determine whether this host runs pushgateway (observer ingress needed)
+  ansible.builtin.set_fact:
+    xaisen_observer_pushgateway_service: "{{ xaisen_services | selectattr('service', 'equalto', 'pushgateway') | list }}"
+
 - name: Ensure observer ingress Caddy config directory exists
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/observer-caddy"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0750"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0)
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0)
 
-- name: Write observer ingress Caddyfile (tempo's bearer-gated OTLP receiver + grafana's plain proxy)
+- name: Write observer ingress Caddyfile (tempo's bearer-gated OTLP receiver + grafana's plain proxy + pushgateway's bearer-gated write endpoint)
   ansible.builtin.template:
     src: observer-caddyfile.j2
     dest: "{{ xaisen_services_root }}/runtime/observer-caddy/Caddyfile"
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0640"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0)
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0)
   register: xaisen_observer_caddyfile_write
 
 - name: Run the observer ingress Caddy container
@@ -187,4 +208,4 @@
       - "{{ xaisen_services_root }}/runtime/observer-caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
       - "{{ xaisen_services_root }}/runtime/observer-caddy/data:/data"
       - "{{ xaisen_services_root }}/runtime/observer-caddy/config:/config"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0)
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0)

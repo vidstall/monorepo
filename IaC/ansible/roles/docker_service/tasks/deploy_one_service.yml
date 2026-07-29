@@ -19,8 +19,8 @@
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0750"
 
 - name: Check for a per-service secrets file locally
@@ -34,8 +34,8 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service_item.service }}.env"
     dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/service.env"
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0640"
   when: xaisen_service_secrets_file.stat.exists | default(false)
 
@@ -63,8 +63,8 @@
 - name: Write operator wallet credentials
   ansible.builtin.copy:
     dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0600"
     content: "{{ xaisen_operator_wallets[inventory_hostname][xaisen_service_item.worker_key | default(xaisen_service_item.service)] }}"
   when:
@@ -78,13 +78,16 @@
 # PINNED_IMAGES) with no keypair/cap/on-chain-endpoint concept -- they need
 # a mounted CONFIG file instead, a need no other service has. Rendered here,
 # before the docker_container task below, so it's in place before the
-# container (re)starts.
+# container (re)starts. Pushgateway is ALSO a pinned upstream image but
+# needs neither a config file nor a data directory (it holds pushed metrics
+# in memory only, no `--persistence.file` flag set here) -- it's
+# deliberately absent from the `when:` lists below.
 - name: Ensure monitoring config directory exists
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config"
     state: directory
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0750"
   when: xaisen_service_item.service in ['prometheus', 'tempo', 'grafana']
 
@@ -103,8 +106,8 @@
   ansible.builtin.template:
     src: prometheus.yml.j2
     dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/prometheus.yml"
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0640"
   when: xaisen_service_item.service == 'prometheus'
   register: xaisen_prometheus_config_write
@@ -113,8 +116,8 @@
   ansible.builtin.template:
     src: tempo.yaml.j2
     dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/tempo.yaml"
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0640"
   when: xaisen_service_item.service == 'tempo'
   register: xaisen_tempo_config_write
@@ -123,11 +126,53 @@
   ansible.builtin.template:
     src: grafana-datasource.yml.j2
     dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/datasource.yml"
-    owner: root
-    group: root
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0640"
   when: xaisen_service_item.service == 'grafana'
   register: xaisen_grafana_config_write
+
+- name: Write Grafana dashboard provider config
+  ansible.builtin.template:
+    src: grafana-dashboard-provider.yml.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboard-provider.yml"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_item.service == 'grafana'
+  register: xaisen_dashboard_provider_write
+
+- name: Ensure Grafana dashboards config subdirectory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards"
+    state: directory
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0750"
+  when: xaisen_service_item.service == 'grafana'
+
+- name: Write Grafana fleet dashboard JSON
+  ansible.builtin.template:
+    src: xaisen-fleet-dashboard.json.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards/xaisen-fleet.json"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_item.service == 'grafana'
+  register: xaisen_dashboard_json_write
+
+# Defense-facing evaluation view (separate uid/file from "Xaisen Fleet"), same
+# provider/folder -- Grafana's file-provider polls the whole dashboards dir,
+# so no new provider plumbing is needed for a second dashboard file.
+- name: Write Grafana academic-eval dashboard JSON
+  ansible.builtin.template:
+    src: xaisen-academic-eval.json.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards/xaisen-academic-eval.json"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_item.service == 'grafana'
+  register: xaisen_academic_eval_dashboard_json_write
 
 # Each worker app expects its own differently-named keypair env var
 # (CP_KEYPAIR, SIGNALING_KEYPAIR, PRIVATE_KEY for relay, SUI_PRIVATE_KEY for
@@ -269,6 +314,17 @@
     # explicit -config.file argument pointing at the mounted config (see
     # volumes: below).
     command: "{{ '-config.file=/etc/tempo.yaml' if xaisen_service_item.service == 'tempo' else omit }}"
+    # The upstream prom/prometheus, grafana/tempo, grafana/grafana images
+    # each run as their own baked-in unprivileged UID by default, which
+    # can't read the bind-mounted config file above (owned by whichever
+    # user wrote it -- root on Pulumi-managed fleet VMs, the SSH user
+    # itself on static hosts like bourbon, see xaisen_services_root's
+    # owner/group conditionals). Running the container AS that same
+    # connecting user (ansible_user_uid/gid, gathered by site.yml's
+    # "Gather host facts" pre-task) instead of loosening the config
+    # file's mode keeps prometheus.yml's real bearer credential
+    # (xaisen_metrics_auth_token) unreadable by anyone else on the box.
+    user: "{{ (ansible_user_uid ~ ':' ~ ansible_user_gid) if xaisen_service_item.service in ['prometheus', 'tempo', 'grafana'] else omit }}"
     # cli/registry.py tags images with the git short SHA, which is stable
     # across repeat `vidctl registry publish` runs on an uncommitted branch
     # -- without forcing a pull, a host that already has that tag cached
@@ -291,29 +347,34 @@
         or (xaisen_prometheus_config_write is defined and xaisen_prometheus_config_write is changed)
         or (xaisen_tempo_config_write is defined and xaisen_tempo_config_write is changed)
         or (xaisen_grafana_config_write is defined and xaisen_grafana_config_write is changed)
+        or (xaisen_dashboard_provider_write is defined and xaisen_dashboard_provider_write is changed)
+        or (xaisen_dashboard_json_write is defined and xaisen_dashboard_json_write is changed)
+        or (xaisen_academic_eval_dashboard_json_write is defined and xaisen_academic_eval_dashboard_json_write is changed)
       }}
     # UDP RTC/pipe ranges are offset per worker_index (100 ports apart) so
     # colocated relay replicas on the same host don't collide -- mirrors how
     # the TCP port below is offset in cli/infra.py's set_vm_defaults().
-    # Prometheus/tempo/grafana have no auth of their own worth relying on for
-    # network exposure (grafana DOES have its own login, but that's gated at
-    # the Caddy ingress layer, not here) -- their published ports below
-    # always bind loopback-only, never 0.0.0.0. Prometheus is reachable only
-    # via an SSH tunnel, published under `host_port` (an operator-chosen,
-    # non-default port -- see cli/observer's DEFAULT_HOST_PORT), NOT its
-    # fixed internal 9090, so nothing externally visible sits on its
-    # well-known default port. Tempo/grafana's ports have no such obscurity
-    # need (each is only ever reached through observer-caddyfile.j2's
-    # reverse proxy, never directly), so they stay on their own fixed
-    # internal ports; tempo's second port (3200, the query API,
-    # SSH-tunnel-reached like Prometheus) is hardcoded here the same way
-    # relay's RTC/pipe UDP ranges are below -- a single fixed pair isn't
-    # worth a generic multi-port mechanism.
+    # Prometheus/tempo/grafana/pushgateway have no auth of their own worth
+    # relying on for network exposure (grafana DOES have its own login, but
+    # that's gated at the Caddy ingress layer, not here) -- their published
+    # ports below always bind loopback-only, never 0.0.0.0. Prometheus is
+    # reachable only via an SSH tunnel, published under `host_port` (an
+    # operator-chosen, non-default port -- see cli/observer's
+    # DEFAULT_HOST_PORT), NOT its fixed internal 9090, so nothing externally
+    # visible sits on its well-known default port. Tempo/grafana/pushgateway's
+    # ports have no such obscurity need (each is only ever reached through
+    # observer-caddyfile.j2's reverse proxy, never directly -- pushgateway's
+    # write endpoint gets its own bearer-gated site block there, same as
+    # tempo's OTLP ingest), so they stay on their own fixed internal ports;
+    # tempo's second port (3200, the query API, SSH-tunnel-reached like
+    # Prometheus) is hardcoded here the same way relay's RTC/pipe UDP ranges
+    # are below -- a single fixed pair isn't worth a generic multi-port
+    # mechanism.
     ports: >-
       {{
         ([
           ('127.0.0.1:' ~ (xaisen_service_item.host_port | default(xaisen_service_item.port)) ~ ':' ~ xaisen_service_item.port)
-          if xaisen_service_item.service in ['prometheus', 'tempo', 'grafana']
+          if xaisen_service_item.service in ['prometheus', 'tempo', 'grafana', 'pushgateway']
           else (xaisen_service_item.port ~ ':' ~ xaisen_service_item.port)
         ] if (xaisen_service_item.port | default(0) | int > 0) else [])
         + (['127.0.0.1:3200:3200'] if xaisen_service_item.service == 'tempo' else [])
@@ -352,6 +413,9 @@
         + (
           [
             xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro',
+            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/dashboard-provider.yml:/etc/grafana/provisioning/dashboards/dashboard-provider.yml:ro',
+            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/dashboards/xaisen-fleet.json:/etc/grafana/provisioning/dashboards/xaisen/xaisen-fleet.json:ro',
+            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/dashboards/xaisen-academic-eval.json:/etc/grafana/provisioning/dashboards/xaisen/xaisen-academic-eval.json:ro',
             xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/data:/var/lib/grafana',
           ]
           if xaisen_service_item.service == 'grafana' else []
@@ -380,8 +444,10 @@
     # otel-bootstrap.ts (packages/shared) no-ops when OTEL_EXPORTER_OTLP_ENDPOINT
     # is unset, so it's safe to inject unconditionally for these 4 services even
     # before the operator has seeded secrets/services/otel.env (see
-    # cli/infra/secrets.py's otel_exporter_vars()) -- same 4-service list as
-    # METRICS_AUTH_TOKEN above, excluding bot/prometheus/tempo/grafana.
+    # cli/infra/secrets.py's otel_exporter_vars()). bot is NOT in this list --
+    # no tracing for it (never imports otel-bootstrap.ts) -- but IS in
+    # METRICS_AUTH_TOKEN's list below, since it now runs its own minimal
+    # prom-client metrics server (packages/shared/src/metrics-prom.ts) too.
     # Grafana's own login, not the observer ingress Caddy's bearer gate (unlike
     # tempo's ingest) -- see cli/observer/secrets.py's grafana_admin_password().
     # GF_SERVER_ROOT_URL tells Grafana its own real public URL so redirects/
@@ -389,6 +455,14 @@
     # (Comments kept as plain YAML here, not inline in the Jinja expression
     # below -- Jinja only supports `{# #}` block comments, not `#` inside a
     # `{{ }}` expression, which is a template syntax error.)
+    # Anonymous Viewer role + embedding allowed for grafana (last combine()
+    # below) -- the vidctl GUI's Observation page embeds this URL directly
+    # in a webview (see cli/gui/pages/observation_page), which needs
+    # dashboards to render with no login prompt. GF_SECURITY_ADMIN_PASSWORD
+    # stays required for anything that isn't read-only viewing (editing
+    # dashboards, Grafana's own admin settings). GF_SERVER_ROOT_URL tells
+    # Grafana its own real public URL so redirects/asset links are correct
+    # behind the reverse proxy.
     env: >-
       {{
         {
@@ -403,10 +477,16 @@
         | combine({'ANNOUNCED_IP': ansible_host} if xaisen_service_item.service == 'relay' else {})
         | combine({'RTC_MIN_PORT': xaisen_relay_rtc_min, 'RTC_MAX_PORT': xaisen_relay_rtc_max, 'PIPE_PORT_RANGE': xaisen_relay_pipe_min ~ '-' ~ xaisen_relay_pipe_max} if xaisen_service_item.service == 'relay' else {})
         | combine({'REGISTRATION_MODE': 'voting'} if xaisen_service_item.service in ['relay', 'signaling', 'validator-daemon'] else {})
-        | combine({'METRICS_AUTH_TOKEN': xaisen_metrics_auth_token} if (xaisen_metrics_auth_token | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
+        | combine({'METRICS_AUTH_TOKEN': xaisen_metrics_auth_token} if (xaisen_metrics_auth_token | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon', 'bot'] else {})
         | combine({'OTEL_EXPORTER_OTLP_ENDPOINT': xaisen_otel_exporter_endpoint, 'OTEL_SERVICE_NAME': xaisen_service_item.service} if (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
         | combine({'OTEL_EXPORTER_OTLP_HEADERS': xaisen_otel_exporter_headers} if (xaisen_otel_exporter_headers | default('')) and (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
-        | combine({'GF_SECURITY_ADMIN_PASSWORD': xaisen_grafana_admin_password, 'GF_SERVER_ROOT_URL': 'https://grafana.' ~ (ansible_host | replace('.', '-')) ~ '.sslip.io/'} if xaisen_service_item.service == 'grafana' else {})
+        | combine({
+            'GF_SECURITY_ADMIN_PASSWORD': xaisen_grafana_admin_password,
+            'GF_SERVER_ROOT_URL': 'https://grafana.' ~ (ansible_host | replace('.', '-')) ~ '.sslip.io/',
+            'GF_AUTH_ANONYMOUS_ENABLED': 'true',
+            'GF_AUTH_ANONYMOUS_ORG_ROLE': 'Viewer',
+            'GF_SECURITY_ALLOW_EMBEDDING': 'true',
+          } if xaisen_service_item.service == 'grafana' else {})
       }}
   async: 300
   poll: 0

@@ -173,10 +173,12 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
         # port-publish change in docker_service/tasks/main.yml.
         _udp_rule("relay-rtc", 10000, 10100)
         _udp_rule("relay-pipe", 40000, 40100)
-    if any(svc.get("service") in ("relay", "signaling") for svc in services):
-        # Each relay/signaling instance gets a Caddy TLS sidecar -- port 80
-        # for the ACME HTTP-01 challenge, port 443 for the actual wss://
-        # traffic clients connect to.
+    if any(svc.get("service") in ("relay", "signaling", "bot", "cp-daemon", "validator-daemon") for svc in services):
+        # Each relay/signaling/bot instance, plus cp-daemon/validator-daemon
+        # (whose only surface is a metrics endpoint), gets a Caddy TLS
+        # sidecar -- port 80 for the ACME HTTP-01 challenge, port 443 for
+        # the actual traffic (wss:// for relay/signaling, plain HTTPS for
+        # the others).
         _tcp_rule("http", 80)
         _tcp_rule("https", 443)
 

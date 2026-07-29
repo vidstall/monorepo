@@ -83,7 +83,7 @@ class ObserverInventoryTests(unittest.TestCase):
         self.assertEqual(host_entry["ansible_user"], "deploy")
         self.assertEqual(host_entry["ansible_ssh_private_key_file"], "/home/me/.ssh/bourbon-deploy")
         services = {s["service"]: s for s in host_entry["xaisen_services"]}
-        self.assertEqual(set(services), {"prometheus", "tempo", "grafana"})
+        self.assertEqual(set(services), {"prometheus", "tempo", "grafana", "pushgateway"})
         # Prometheus: container-internal port stays fixed (its own default)
         # -- only host_port (the externally published one) is
         # operator-chosen.
@@ -101,6 +101,13 @@ class ObserverInventoryTests(unittest.TestCase):
         self.assertEqual(services["grafana"]["port"], 3000)
         self.assertEqual(services["grafana"]["host_port"], 3000)
         self.assertEqual(services["grafana"]["desired_state"], "running")
+        # Pushgateway: both port and host_port stay fixed at 9091. Prometheus
+        # scrapes it over the internal xaisen-net bridge by container name
+        # (same host, no TLS/bearer needed); its host_port only matters for
+        # an SSH-tunnel debug path, same no-obscurity reasoning as tempo.
+        self.assertEqual(services["pushgateway"]["port"], 9091)
+        self.assertEqual(services["pushgateway"]["host_port"], 9091)
+        self.assertEqual(services["pushgateway"]["desired_state"], "running")
 
     def test_build_inventory_uses_custom_port(self) -> None:
         observer.add_host("bourbon", "161.118.232.63", "deploy", "/tmp/key", port=27000)
@@ -254,6 +261,28 @@ class ObserverSecretsTests(unittest.TestCase):
         self.assertEqual(first, second)
         contents = (context.SERVICE_SECRETS_DIR / "observer-grafana.env").read_text(encoding="utf-8")
         self.assertIn(f"GF_SECURITY_ADMIN_PASSWORD={first}", contents)
+
+
+class ObserverCleanPlaybookTests(unittest.TestCase):
+    def test_clean_wipes_prometheus_and_tempo_data_but_not_grafanas(self) -> None:
+        import yaml
+
+        path = context.ANSIBLE_DIR / "playbooks" / "observer_clean.yml"
+        play = yaml.safe_load(path.read_text(encoding="utf-8"))[0]
+        tasks = {task["name"]: task for task in play["tasks"]}
+
+        removed_containers = tasks["Remove monitoring containers"]["loop"]
+        self.assertEqual(
+            set(removed_containers),
+            {"xaisen-prometheus", "xaisen-tempo", "xaisen-grafana", "xaisen-pushgateway"},
+        )
+
+        wiped_data_dirs = tasks["Wipe monitoring data directories"]["loop"]
+        # Grafana's container is removed above, but its data dir (dashboards,
+        # logins) must survive a `vidctl scenario destroy` reset -- only
+        # prometheus/tempo's history is meant to be wiped.
+        self.assertEqual(set(wiped_data_dirs), {"prometheus", "tempo"})
+        self.assertNotIn("grafana", wiped_data_dirs)
 
 
 if __name__ == "__main__":

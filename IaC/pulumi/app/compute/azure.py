@@ -122,9 +122,12 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                 )
             )
             next_priority += 10
-    if any(svc.get("service") in ("relay", "signaling") for svc in services):
-        # Each relay/signaling instance gets a Caddy TLS sidecar -- port 80 for the
-        # ACME HTTP-01 challenge, port 443 for the actual wss:// traffic.
+    if any(svc.get("service") in ("relay", "signaling", "bot", "cp-daemon", "validator-daemon") for svc in services):
+        # Each relay/signaling/bot instance, plus cp-daemon/validator-daemon
+        # (whose only surface is a metrics endpoint), gets a Caddy TLS
+        # sidecar -- port 80 for the ACME HTTP-01 challenge, port 443 for
+        # the actual traffic (wss:// for relay/signaling, plain HTTPS for
+        # the others).
         for tls_port in (80, 443):
             security_rules.append(
                 network.SecurityRuleArgs(

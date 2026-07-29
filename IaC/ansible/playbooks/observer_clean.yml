@@ -1,12 +1,29 @@
 ---
 # `vidctl observer clean` -- removes the monitoring containers AND wipes
-# their data directories (permanent history loss, unlike
+# prometheus/tempo's data directories (permanent history loss, unlike
 # observer_destroy.yml). Never touches the host/VM itself -- no
 # destroy/reboot semantics exist anywhere in this file.
+#
+# Grafana's container IS removed (consistent with the other two), but its
+# data dir is deliberately NOT wiped here -- unlike prometheus/tempo's TSDB/
+# trace storage, Grafana's data dir holds its own sqlite DB (dashboards,
+# users, sessions). Pushgateway's container is also removed but never had a
+# data dir to begin with (it holds pushed metrics in memory only, no
+# `--persistence.file` configured -- see deploy_one_service.yml). `vidctl
+# scenario destroy` calls this playbook to reset observation data on every
+# fresh scenario restart (see cli/scenario/apply.py's destroy()) -- wiping
+# Grafana too would force the operator to redo their Grafana setup after
+# every scenario reset, which nothing asked for. `vidctl observer deploy`/
+# `start` recreates the grafana container fine even with an empty runtime
+# dir (first-run behavior), so removing the container alone is safe.
+# No become: same reasoning as observer_destroy.yml -- this playbook only
+# ever targets operator-provisioned static hosts whose services_root is
+# owned by the SSH user itself, so removing containers/data needs no
+# privilege escalation.
 - name: Remove the monitoring containers and their data
   hosts: xaisen
   gather_facts: false
-  become: true
+  become: false
   tasks:
     - name: Remove monitoring containers
       community.docker.docker_container:
@@ -16,6 +33,7 @@
         - xaisen-prometheus
         - xaisen-tempo
         - xaisen-grafana
+        - xaisen-pushgateway
 
     - name: Wipe monitoring data directories
       ansible.builtin.file:
@@ -24,4 +42,3 @@
       loop:
         - prometheus
         - tempo
-        - grafana

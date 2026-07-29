@@ -1,0 +1,295 @@
+{# Defense-facing evaluation dashboard, separate from "Xaisen Fleet" (the
+   operational health view). Fixed uid "xaisen-academic-eval". Same
+   provisioning mechanism as xaisen-fleet-dashboard.json.j2 (file provider,
+   folder poll) -- no new provider plumbing needed, this file just also
+   gets bind-mounted into the same dashboards folder under a different
+   filename (see deploy_one_service.yml). Datasources referenced by name
+   ("Prometheus"), matching grafana-datasource.yml.j2's provisioned names.
+   Wrapped in {% raw %} for the same reason as the fleet dashboard: plain
+   JSON with pretty-printed nested braces would otherwise get misparsed as
+   Jinja expression syntax. #}
+{% raw %}
+{
+  "uid": "xaisen-academic-eval",
+  "title": "Xaisen Academic Evaluation",
+  "tags": ["xaisen", "academic-eval"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 100,
+      "type": "text",
+      "title": "About this dashboard",
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "This dashboard argues the system's research claims: it scales, on-chain coordination overhead is bounded, failover recovers within a target window, and media quality holds up under load. Panels are fed by two kinds of signal: **live fleet metrics** (continuously scraped from relay/signaling/cp-daemon/validator-daemon/bot) and **one-shot eval-harness results** (pushed to the observer host's Pushgateway by `scripts/eval/*` and `scripts/failover/failover-smoke.ts`). Numbers here are real production/fleet or loopback-bench signals -- they complement, not replace, the hermetic microbenchmarks in `.evidence/verification/*.md` (methodology docs: `docs/80-research/evaluation/`). Keep this list in sync manually when new evidence docs are added:\n\n- `.evidence/verification/` -- microbenchmark reports (mechanism-floor timings, explicit honesty/bounds framing)\n- `docs/80-research/evaluation/m1-latency-methodology.md` -- latency measurement methodology\n- `scripts/eval/measure-onchain-cost.ts` / `aggregate-onchain-cost.ts` -- Sui gas-cost evidence + $/room break-even\n- `scripts/eval/measure-chain-latency.ts` / `replay-chain-latency.ts` -- on-chain finality latency evidence\n- `scripts/eval/run-scale-ramp.ts` -- load-ramp harness\n- `scripts/failover/failover-smoke.ts` -- synthetic failover-detector drill"
+      }
+    },
+
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Scalability under load",
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "panels": [
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Active rooms / sessions",
+          "description": "dvconf_rooms_active (gauge) and rate of dvconf_sessions_total (counter) -- signaling's live concurrency (apps/signaling/src/index.ts).",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_rooms_active", "legendFormat": "rooms active ({{service}})", "refId": "A" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_sessions_total[5m])", "legendFormat": "sessions/s ({{service}})", "refId": "B" }
+          ]
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "CPU + RSS per active session",
+          "description": "Pure PromQL ratio, no new instrumentation -- process_cpu_seconds_total / process_resident_memory_bytes divided by dvconf_active_sessions.",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(process_cpu_seconds_total{job=~\"xaisen.*\"}[5m]) / clamp_min(dvconf_active_sessions, 1)", "legendFormat": "cpu/session ({{job}})", "refId": "A" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "process_resident_memory_bytes{job=~\"xaisen.*\"} / clamp_min(dvconf_active_sessions, 1)", "legendFormat": "bytes/session ({{job}})", "refId": "B" }
+          ]
+        },
+        {
+          "id": 12,
+          "type": "heatmap",
+          "title": "Bot join-phase latency",
+          "description": "dvconf_bot_join_phase_seconds{phase} -- register/create-room/ws-connect/media-start step durations (apps/bot/src/session.ts).",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "sum(rate(dvconf_bot_join_phase_seconds_bucket[5m])) by (le, phase)", "format": "heatmap", "legendFormat": "{{phase}} {{le}}", "refId": "A" }
+          ]
+        },
+        {
+          "id": 13,
+          "type": "table",
+          "title": "Load-ramp step results (run-scale-ramp.ts)",
+          "description": "Pushgateway job xaisen_loadtest -- one row per ramp step, grouped by the `step` label. Populated only after running `scripts/eval/run-scale-ramp.ts`.",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_loadtest_step_participants", "format": "table", "instant": true, "legendFormat": "__auto", "refId": "A" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_loadtest_step_launched", "format": "table", "instant": true, "legendFormat": "__auto", "refId": "B" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_loadtest_step_failures", "format": "table", "instant": true, "legendFormat": "__auto", "refId": "C" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_loadtest_step_pool_launch_ms_p95", "format": "table", "instant": true, "legendFormat": "__auto", "refId": "D" }
+          ],
+          "transformations": [{ "id": "merge", "options": {} }]
+        }
+      ]
+    },
+
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Blockchain overhead & decentralization",
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "panels": [
+        {
+          "id": 20,
+          "type": "heatmap",
+          "title": "Chain tx latency by method",
+          "description": "dvconf_chain_tx_duration_seconds{service,method} -- every executeWithRetry() call, first attempt to final success/failure (packages/shared/src/chain/tx.ts).",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "sum(rate(dvconf_chain_tx_duration_seconds_bucket[5m])) by (le, method)", "format": "heatmap", "legendFormat": "{{method}} {{le}}", "refId": "A" }
+          ]
+        },
+        {
+          "id": 21,
+          "type": "timeseries",
+          "title": "Chain tx retries + event-poll duration",
+          "description": "dvconf_chain_tx_retries_total (retry attempts beyond the first) and dvconf_chain_poll_duration_seconds (EventPoller.pollOnce wall-clock, packages/shared/src/chain/events.ts).",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_chain_tx_retries_total[5m])", "legendFormat": "retries/s ({{service}}/{{method}})", "refId": "A" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_poll_duration_seconds_bucket[5m])) by (le, service, module))", "legendFormat": "poll p95 ({{service}}/{{module}})", "refId": "B" }
+          ]
+        },
+        {
+          "id": 22,
+          "type": "timeseries",
+          "title": "Role-vote-cast rate vs. 2/3 quorum threshold",
+          "description": "dvconf_role_votes_cast_total (cp-daemon vote submissions) and dvconf_role_assignments_total (completed apply_voted_role calls). role_voting.move requires a 2/3 CP supermajority (base_threshold_bps = 6667) -- the dashed line is illustrative context, not a literal vote-count threshold (quorum is a FRACTION of active CPs, not a fixed count).",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_role_votes_cast_total[5m])", "legendFormat": "votes cast/s", "refId": "A" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_role_assignments_total[5m])", "legendFormat": "assignments/s ({{service}})", "refId": "B" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "thresholdsStyle": { "mode": "line" }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.6667 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 23,
+          "type": "table",
+          "title": "Gas cost (measure-onchain-cost.ts / aggregate-onchain-cost.ts)",
+          "description": "Pushgateway job xaisen_onchain_cost -- N=4 (ADR-0006) irreversible/net USD cost and break-even SUI/USD price for a $0.01/room target. Populated only after running the measure+aggregate on-chain-cost pipeline against localnet.",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_onchain_cost_irreversible_usd", "format": "table", "instant": true, "legendFormat": "__auto", "refId": "A" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_onchain_cost_net_usd", "format": "table", "instant": true, "legendFormat": "__auto", "refId": "B" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_onchain_breakeven_sui_price_irreversible", "format": "table", "instant": true, "legendFormat": "__auto", "refId": "C" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_onchain_breakeven_sui_price_net", "format": "table", "instant": true, "legendFormat": "__auto", "refId": "D" }
+          ],
+          "transformations": [{ "id": "merge", "options": {} }]
+        },
+        {
+          "id": 24,
+          "type": "timeseries",
+          "title": "Chain finality latency (measure-chain-latency.ts / replay-chain-latency.ts)",
+          "description": "Pushgateway job xaisen_chain_latency -- dvconf_chain_finality_ms{event,pct}: submit-to-event p50/p95/p99 for L_chain_create / L_chain_settle. Populated only after running the measure+replay chain-latency pipeline against localnet.",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_chain_finality_ms", "legendFormat": "{{event}} {{pct}}", "refId": "A" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "ms" } }
+        }
+      ]
+    },
+
+    {
+      "id": 3,
+      "type": "row",
+      "title": "Fault tolerance / failover",
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
+      "panels": [
+        {
+          "id": 30,
+          "type": "timeseries",
+          "title": "Failover events over time",
+          "description": "dvconf_failover_events_total{phase} -- detect (relay-heartbeat.ts, NOT wired to any production call site today), rebuild (relay-worker-recovery.ts), promote (index.ts's pipe-liveness rtcpAlive edge).",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_failover_events_total[15m])", "legendFormat": "{{phase}}", "refId": "A" }
+          ]
+        },
+        {
+          "id": 31,
+          "type": "timeseries",
+          "title": "Failover duration by phase",
+          "description": "dvconf_failover_duration_seconds{phase} p95 -- EACH phase is measured independently and locally (no shared correlation ID crosses detect -> rebuild -> promote today, see failover-metrics.ts). Reference lines are the loopback-bench targets (.evidence/verification), not a WAN-realistic SLA.",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "histogram_quantile(0.95, sum(rate(dvconf_failover_duration_seconds_bucket[15m])) by (le, phase))", "legendFormat": "p95 {{phase}}", "refId": "A" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "thresholdsStyle": { "mode": "line" } },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.1 },
+                  { "color": "red", "value": 0.2 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 32,
+          "type": "stat",
+          "title": "mediasoup Worker died (cumulative)",
+          "description": "dvconf_relay_worker_died_total -- F61 health signal (DOH-014), apps/relay/src/mediasoup-manager.ts.",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_relay_worker_died_total", "legendFormat": "{{job}}", "refId": "A" }
+          ]
+        },
+        {
+          "id": 33,
+          "type": "table",
+          "title": "Synthetic failover drill (failover-smoke.ts)",
+          "description": "Pushgateway job xaisen_failover_smoke -- dvconf_failover_smoke_trigger_to_decision_ms{scenario}: the 6 synthetic scenarios' trigger-to-decision latency from the offline detector state machine (apps/cp-daemon/src/failover-detector.js). Populated only after running `pnpm failover:smoke` with PUSHGATEWAY_URL set.",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_failover_smoke_trigger_to_decision_ms", "format": "table", "instant": true, "legendFormat": "__auto", "refId": "A" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": 4,
+      "type": "row",
+      "title": "Media / WebRTC quality",
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 },
+      "panels": [
+        {
+          "id": 40,
+          "type": "timeseries",
+          "title": "RTT + jitter",
+          "description": "dvconf_rtc_rtt_ms / dvconf_rtc_jitter_ms{direction} -- server-observed mediasoup Consumer (down)/Producer (up) RTP-stream stats, sampled by the same 3s byteSampler loop that already tracks forwarded bytes (apps/relay/src/signaling/index.ts). Distinct from client-reported dvconf_relay_peer_* (POST /stats/report, opt-in) -- disagreement between the two is itself informative.",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_rtc_rtt_ms) by (direction)", "legendFormat": "rtt {{direction}}", "refId": "A" },
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_rtc_jitter_ms) by (direction)", "legendFormat": "jitter {{direction}}", "refId": "B" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "ms" } }
+        },
+        {
+          "id": 41,
+          "type": "timeseries",
+          "title": "Packet loss ratio",
+          "description": "dvconf_rtc_packet_loss_ratio{direction} -- RTP fractionLost (0..1), server-observed.",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_rtc_packet_loss_ratio) by (direction)", "legendFormat": "{{direction}}", "refId": "A" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 } }
+        },
+        {
+          "id": 42,
+          "type": "timeseries",
+          "title": "Bitrate up/down",
+          "description": "dvconf_rtc_bitrate_kbps{direction} -- server-observed mediasoup RTP-stream bitrate, kbps.",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+          "targets": [
+            { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "sum(dvconf_rtc_bitrate_kbps) by (direction)", "legendFormat": "{{direction}}", "refId": "A" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "Kbits" } }
+        }
+      ]
+    }
+  ]
+}
+{% endraw %}

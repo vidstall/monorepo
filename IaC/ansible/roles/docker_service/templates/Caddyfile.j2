@@ -1,9 +1,11 @@
-{# One site block per relay/signaling/bot instance colocated on this
-   host. Hostname must exactly match what deploy_one_service.yml injects as
-   RELAY_ENDPOINT_URL/ENDPOINT_URL (wss://<worker_key>.<ip-dashed>.sslip.io)
-   or the cert Caddy obtains won't match what the client connects to. bot
-   has no such env var -- its hostname is whatever sslip.io address the
-   operator reaches it at directly (bot's control API).
+{# One site block per relay/signaling/bot/cp-daemon/validator-daemon
+   instance colocated on this host. Hostname must exactly match what
+   deploy_one_service.yml injects as RELAY_ENDPOINT_URL/ENDPOINT_URL
+   (wss://<worker_key>.<ip-dashed>.sslip.io) or the cert Caddy obtains
+   won't match what the client connects to. bot/cp-daemon/validator-daemon
+   have no such env var -- their hostname is whatever sslip.io address is
+   reached directly (bot's control API; cp-daemon/validator-daemon's
+   metrics-only endpoint).
 
    The main upstream target is each app's FIXED internal listen port
    (WS_PORT for relay, SIGNALING_PORT for signaling, PORT for bot --
@@ -15,30 +17,44 @@
    directly over the shared xaisen-net bridge, bypassing published host
    ports entirely, so every same-service replica on this host listens
    internally on the SAME fixed port and needs the SAME upstream target.
+   cp-daemon/validator-daemon have NO such main surface at all (chain-
+   facing daemons, not client-facing servers) -- they're absent from
+   xaisen_internal_ports entirely, so their site block below only gets
+   the metrics handle, no generic fallback.
 
-   relay/signaling additionally run a SEPARATE metrics HTTP server on its
-   own port (METRICS_PORT=4001, SIGNALING_METRICS_PORT=8083 -- a distinct
-   Node process listener, not the same server as WS_PORT/SIGNALING_PORT)
-   which has no published host port and no firewall rule of its own (see
-   IaC/pulumi/app/compute/digitalocean.py's per-svc.port inbound rules) --
-   it's reachable ONLY by path-routing a slice of this SAME public hostname
-   to that internal port, which is what xaisen_metrics_ports + the
-   handle blocks below do. Prometheus's scrape targets and the client's
-   POST /stats/report both go through this same public :443 hostname. #}
+   relay/signaling/bot/cp-daemon/validator-daemon each additionally run a
+   SEPARATE metrics HTTP server on its own port (METRICS_PORT=4001,
+   SIGNALING_METRICS_PORT=8083, BOT_METRICS_PORT=8096,
+   CP_METRICS_PORT=8092, VALIDATOR_METRICS_PORT=8103 -- a distinct Node
+   process listener, not the same server as the main port above) which has
+   no published host port and no firewall rule of its own (see
+   IaC/pulumi/app/compute/*.py's per-svc.port inbound rules) -- it's
+   reachable ONLY by path-routing a slice of this SAME public hostname to
+   that internal port, which is what xaisen_metrics_ports + the handle
+   blocks below do. Prometheus's scrape targets go through this same
+   public :443 hostname. /stats/* (the client's POST /stats/report) is
+   relay/signaling's own app-protocol route, not a generic metrics-server
+   feature -- scoped to xaisen_stats_report_services so it isn't wrongly
+   added for bot/cp-daemon/validator-daemon, which don't implement it. #}
 {% set xaisen_internal_ports = {'relay': 4000, 'signaling': 8080, 'bot': 8095} %}
-{% set xaisen_metrics_ports = {'relay': 4001, 'signaling': 8083} %}
+{% set xaisen_metrics_ports = {'relay': 4001, 'signaling': 8083, 'bot': 8096, 'cp-daemon': 8092, 'validator-daemon': 8103} %}
+{% set xaisen_stats_report_services = ['relay', 'signaling'] %}
 {% for svc in xaisen_public_services %}
 {{ svc.worker_key | default(svc.service) }}.{{ ansible_host | replace('.', '-') }}.sslip.io {
 {% if svc.service in xaisen_metrics_ports %}
     handle /metrics* {
         reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
     }
+{% if svc.service in xaisen_stats_report_services %}
     handle /stats/* {
         reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
     }
+{% endif %}
+{% if svc.service in xaisen_internal_ports %}
     handle {
         reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_internal_ports[svc.service] }}
     }
+{% endif %}
 {% else %}
     reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_internal_ports[svc.service] }}
 {% endif %}

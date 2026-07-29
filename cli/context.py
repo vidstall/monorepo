@@ -76,6 +76,7 @@ PINNED_IMAGES = {
     "prometheus": "prom/prometheus:v2.53.0",
     "tempo": "grafana/tempo:2.5.0",
     "grafana": "grafana/grafana:11.2.0",
+    "pushgateway": "prom/pushgateway:v1.9.0",
 }
 
 
