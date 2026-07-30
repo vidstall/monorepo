@@ -25,6 +25,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "expr": "up{job=~\"xaisen.*\"}",
+          "instant": true,
           "legendFormat": "{{job}}",
           "refId": "A"
         }

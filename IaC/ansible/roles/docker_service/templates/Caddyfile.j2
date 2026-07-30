@@ -32,7 +32,13 @@
    reachable ONLY by path-routing a slice of this SAME public hostname to
    that internal port, which is what xaisen_metrics_ports + the handle
    blocks below do. Prometheus's scrape targets go through this same
-   public :443 hostname. /stats/* (the client's POST /stats/report) is
+   public :443 hostname. /healthz* rides the same metrics-port handle
+   (relay/signaling's metrics-server.ts serves /healthz alongside /metrics,
+   see RO-020) -- this is what lets cp-daemon's relay-assignment liveness
+   probe (room-assignment.ts) reach ANY candidate relay's health endpoint
+   over the public hostname, regardless of whether cp-daemon happens to be
+   colocated with that relay or on a different host entirely. /stats/*
+   (the client's POST /stats/report) is
    relay/signaling's own app-protocol route, not a generic metrics-server
    feature -- scoped to xaisen_stats_report_services so it isn't wrongly
    added for bot/cp-daemon/validator-daemon, which don't implement it. #}
@@ -43,6 +49,9 @@
 {{ svc.worker_key | default(svc.service) }}.{{ ansible_host | replace('.', '-') }}.sslip.io {
 {% if svc.service in xaisen_metrics_ports %}
     handle /metrics* {
+        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
+    }
+    handle /healthz* {
         reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
     }
 {% if svc.service in xaisen_stats_report_services %}
