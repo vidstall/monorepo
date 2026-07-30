@@ -1,13 +1,36 @@
 {# Provisioned Grafana datasources, mounted straight into
-   /etc/grafana/provisioning/datasources/datasource.yml -- prometheus/tempo
-   are never publicly exposed themselves (no Caddy site block for either),
-   only reachable from grafana over the shared xaisen-net bridge by
-   container name, same mechanism the observer ingress Caddy/fleet Caddy
-   use to reach every other service. uid is pinned (not left to Grafana's
-   auto-generated random default) because the dashboard JSON files under
-   files/dashboards/ reference these datasources by this exact uid -- an
-   unpinned uid would leave a dashboard's panels unable to resolve their datasource
-   (a random uid every fresh provision, invisible until you check). #}
+   /etc/grafana/provisioning/datasources/datasource.yml. Prometheus always
+   colocates with Grafana (see cli/observer/inventory.py's per-host services
+   split -- a hard design constraint, not something templated away here), so
+   its datasource stays a plain container-name link over the shared
+   xaisen-net bridge, never publicly exposed.
+
+   Tempo/Loki are NOT guaranteed to colocate with Grafana -- two weak static
+   hosts (e.g. bourbon/vermouth) can divide the stack, with Grafana on one
+   and Tempo+Loki on the other. Find whichever host in the merged inventory
+   actually runs each service (same groups['xaisen']/hostvars iteration
+   prometheus.yml.j2 already uses to scrape the whole fleet from any
+   observer host) and only fall back to the local container-name link when
+   that host IS this one (inventory_hostname) -- otherwise reach it over the
+   public network through that host's own observer-caddyfile.j2 site block,
+   with credentials injected via Grafana datasource provisioning's
+   jsonData/secureJsonData (the same xaisen_tempo_auth_token/
+   xaisen_loki_auth_token every other metrics/log surface already uses, not
+   new secrets).
+
+   uid is pinned (not left to Grafana's auto-generated random default)
+   because the dashboard JSON files under files/dashboards/ reference these
+   datasources by this exact uid -- an unpinned uid would leave a
+   dashboard's panels unable to resolve their datasource (a random uid every
+   fresh provision, invisible until you check). #}
+{% set xaisen_tempo_host = namespace(name=None) %}
+{% set xaisen_loki_host = namespace(name=None) %}
+{% for host in groups['xaisen'] %}
+{% for svc in hostvars[host].get('xaisen_services', []) %}
+{% if svc.service == 'tempo' %}{% set xaisen_tempo_host.name = host %}{% endif %}
+{% if svc.service == 'loki' %}{% set xaisen_loki_host.name = host %}{% endif %}
+{% endfor %}
+{% endfor %}
 apiVersion: 1
 
 datasources:
@@ -18,15 +41,36 @@ datasources:
     url: http://xaisen-prometheus:9090
     isDefault: true
     editable: false
+{% if xaisen_tempo_host.name %}
   - name: Tempo
     uid: Tempo
     type: tempo
     access: proxy
+{% if xaisen_tempo_host.name == inventory_hostname %}
     url: http://xaisen-tempo:3200
+{% else %}
+    url: "https://tempo-query.{{ hostvars[xaisen_tempo_host.name].ansible_host | replace('.', '-') }}.sslip.io"
+    jsonData:
+      httpHeaderName1: "Authorization"
+    secureJsonData:
+      httpHeaderValue1: "Bearer {{ xaisen_tempo_auth_token }}"
+{% endif %}
     editable: false
+{% endif %}
+{% if xaisen_loki_host.name %}
   - name: Loki
     uid: Loki
     type: loki
     access: proxy
+{% if xaisen_loki_host.name == inventory_hostname %}
     url: http://xaisen-loki:3100
+{% else %}
+    url: "https://loki.{{ hostvars[xaisen_loki_host.name].ansible_host | replace('.', '-') }}.sslip.io"
+    jsonData:
+      basicAuth: true
+      basicAuthUser: "xaisen"
+    secureJsonData:
+      basicAuthPassword: "{{ xaisen_loki_auth_token }}"
+{% endif %}
     editable: false
+{% endif %}

@@ -5,7 +5,7 @@ from typing import Any
 
 from ..context import PINNED_IMAGES
 from .config import read_hosts
-from .inventory import write_inventory
+from .inventory import ALL_SERVICE_NAMES, write_inventory
 from .secrets import grafana_admin_password, loki_auth_token, tempo_auth_token
 
 
@@ -84,18 +84,27 @@ def deploy(host: str | None = None) -> int:
     if code == 0:
         targeted = [h for h in hosts if host is None or h.get("name") == host]
         for entry in targeted:
-            print(
-                f"Tempo trace ingest for {entry['name']!r}: {_tempo_ingest_url(entry)} "
-                f"(Authorization: Bearer <token from secrets/services/observer-tempo.env>)"
-            )
-            print(
-                f"Loki log ingest for {entry['name']!r}: {_loki_ingest_url(entry)} "
-                f"(Basic auth, username 'xaisen', password from secrets/services/observer-loki.env -- "
-                f"copy this URL/token into secrets/services/loki.env as LOKI_PUSH_URL/LOKI_AUTH_TOKEN "
-                f"to enable fleet-wide log shipping via cli/infra)"
-            )
-            print(
-                f"Grafana for {entry['name']!r}: {_grafana_url(entry)} "
-                f"(login: admin / <password from secrets/services/observer-grafana.env>)"
-            )
+            # Only print a service's URL for hosts that actually run it --
+            # once a host's `services` is a subset (see inventory.py's
+            # per-host split, e.g. bourbon/vermouth dividing the stack),
+            # printing all 3 unconditionally would show ingest/login URLs
+            # for services that aren't actually running on that host.
+            services = entry.get("services") or ALL_SERVICE_NAMES
+            if "tempo" in services:
+                print(
+                    f"Tempo trace ingest for {entry['name']!r}: {_tempo_ingest_url(entry)} "
+                    f"(Authorization: Bearer <token from secrets/services/observer-tempo.env>)"
+                )
+            if "loki" in services:
+                print(
+                    f"Loki log ingest for {entry['name']!r}: {_loki_ingest_url(entry)} "
+                    f"(Basic auth, username 'xaisen', password from secrets/services/observer-loki.env -- "
+                    f"copy this URL/token into secrets/services/loki.env as LOKI_PUSH_URL/LOKI_AUTH_TOKEN "
+                    f"to enable fleet-wide log shipping via cli/infra)"
+                )
+            if "grafana" in services:
+                print(
+                    f"Grafana for {entry['name']!r}: {_grafana_url(entry)} "
+                    f"(login: admin / <password from secrets/services/observer-grafana.env>)"
+                )
     return code

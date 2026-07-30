@@ -199,6 +199,10 @@
   ansible.builtin.set_fact:
     xaisen_observer_loki_service: "{{ xaisen_services | selectattr('service', 'equalto', 'loki') | list }}"
 
+- name: Determine whether this host runs prometheus (observer ingress needed)
+  ansible.builtin.set_fact:
+    xaisen_observer_prometheus_service: "{{ xaisen_services | selectattr('service', 'equalto', 'prometheus') | list }}"
+
 - name: Ensure observer ingress Caddy config directory exists
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/observer-caddy"
@@ -206,16 +210,16 @@
     owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0750"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0)
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0) or (xaisen_observer_prometheus_service | length > 0)
 
-- name: Write observer ingress Caddyfile (tempo's bearer-gated OTLP receiver + grafana's plain proxy + pushgateway's bearer-gated write endpoint + loki's Basic-Auth-gated push endpoint)
+- name: Write observer ingress Caddyfile (tempo's bearer-gated OTLP receiver + grafana's plain proxy + pushgateway's bearer-gated write endpoint + loki's Basic-Auth-gated push endpoint + prometheus's bearer-gated query endpoint)
   ansible.builtin.template:
     src: observer-caddyfile.j2
     dest: "{{ xaisen_services_root }}/runtime/observer-caddy/Caddyfile"
     owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0640"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0)
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0) or (xaisen_observer_prometheus_service | length > 0)
   register: xaisen_observer_caddyfile_write
 
 - name: Run the observer ingress Caddy container
@@ -234,4 +238,4 @@
       - "{{ xaisen_services_root }}/runtime/observer-caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
       - "{{ xaisen_services_root }}/runtime/observer-caddy/data:/data"
       - "{{ xaisen_services_root }}/runtime/observer-caddy/config:/config"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0)
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0) or (xaisen_observer_prometheus_service | length > 0)

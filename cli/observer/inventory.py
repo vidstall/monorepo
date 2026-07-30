@@ -50,9 +50,78 @@ _PUSHGATEWAY_PORT = 9091
 # SSH tunnel for query/debug), same reasoning as tempo's ports above.
 _LOKI_PORT = 3100
 
+# Every known monitoring service's name, in the fixed order they were always
+# emitted in before per-host subsets existed -- used as the fallback when a
+# host's `services` field is unset (see _host_entry()) so hosts registered
+# before that field existed, or that just don't care to split the stack,
+# keep getting all 5 exactly as before. Also reused by cli/observer/deploy.py
+# to gate its per-host success-print URLs the same way.
+ALL_SERVICE_NAMES = ["prometheus", "tempo", "grafana", "pushgateway", "loki"]
+
+
+def _service_catalog(host: dict[str, Any], desired_state: str) -> dict[str, dict[str, Any]]:
+    """Every known monitoring service's fixed shape, keyed by name --
+    identical port/host_port/worker_key values _host_entry() always emitted,
+    just individually addressable now so a host can be given a SUBSET (see
+    host.get("services") in _host_entry()) instead of always getting all 5 --
+    lets two (or more) weak static hosts divide the stack between them.
+    host_port stays prometheus-only (its published, operator-chosen port);
+    every other service's port/host_port stay fixed, same no-obscurity
+    reasoning as before."""
+    return {
+        "prometheus": {
+            "service": "prometheus",
+            # Prometheus's own process always listens on 9090 inside the
+            # container (fixed by the upstream image) -- `host_port` is
+            # the DIFFERENT, operator-chosen port it's published as on
+            # the host, so nothing sits on the well-known default
+            # externally (see deploy_one_service.yml's loopback-only
+            # ports: mapping).
+            "port": 9090,
+            "host_port": host.get("port", DEFAULT_HOST_PORT),
+            "desired_state": desired_state,
+            "index": 1,
+            "worker_key": "prometheus",
+        },
+        "tempo": {
+            "service": "tempo",
+            "port": _TEMPO_OTLP_PORT,
+            "host_port": _TEMPO_OTLP_PORT,
+            "desired_state": desired_state,
+            "index": 1,
+            "worker_key": "tempo",
+        },
+        "grafana": {
+            "service": "grafana",
+            "port": _GRAFANA_PORT,
+            "host_port": _GRAFANA_PORT,
+            "desired_state": desired_state,
+            "index": 1,
+            "worker_key": "grafana",
+        },
+        "pushgateway": {
+            "service": "pushgateway",
+            "port": _PUSHGATEWAY_PORT,
+            "host_port": _PUSHGATEWAY_PORT,
+            "desired_state": desired_state,
+            "index": 1,
+            "worker_key": "pushgateway",
+        },
+        "loki": {
+            "service": "loki",
+            "port": _LOKI_PORT,
+            "host_port": _LOKI_PORT,
+            "desired_state": desired_state,
+            "index": 1,
+            "worker_key": "loki",
+        },
+    }
+
 
 def _host_entry(host: dict[str, Any]) -> dict[str, Any]:
     desired_state = host.get("desired_state", "running")
+    catalog = _service_catalog(host, desired_state)
+    selected = host.get("services") or ALL_SERVICE_NAMES
     return {
         "ansible_host": host["address"],
         "ansible_user": host["ssh_user"],
@@ -70,54 +139,7 @@ def _host_entry(host: dict[str, Any]) -> dict[str, Any]:
         # singular field (xaisen_services, plural, below is what actually
         # drives deploy_one_service.yml).
         "xaisen_service": "prometheus",
-        "xaisen_services": [
-            {
-                "service": "prometheus",
-                # Prometheus's own process always listens on 9090 inside the
-                # container (fixed by the upstream image) -- `host_port` is
-                # the DIFFERENT, operator-chosen port it's published as on
-                # the host, so nothing sits on the well-known default
-                # externally (see deploy_one_service.yml's loopback-only
-                # ports: mapping).
-                "port": 9090,
-                "host_port": host.get("port", DEFAULT_HOST_PORT),
-                "desired_state": desired_state,
-                "index": 1,
-                "worker_key": "prometheus",
-            },
-            {
-                "service": "tempo",
-                "port": _TEMPO_OTLP_PORT,
-                "host_port": _TEMPO_OTLP_PORT,
-                "desired_state": desired_state,
-                "index": 1,
-                "worker_key": "tempo",
-            },
-            {
-                "service": "grafana",
-                "port": _GRAFANA_PORT,
-                "host_port": _GRAFANA_PORT,
-                "desired_state": desired_state,
-                "index": 1,
-                "worker_key": "grafana",
-            },
-            {
-                "service": "pushgateway",
-                "port": _PUSHGATEWAY_PORT,
-                "host_port": _PUSHGATEWAY_PORT,
-                "desired_state": desired_state,
-                "index": 1,
-                "worker_key": "pushgateway",
-            },
-            {
-                "service": "loki",
-                "port": _LOKI_PORT,
-                "host_port": _LOKI_PORT,
-                "desired_state": desired_state,
-                "index": 1,
-                "worker_key": "loki",
-            },
-        ],
+        "xaisen_services": [catalog[name] for name in selected if name in catalog],
         "xaisen_provider": "static",
         "xaisen_env": "",
         "xaisen_contract_env": "",

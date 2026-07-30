@@ -6,18 +6,51 @@
    passed as the xaisen_tempo_auth_token extra var). Requests without a
    matching Authorization header get a plain 401, never reach tempo.
 
-   Tempo's query API (3200) is deliberately NOT proxied here -- it stays
-   loopback-only, reached by grafana (colocated on this same host, over the
-   shared xaisen-net bridge by container name) or an SSH tunnel for direct
-   debug access. Only the ingest path needs public reachability, since it's
-   PUSHED to, unlike Prometheus/Tempo's query APIs which are PULLED from. #}
+   Tempo's query API (3200) is proxied separately below (a distinct
+   hostname, "tempo-query"), not here -- this block is ingest-only.
+
+   Every gated block below wraps reverse_proxy+respond in an explicit
+   `route {}`: Caddy does NOT execute same-level directives in the order
+   they're written, it sorts them by a fixed built-in directive priority
+   list, and `respond` sorts before `reverse_proxy` regardless of source
+   order. Without `route {}` the unconditional `respond 401` always wins
+   and the auth-gated reverse_proxy is dead code -- every request 401s
+   even with a correct token. This bit us in production: found via a live
+   401 on pushgateway/tempo-query with a byte-verified matching token. #}
 {% if xaisen_observer_tempo_service | length > 0 %}
 tempo.{{ ansible_host | replace('.', '-') }}.sslip.io {
     @authorized {
         header Authorization "Bearer {{ xaisen_tempo_auth_token }}"
     }
-    reverse_proxy @authorized xaisen-tempo:4318
-    respond 401
+    route {
+        reverse_proxy @authorized xaisen-tempo:4318
+        respond 401
+    }
+}
+{% endif %}
+
+{# Tempo's QUERY API (3200), bearer-gated the SAME way as the OTLP ingest
+   block above (reusing xaisen_tempo_auth_token, not a separate token --
+   same trust boundary, just a different Tempo endpoint). Needed whenever
+   Grafana doesn't colocate with Tempo on the same host (e.g. bourbon/
+   vermouth dividing the monitoring stack between two weak hosts) -- Grafana's
+   datasource then reaches Tempo over the public network instead of the
+   xaisen-net bridge by container name (see grafana-datasource.yml.j2), so
+   this must be reachable from off-box. Distinct hostname ("tempo-query", not
+   "tempo") since it's a different site block for a different upstream port,
+   sharing this host's one IP the same way relay/signaling share a droplet
+   via worker_key-prefixed hostnames. Still SSH-tunnel-reachable too when
+   Tempo IS colocated with grafana; rendering it unconditionally whenever
+   tempo is present costs nothing extra. #}
+{% if xaisen_observer_tempo_service | length > 0 %}
+tempo-query.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    @authorized {
+        header Authorization "Bearer {{ xaisen_tempo_auth_token }}"
+    }
+    route {
+        reverse_proxy @authorized xaisen-tempo:3200
+        respond 401
+    }
 }
 {% endif %}
 
@@ -45,8 +78,10 @@ pushgateway.{{ ansible_host | replace('.', '-') }}.sslip.io {
     @authorized {
         header Authorization "Bearer {{ xaisen_metrics_auth_token }}"
     }
-    reverse_proxy @authorized xaisen-pushgateway:9091
-    respond 401
+    route {
+        reverse_proxy @authorized xaisen-pushgateway:9091
+        respond 401
+    }
 }
 {% endif %}
 
@@ -68,7 +103,33 @@ loki.{{ ansible_host | replace('.', '-') }}.sslip.io {
     @authorized {
         header Authorization "Basic {{ ('xaisen:' ~ xaisen_loki_auth_token) | b64encode }}"
     }
-    reverse_proxy @authorized xaisen-loki:3100
-    respond 401
+    route {
+        reverse_proxy @authorized xaisen-loki:3100
+        respond 401
+    }
+}
+{% endif %}
+
+{# Prometheus's QUERY API (/api/v1/query etc, its normal internal port 9090 --
+   NOT the operator-chosen host_port used for the loopback/SSH-tunnel path),
+   bearer-gated the same way as pushgateway above (reusing
+   xaisen_metrics_auth_token, not a separate token -- same trust boundary,
+   just a read path this time instead of a write path). Needed by the GUI's
+   Room tab (cli/gui/pages/scenario_page/room.py) to read live
+   dvconf_room_participants values from an operator's machine, which has no
+   other way to reach Prometheus's loopback-only port (see
+   cli/observer/inventory.py's port comments -- direct query access was
+   previously SSH-tunnel-only, same as tempo's query API before tempo-query
+   above existed). Distinct hostname ("prometheus-query") since it's a
+   different site block for a different service than pushgateway/tempo. #}
+{% if xaisen_observer_prometheus_service | length > 0 %}
+prometheus-query.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    @authorized {
+        header Authorization "Bearer {{ xaisen_metrics_auth_token }}"
+    }
+    route {
+        reverse_proxy @authorized xaisen-prometheus:9090
+        respond 401
+    }
 }
 {% endif %}

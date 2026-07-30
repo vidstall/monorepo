@@ -62,6 +62,29 @@ class ObserverConfigTests(unittest.TestCase):
         observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key", port=28000)
         self.assertEqual(observer.find_host("bourbon")["port"], 28000)
 
+    def test_add_host_without_services_omits_the_key(self) -> None:
+        # No `services` key at all when unset -- keeps runtime/observer.toml
+        # unchanged for every host that doesn't use the split feature (and
+        # matches inventory.py's "no key -> all 5" fallback).
+        entry = observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key")
+        self.assertNotIn("services", entry)
+        self.assertNotIn("services", observer.find_host("bourbon"))
+
+    def test_add_host_services_is_persisted_and_preserved_on_update(self) -> None:
+        observer.add_host("vermouth", "5.6.7.8", "deploy", "/tmp/key", services=["tempo", "loki"])
+        self.assertEqual(observer.find_host("vermouth")["services"], ["tempo", "loki"])
+        # Re-adding without `services` preserves the existing split, same
+        # pattern as `port`.
+        observer.add_host("vermouth", "9.9.9.9", "deploy", "/tmp/key")
+        entry = observer.find_host("vermouth")
+        self.assertEqual(entry["address"], "9.9.9.9")
+        self.assertEqual(entry["services"], ["tempo", "loki"])
+
+    def test_add_host_services_can_be_changed_on_update(self) -> None:
+        observer.add_host("vermouth", "5.6.7.8", "deploy", "/tmp/key", services=["tempo", "loki"])
+        observer.add_host("vermouth", "5.6.7.8", "deploy", "/tmp/key", services=["tempo"])
+        self.assertEqual(observer.find_host("vermouth")["services"], ["tempo"])
+
 
 class ObserverInventoryTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -129,6 +152,18 @@ class ObserverInventoryTests(unittest.TestCase):
         self.assertTrue(context.GENERATED_OBSERVER_INVENTORY.exists())
         self.assertIn("bourbon", context.GENERATED_OBSERVER_INVENTORY.read_text(encoding="utf-8"))
 
+    def test_build_inventory_filters_services_for_a_split_host(self) -> None:
+        observer.add_host("bourbon", "161.118.232.63", "deploy", "/tmp/key", services=["prometheus", "grafana", "pushgateway"])
+        observer.add_host("vermouth", "140.245.113.173", "deploy", "/tmp/key2", services=["tempo", "loki"])
+        data = observer.build_inventory()
+        hosts = data["all"]["children"]["xaisen"]["hosts"]
+
+        bourbon_services = {s["service"] for s in hosts["bourbon"]["xaisen_services"]}
+        self.assertEqual(bourbon_services, {"prometheus", "grafana", "pushgateway"})
+
+        vermouth_services = {s["service"] for s in hosts["vermouth"]["xaisen_services"]}
+        self.assertEqual(vermouth_services, {"tempo", "loki"})
+
 
 class ObserverDeployTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -173,6 +208,23 @@ class ObserverDeployTests(unittest.TestCase):
         self.assertEqual(code, 0)
         _, kwargs = ansible_playbook.call_args
         self.assertEqual(kwargs["host_limit"], "bourbon")
+
+    def test_deploy_only_prints_urls_for_a_split_host_own_services(self) -> None:
+        # A host whose `services` doesn't include tempo/loki/grafana must not
+        # print those services' ingest/login URLs -- they're not running
+        # there (see bourbon/vermouth dividing the stack).
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key", services=["prometheus", "grafana", "pushgateway"])
+        observer.add_host("vermouth", "5.6.7.8", "deploy", "/tmp/key2", services=["tempo", "loki"])
+        with patch.object(infra, "ansible_playbook", return_value=0):
+            with patch("builtins.print") as mock_print:
+                observer.deploy()
+        printed = "\n".join(str(call.args[0]) for call in mock_print.call_args_list)
+        self.assertIn("Grafana for 'bourbon'", printed)
+        self.assertNotIn("Tempo trace ingest for 'bourbon'", printed)
+        self.assertNotIn("Loki log ingest for 'bourbon'", printed)
+        self.assertIn("Tempo trace ingest for 'vermouth'", printed)
+        self.assertIn("Loki log ingest for 'vermouth'", printed)
+        self.assertNotIn("Grafana for 'vermouth'", printed)
 
 
 class ObserverLifecycleTests(unittest.TestCase):

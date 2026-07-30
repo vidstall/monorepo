@@ -12,9 +12,37 @@ from .. import observer
 DEFAULT_HOST = "bourbon"
 
 
+def _parse_services(raw: str | None) -> list[str] | None:
+    """Comma-separated subset of observer.ALL_SERVICE_NAMES, or None (meaning
+    "all 5", today's implicit default -- see add_host()/inventory.py's
+    fallback) when --services wasn't passed at all."""
+    if raw is None:
+        return None
+    names = [s.strip() for s in raw.split(",") if s.strip()]
+    unknown = [n for n in names if n not in observer.ALL_SERVICE_NAMES]
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"Unknown service(s): {', '.join(unknown)}. Known: {', '.join(observer.ALL_SERVICE_NAMES)}."
+        )
+    return names
+
+
 def _add_host(args: argparse.Namespace) -> int:
-    entry = observer.add_host(args.host, args.address, args.ssh_user, args.ssh_key, args.port)
+    services = _parse_services(args.services)
+    entry = observer.add_host(args.host, args.address, args.ssh_user, args.ssh_key, args.port, services)
     print(f"Registered observer host {args.host!r} ({args.address}), published on port {entry['port']}.")
+    return 0
+
+
+def _set_services(args: argparse.Namespace) -> int:
+    host = observer.find_host(args.host)
+    if host is None:
+        print(f"Unknown observer host: {args.host}", file=sys.stderr)
+        return 1
+    services = _parse_services(args.services)
+    assert services is not None  # --services is required on this subcommand
+    observer.add_host(host["name"], host["address"], host["ssh_user"], host["ssh_key"], host.get("port"), services)
+    print(f"Updated {args.host!r}'s services to: {', '.join(services)}.")
     return 0
 
 
@@ -57,7 +85,28 @@ def add_observer_parser(subparsers: argparse._SubParsersAction[argparse.Argument
             f"internal 9090). Default: {observer.DEFAULT_HOST_PORT}."
         ),
     )
+    add_parser.add_argument(
+        "--services",
+        default=None,
+        help=(
+            "Comma-separated subset of {" + ",".join(observer.ALL_SERVICE_NAMES) + "} this host should "
+            "run -- lets weak static hosts divide the monitoring stack between them. Default: all 5 "
+            "(today's colocated behavior)."
+        ),
+    )
     add_parser.set_defaults(handler=_add_host)
+
+    set_services_parser = actions.add_parser(
+        "set-services",
+        help="Change which monitoring services a registered host runs, without re-supplying its connection info.",
+    )
+    _add_host_arg(set_services_parser)
+    set_services_parser.add_argument(
+        "--services",
+        required=True,
+        help="Comma-separated subset of {" + ",".join(observer.ALL_SERVICE_NAMES) + "}.",
+    )
+    set_services_parser.set_defaults(handler=_set_services)
 
     remove_parser = actions.add_parser(
         "remove-host",

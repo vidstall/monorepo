@@ -52,18 +52,31 @@ def add_host(
     ssh_user: str,
     ssh_key: str,
     port: int | None = None,
+    services: list[str] | None = None,
 ) -> dict[str, Any]:
     """Add (or update, if `name` already exists) a static observer host.
     ssh_key is expanded and resolved to an absolute path at write time --
     Ansible's ansible_ssh_private_key_file needs a real filesystem path, not
     a shell-expandable `~/...` string it never expands itself. Re-adding an
-    existing host preserves its current desired_state (start/stop/restart)
-    and published port unless `port` is explicitly passed."""
+    existing host preserves its current desired_state (start/stop/restart),
+    published port, and services split unless explicitly passed.
+
+    services: which of the 5 known monitoring services (prometheus/tempo/
+    grafana/pushgateway/loki) this host should run -- lets two (or more)
+    weak static hosts divide the stack between them instead of each running
+    all 5 colocated. None (the default) means "all 5", today's implicit
+    behavior, preserved for hosts registered before this option existed and
+    for any caller that doesn't care about splitting the stack (see
+    inventory.py's _host_entry(), which applies this same fallback). Only
+    written into the persisted entry when actually set, so runtime/
+    observer.toml stays unchanged for hosts that never use this."""
     key_path = str(Path(ssh_key).expanduser())
     existing = find_host(name)
     desired_state = existing.get("desired_state", "running") if existing else "running"
     if port is None:
         port = existing.get("port", DEFAULT_HOST_PORT) if existing else DEFAULT_HOST_PORT
+    if services is None:
+        services = existing.get("services") if existing else None
     entry = {
         "name": name,
         "address": address,
@@ -72,6 +85,8 @@ def add_host(
         "port": port,
         "desired_state": desired_state,
     }
+    if services is not None:
+        entry["services"] = list(services)
     hosts = [h for h in read_hosts() if h.get("name") != name]
     hosts.append(entry)
     write_hosts(hosts)
