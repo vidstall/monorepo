@@ -70,6 +70,37 @@ def _group_vm_workers(
         def _service_port(r: TopologyInstance) -> dict:
             service = str(r.get("service", ""))
             index = int(r.get("worker_index", 1) or 1)
+            # node_exporter is auto-injected once per HOST, never colocated
+            # with a same-typed sibling (cli/scenario/spec.py) -- it reports
+            # on the whole machine, so it gets a host-level identity
+            # (<provider>-<host>, e.g. "digitalocean-001") instead of the
+            # generic per-service worker_key below. This is what
+            # prometheus.yml.j2's node_exporter scrape target hostname is
+            # built from -- without this it fell through to the bare
+            # literal "node_exporter" (index is always 1 for it), which is
+            # what showed up as the opaque instance label on the
+            # Infrastructure dashboard.
+            if service == "node_exporter":
+                worker_key = f"{r.get('provider', '')}-{r.get('host', '')}"
+            else:
+                # <provider>-<host>-<service>-<index> -- MUST match
+                # cli/infra/topology.py's worker_identifier() exactly:
+                # cli/infra/control_fleet.py/control_batch.py/control.py key
+                # xaisen_operator_wallets by this exact string, and
+                # deploy_one_service.yml's "Write operator wallet
+                # credentials" task looks up
+                # xaisen_operator_wallets[host][worker_key] -- a mismatch
+                # here means that lookup silently misses, no wallet file
+                # ever gets written, and every daemon crashes on boot with
+                # "Missing keypair env var" (confirmed the hard way: this
+                # used to be the un-suffixed-index-1 scheme here while
+                # cli/infra had already moved to worker_identifier()'s
+                # always-4-part format, breaking every colocated fleet
+                # deploy since). Reimplemented inline (not imported) since
+                # this Pulumi program is a separate Python project from
+                # cli/ -- same reasoning as contract_exporter.py's own
+                # not-imported-from-cli/gui note.
+                worker_key = f"{r.get('provider', '')}-{r.get('host', '')}-{service}-{index}"
             return {
                 "service": service,
                 "port": int(r.get("port", 0) or 0),
@@ -78,10 +109,7 @@ def _group_vm_workers(
                 # independently of its colocated siblings.
                 "desired_state": str(r.get("desired_state", "")),
                 "index": index,
-                # Namespacing key for Ansible (container name/state dir/wallet
-                # file) -- index 1 stays un-suffixed for backward compat with
-                # already-deployed single-worker hosts.
-                "worker_key": service if index == 1 else f"{service}-{index}",
+                "worker_key": worker_key,
             }
 
         merged["services"] = sorted(

@@ -108,6 +108,22 @@ def find_pinned_alibaba_worker(topology: dict[str, Any], service: str, provider:
     return None
 
 
+def worker_identifier(provider: str, host: str, service: str, worker_index: int) -> str:
+    # <provider>-<host>-<service>-<worker_index>, used everywhere a worker
+    # needs a single stable string identity: container name, sslip.io public
+    # hostname, wallet-pool/registry lookup key. `host` stands in for a real
+    # cloud-provider resource id (droplet id, ECS instance id, ...) rather
+    # than using the actual one: the real id is only assigned by the
+    # provider AFTER `pulumi up` creates the resource, and changes on every
+    # destroy+recreate -- embedding it would churn the container name/DNS
+    # hostname/Caddy cert on every redeploy. `host` is chosen once, up front,
+    # in the scenario TOML and never changes, so it's a stable stand-in.
+    # Always includes worker_index (no more "index 1 is unsuffixed" special
+    # case) since a droplet can colocate several services, and each needs an
+    # unambiguous identity regardless of how many replicas of it exist.
+    return f"{provider}-{host}-{service}-{worker_index}"
+
+
 def new_worker(env_name: str, host: str, service: str, provider: str, worker_index: int = 1) -> dict[str, Any]:
     return {
         "host": host,

@@ -6,7 +6,7 @@ from typing import Any
 from ..context import PINNED_IMAGES
 from .config import read_hosts
 from .inventory import write_inventory
-from .secrets import grafana_admin_password, tempo_auth_token
+from .secrets import grafana_admin_password, loki_auth_token, tempo_auth_token
 
 
 def _tempo_ingest_url(host: dict[str, Any]) -> str:
@@ -18,14 +18,28 @@ def _tempo_ingest_url(host: dict[str, Any]) -> str:
     return f"https://tempo.{dashed}.sslip.io/v1/traces"
 
 
+def _loki_ingest_url(host: dict[str, Any]) -> str:
+    """The public URL every fleet VM's Docker `loki` logging driver should
+    push to -- same sslip.io trick as tempo's ingest, matching observer-
+    caddyfile.j2's loki site block hostname. This is what an operator
+    copies into secrets/services/loki.env's LOKI_PUSH_URL (see
+    cli/infra/secrets.py::loki_shipping_vars()) -- cli/infra stays
+    decoupled from cli/observer, so this URL isn't wired through
+    automatically, same manual bridge step tempo's OTEL endpoint already
+    requires."""
+    dashed = str(host["address"]).replace(".", "-")
+    return f"https://loki.{dashed}.sslip.io/loki/api/v1/push"
+
+
 def _grafana_url(host: dict[str, Any]) -> str:
     """The public URL for this host's Grafana UI -- same sslip.io trick,
     matching observer-caddyfile.j2's grafana site block's hostname. Links
-    straight at the provisioned "Xaisen Fleet" dashboard (fixed uid
-    "xaisen-fleet", see grafana-dashboard-provider.yml.j2 +
-    xaisen-fleet-dashboard.json.j2), not Grafana's bare landing page."""
+    straight at the "Overview" dashboard (fixed uid "overview", see
+    IaC/ansible/roles/docker_service/files/dashboards/overview.json), the
+    pane-of-glass entry point into the other 5 dashboards -- not Grafana's
+    bare landing page."""
     dashed = str(host["address"]).replace(".", "-")
-    return f"https://grafana.{dashed}.sslip.io/d/xaisen-fleet/xaisen-fleet"
+    return f"https://grafana.{dashed}.sslip.io/d/overview/overview"
 
 
 def deploy(host: str | None = None) -> int:
@@ -61,6 +75,7 @@ def deploy(host: str | None = None) -> int:
         "xaisen_pinned_images": dict(PINNED_IMAGES),
         "xaisen_metrics_auth_token": infra.metrics_auth_token(),
         "xaisen_tempo_auth_token": tempo_auth_token(),
+        "xaisen_loki_auth_token": loki_auth_token(),
         "xaisen_grafana_admin_password": grafana_admin_password(),
         "xaisen_container_state": "started",
     }
@@ -72,6 +87,12 @@ def deploy(host: str | None = None) -> int:
             print(
                 f"Tempo trace ingest for {entry['name']!r}: {_tempo_ingest_url(entry)} "
                 f"(Authorization: Bearer <token from secrets/services/observer-tempo.env>)"
+            )
+            print(
+                f"Loki log ingest for {entry['name']!r}: {_loki_ingest_url(entry)} "
+                f"(Basic auth, username 'xaisen', password from secrets/services/observer-loki.env -- "
+                f"copy this URL/token into secrets/services/loki.env as LOKI_PUSH_URL/LOKI_AUTH_TOKEN "
+                f"to enable fleet-wide log shipping via cli/infra)"
             )
             print(
                 f"Grafana for {entry['name']!r}: {_grafana_url(entry)} "

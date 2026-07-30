@@ -20,6 +20,28 @@
     enabled: true
   when: xaisen_provider != 'static'
 
+# Fleet-wide log shipping (every container this role ever creates, on
+# every host including the static observer host) logs via Docker's native
+# `loki` logging driver -- see deploy_one_service.yml's log_driver/
+# log_options. That driver is a separate Docker plugin, not built in, so
+# it must be installed once per host before any docker_container task
+# fires. Both calls are natively idempotent (docker_plugin's `state:
+# present` is a no-op if already installed; `state: enable` is a no-op if
+# already enabled), so no `when:` guard is needed here, and no become
+# beyond what every docker_container task on this same host already
+# assumes (the ssh user is already in the docker group).
+- name: Install Loki Docker logging-driver plugin
+  community.docker.docker_plugin:
+    plugin_name: grafana/loki-docker-driver:latest
+    alias: loki
+    state: present
+  register: xaisen_loki_plugin_install
+
+- name: Enable Loki Docker logging-driver plugin
+  community.docker.docker_plugin:
+    plugin_name: loki
+    state: enable
+
 - name: Log in to the container registry
   community.docker.docker_login:
     registry_url: "{{ xaisen_registry_host }}"
@@ -173,6 +195,10 @@
   ansible.builtin.set_fact:
     xaisen_observer_pushgateway_service: "{{ xaisen_services | selectattr('service', 'equalto', 'pushgateway') | list }}"
 
+- name: Determine whether this host runs loki (observer ingress needed)
+  ansible.builtin.set_fact:
+    xaisen_observer_loki_service: "{{ xaisen_services | selectattr('service', 'equalto', 'loki') | list }}"
+
 - name: Ensure observer ingress Caddy config directory exists
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/observer-caddy"
@@ -180,16 +206,16 @@
     owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0750"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0)
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0)
 
-- name: Write observer ingress Caddyfile (tempo's bearer-gated OTLP receiver + grafana's plain proxy + pushgateway's bearer-gated write endpoint)
+- name: Write observer ingress Caddyfile (tempo's bearer-gated OTLP receiver + grafana's plain proxy + pushgateway's bearer-gated write endpoint + loki's Basic-Auth-gated push endpoint)
   ansible.builtin.template:
     src: observer-caddyfile.j2
     dest: "{{ xaisen_services_root }}/runtime/observer-caddy/Caddyfile"
     owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0640"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0)
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0)
   register: xaisen_observer_caddyfile_write
 
 - name: Run the observer ingress Caddy container
@@ -208,4 +234,4 @@
       - "{{ xaisen_services_root }}/runtime/observer-caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
       - "{{ xaisen_services_root }}/runtime/observer-caddy/data:/data"
       - "{{ xaisen_services_root }}/runtime/observer-caddy/config:/config"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0)
+  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0)

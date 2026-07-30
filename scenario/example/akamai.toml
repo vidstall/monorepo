@@ -15,105 +15,105 @@ provider = "digitalocean"
 tag = ""
 
 [[workers]]
-host = "akamai-node-1"
+host = "001"
 service = "signaling"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-1"
+host = "001"
 service = "relay"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-1"
+host = "001"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-1"
+host = "001"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 2
 
 [[workers]]
-host = "akamai-node-1"
+host = "001"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-2"
+host = "002"
 service = "signaling"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-2"
+host = "002"
 service = "relay"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-2"
+host = "002"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-2"
+host = "002"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 2
 
 [[workers]]
-host = "akamai-node-2"
+host = "002"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-3"
+host = "003"
 service = "signaling"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-3"
+host = "003"
 service = "relay"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-3"
+host = "003"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-3"
+host = "003"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 2
 
 [[workers]]
-host = "akamai-node-3"
+host = "003"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
@@ -122,41 +122,41 @@ worker_index = 1
 # Dedicated validator host -- boosts the live validator count from 3 to 8 so
 # the liveness-voting quorum (2/3 of ALL registered active validators, live or
 # not) becomes reachable again. 7 validators are currently registered active
-# on-chain but only 3 (akamai-node-1/2/3's single validator-daemon each) are
+# on-chain but only 3 (hosts 001/002/003's single validator-daemon each) are
 # actually alive; the other 4 are stale leftovers from a destroyed prior
 # deployment, and with only 3 live voters quorum (5 of 7) could never be
 # reached -- not even to eject those 4 dead validators themselves. 5 MORE
 # live validators here brings it to 8 live votes possible.
 [[workers]]
-host = "akamai-node-4"
+host = "004"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-4"
+host = "004"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 2
 
 [[workers]]
-host = "akamai-node-4"
+host = "004"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 3
 
 [[workers]]
-host = "akamai-node-4"
+host = "004"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 4
 
 [[workers]]
-host = "akamai-node-4"
+host = "004"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"

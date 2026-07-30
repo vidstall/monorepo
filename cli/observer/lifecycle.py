@@ -5,7 +5,7 @@ import sys
 from ..context import PINNED_IMAGES
 from .config import find_host, set_desired_state
 from .inventory import write_inventory
-from .secrets import grafana_admin_password, tempo_auth_token
+from .secrets import grafana_admin_password, loki_auth_token, tempo_auth_token
 
 
 def _require_host(host: str) -> bool:
@@ -25,6 +25,7 @@ def _site_extra_vars(container_state: str) -> dict:
         "xaisen_pinned_images": dict(PINNED_IMAGES),
         "xaisen_metrics_auth_token": infra.metrics_auth_token(),
         "xaisen_tempo_auth_token": tempo_auth_token(),
+        "xaisen_loki_auth_token": loki_auth_token(),
         "xaisen_grafana_admin_password": grafana_admin_password(),
         "xaisen_container_state": container_state,
     }

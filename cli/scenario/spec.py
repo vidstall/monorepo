@@ -39,6 +39,26 @@ ACTION_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
 
 _TIMESTAMP_RE = re.compile(r"^\+(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
 
+# `host` is a cloud-instance id, not a hostname: a zero-padded, >=3-digit
+# number ("001", "002", ..., "142") counting from 1, unique across the WHOLE
+# scenario file regardless of how many providers it spans (see
+# _group_vm_workers in IaC/pulumi/app/program.py, which groups VM rows to
+# colocate by this raw string -- two different providers sharing the same
+# host id would be wrongly merged into one VM group). Combined with
+# provider/service/worker_index it forms the worker identifier used
+# everywhere for container name, public hostname, and registry lookup key:
+# <provider>-<host>-<service>-<worker_index>, e.g. "digitalocean-001-relay-2"
+# (see worker_identifier() in cli/infra/topology.py).
+_HOST_ID_RE = re.compile(r"^\d{3,}$")
+
+
+def _validate_host_id(host: str, context: str) -> None:
+    if not _HOST_ID_RE.match(host):
+        raise ValueError(
+            f"Invalid host {host!r} for {context}: host must be a zero-padded number "
+            "counting from 1 (e.g. '001', '002'), unique across the whole scenario file."
+        )
+
 
 def parse_timestamp(value: str) -> int:
     """Parse a scenario action's `timestamp` field ("+10s", "+5m", "+1h30m")
@@ -74,6 +94,7 @@ def load_scenario(path: Path) -> dict[str, Any]:
         worker_index = int(row.get("worker_index", 1) or 1)
         if not host:
             raise ValueError("Every scenario worker needs a 'host'.")
+        _validate_host_id(host, f"worker (service={service!r})")
         if service not in infra.DOCKER_SERVICES and service not in infra.PINNED_IMAGES:
             raise ValueError(f"Unknown service '{service}' for worker on host '{host}'.")
         if provider not in infra.PROVIDERS:
@@ -93,6 +114,32 @@ def load_scenario(path: Path) -> dict[str, Any]:
                 "worker_index": worker_index,
                 "size": row.get("size") or None,
                 "region": row.get("region") or None,
+            }
+        )
+
+    # node_exporter is never hand-declared per scenario worker -- every host
+    # running ANY worker gets one implicitly, once per host (see
+    # infra.PINNED_IMAGES). Host-level CPU/RAM/network matters regardless of
+    # which daemon roles happen to be colocated there, and requiring a
+    # `service = "node_exporter"` [[workers]] row per host in every
+    # scenario.toml would be pure repetition that's easy to forget when
+    # adding a new host. Appended after dedup so it doesn't collide with the
+    # `seen` check above; first worker row seen for a host donates its
+    # provider/size/region since node_exporter colocates on that same VM.
+    seen_node_exporter_hosts: set[str] = set()
+    for row in list(workers):
+        host = row["host"]
+        if host in seen_node_exporter_hosts:
+            continue
+        seen_node_exporter_hosts.add(host)
+        workers.append(
+            {
+                "host": host,
+                "service": "node_exporter",
+                "provider": row["provider"],
+                "worker_index": 1,
+                "size": row["size"],
+                "region": row["region"],
             }
         )
 
@@ -156,6 +203,10 @@ def load_scenario(path: Path) -> dict[str, Any]:
         for field in ACTION_REQUIRED_FIELDS[action_type]:
             if not row.get(field):
                 raise ValueError(f"Action #{index + 1} (type={action_type}) needs a {field!r} field.")
+
+        action_host = str(row.get("host") or "")
+        if action_host:
+            _validate_host_id(action_host, f"action #{index + 1} (type={action_type})")
 
         service = str(row.get("service", ""))
         if service and service not in infra.DOCKER_SERVICES:

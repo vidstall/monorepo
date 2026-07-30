@@ -15,35 +15,35 @@ provider = "digitalocean"
 tag = ""
 
 [[workers]]
-host = "azure-node-1"
+host = "001"
 service = "signaling"
 provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 
 [[workers]]
-host = "azure-node-1"
+host = "001"
 service = "relay"
 provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 
 [[workers]]
-host = "azure-node-1"
+host = "001"
 service = "cp-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 
 [[workers]]
-host = "azure-node-1"
+host = "001"
 service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 
 [[workers]]
-host = "azure-node-2"
+host = "002"
 service = "signaling"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -51,7 +51,7 @@ worker_index = 1
 region = "westus2"
 
 [[workers]]
-host = "azure-node-2"
+host = "002"
 service = "relay"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -59,7 +59,7 @@ worker_index = 1
 region = "westus2"
 
 [[workers]]
-host = "azure-node-2"
+host = "002"
 service = "cp-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -67,7 +67,7 @@ worker_index = 1
 region = "westus2"
 
 [[workers]]
-host = "azure-node-2"
+host = "002"
 service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -75,7 +75,7 @@ worker_index = 1
 region = "westus2"
 
 [[workers]]
-host = "azure-node-3"
+host = "003"
 service = "cp-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -83,7 +83,7 @@ worker_index = 1
 region = "centralus"
 
 [[workers]]
-host = "azure-node-3"
+host = "003"
 service = "cp-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -91,7 +91,7 @@ worker_index = 2
 region = "centralus"
 
 [[workers]]
-host = "azure-node-3"
+host = "003"
 service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -99,7 +99,7 @@ worker_index = 1
 region = "centralus"
 
 [[workers]]
-host = "azure-node-4"
+host = "004"
 service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -107,7 +107,7 @@ worker_index = 1
 region = "westeurope"
 
 [[workers]]
-host = "azure-node-4"
+host = "004"
 service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"

@@ -44,6 +44,12 @@ _GRAFANA_PORT = 3000
 # tempo's OTLP ingest.
 _PUSHGATEWAY_PORT = 9091
 
+# Loki's own default HTTP port -- serves both push (/loki/api/v1/push) and
+# query, fixed since it's never published un-proxied (reached through
+# observer-caddyfile.j2's bearer(Basic)-gated reverse proxy for push, or an
+# SSH tunnel for query/debug), same reasoning as tempo's ports above.
+_LOKI_PORT = 3100
+
 
 def _host_entry(host: dict[str, Any]) -> dict[str, Any]:
     desired_state = host.get("desired_state", "running")
@@ -102,6 +108,14 @@ def _host_entry(host: dict[str, Any]) -> dict[str, Any]:
                 "desired_state": desired_state,
                 "index": 1,
                 "worker_key": "pushgateway",
+            },
+            {
+                "service": "loki",
+                "port": _LOKI_PORT,
+                "host_port": _LOKI_PORT,
+                "desired_state": desired_state,
+                "index": 1,
+                "worker_key": "loki",
             },
         ],
         "xaisen_provider": "static",

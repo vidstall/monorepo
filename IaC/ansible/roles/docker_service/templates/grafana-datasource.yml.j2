@@ -4,9 +4,9 @@
    only reachable from grafana over the shared xaisen-net bridge by
    container name, same mechanism the observer ingress Caddy/fleet Caddy
    use to reach every other service. uid is pinned (not left to Grafana's
-   auto-generated random default) because xaisen-fleet-dashboard.json.j2's
-   panels reference these datasources by this exact uid -- an unpinned uid
-   would leave the dashboard's panels unable to resolve their datasource
+   auto-generated random default) because the dashboard JSON files under
+   files/dashboards/ reference these datasources by this exact uid -- an
+   unpinned uid would leave a dashboard's panels unable to resolve their datasource
    (a random uid every fresh provision, invisible until you check). #}
 apiVersion: 1
 
@@ -23,4 +23,10 @@ datasources:
     type: tempo
     access: proxy
     url: http://xaisen-tempo:3200
+    editable: false
+  - name: Loki
+    uid: Loki
+    type: loki
+    access: proxy
+    url: http://xaisen-loki:3100
     editable: false

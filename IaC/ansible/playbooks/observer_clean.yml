@@ -5,9 +5,12 @@
 # destroy/reboot semantics exist anywhere in this file.
 #
 # Grafana's container IS removed (consistent with the other two), but its
-# data dir is deliberately NOT wiped here -- unlike prometheus/tempo's TSDB/
-# trace storage, Grafana's data dir holds its own sqlite DB (dashboards,
-# users, sessions). Pushgateway's container is also removed but never had a
+# data dir is deliberately NOT wiped here -- unlike prometheus/tempo/loki's
+# TSDB/trace/log storage, Grafana's data dir holds its own sqlite DB
+# (dashboards, users, sessions). Loki's data dir is wiped alongside
+# prometheus/tempo's -- its local chunk/index storage behaves the same way
+# (wipeable, no login/dashboard state to preserve). Pushgateway's container
+# is also removed but never had a
 # data dir to begin with (it holds pushed metrics in memory only, no
 # `--persistence.file` configured -- see deploy_one_service.yml). `vidctl
 # scenario destroy` calls this playbook to reset observation data on every
@@ -34,6 +37,7 @@
         - xaisen-tempo
         - xaisen-grafana
         - xaisen-pushgateway
+        - xaisen-loki
 
     - name: Wipe monitoring data directories
       ansible.builtin.file:
@@ -42,3 +46,4 @@
       loop:
         - prometheus
         - tempo
+        - loki

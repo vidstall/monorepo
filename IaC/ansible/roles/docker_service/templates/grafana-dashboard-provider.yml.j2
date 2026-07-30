@@ -1,8 +1,8 @@
 {# Grafana file-based dashboard provider -- mounted into
    /etc/grafana/provisioning/dashboards/dashboard-provider.yml, parallel to
    grafana-datasource.yml.j2's datasource provider. Points Grafana at a
-   folder (options.path) that xaisen-fleet-dashboard.json.j2's rendered
-   output is bind-mounted into (see deploy_one_service.yml's grafana volume
+   folder (options.path) that the whole files/dashboards/ directory is
+   bind-mounted into wholesale (see deploy_one_service.yml's grafana volume
    list) -- Grafana polls that folder every updateIntervalSeconds and
    loads/reloads any dashboard JSON it finds there. #}
 apiVersion: 1

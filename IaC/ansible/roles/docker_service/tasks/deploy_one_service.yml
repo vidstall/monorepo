@@ -6,10 +6,11 @@
 #     relay, ...). Shared across every colocated replica of that type --
 #     used only for things that are identical per replica: the Docker
 #     image/tag, and the keypair/cap env var NAMES below.
-#   - xaisen_service_item.worker_key  -- service, or "service-N" for the
-#     Nth colocated replica of that service on this host (vidctl.py's
-#     count-prefix --service syntax, e.g. `5cp-daemon`). Index 1 is
-#     un-suffixed (== service) for backward compatibility. Used for
+#   - xaisen_service_item.worker_key  -- "<provider>-<host>-<service>-<N>"
+#     (see cli/infra/topology.py's worker_identifier()), always 4 parts
+#     (no more un-suffixed index-1 special case) -- unambiguous even when a
+#     host colocates several replicas of the same service (vidctl.py's
+#     count-prefix --service syntax, e.g. `5cp-daemon`). Used for
 #     everything that must be UNIQUE per replica: container name, state
 #     dir, wallet file, xaisen_operator_wallets lookup key.
 # `| default(xaisen_service_item.service)` guards worker_key in case an
@@ -89,18 +90,18 @@
     owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0750"
-  when: xaisen_service_item.service in ['prometheus', 'tempo', 'grafana']
+  when: xaisen_service_item.service in ['prometheus', 'tempo', 'grafana', 'loki']
 
-# The upstream prom/prometheus, grafana/tempo, and grafana/grafana images
-# each run as their own unprivileged UID, not root -- 0777 (rather than a
-# root-owned 0750) is what lets that in-container user actually write its
-# data into this bind-mounted host directory.
+# The upstream prom/prometheus, grafana/tempo, grafana/grafana, and
+# grafana/loki images each run as their own unprivileged UID, not root --
+# 0777 (rather than a root-owned 0750) is what lets that in-container user
+# actually write its data into this bind-mounted host directory.
 - name: Ensure monitoring data directory exists
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/data"
     state: directory
     mode: "0777"
-  when: xaisen_service_item.service in ['prometheus', 'tempo', 'grafana']
+  when: xaisen_service_item.service in ['prometheus', 'tempo', 'grafana', 'loki']
 
 - name: Write Prometheus scrape config
   ansible.builtin.template:
@@ -121,6 +122,16 @@
     mode: "0640"
   when: xaisen_service_item.service == 'tempo'
   register: xaisen_tempo_config_write
+
+- name: Write Loki config
+  ansible.builtin.template:
+    src: loki.yaml.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/loki.yaml"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_item.service == 'loki'
+  register: xaisen_loki_config_write
 
 - name: Write Grafana datasource provisioning config
   ansible.builtin.template:
@@ -151,28 +162,34 @@
     mode: "0750"
   when: xaisen_service_item.service == 'grafana'
 
-- name: Write Grafana fleet dashboard JSON
-  ansible.builtin.template:
-    src: xaisen-fleet-dashboard.json.j2
-    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards/xaisen-fleet.json"
-    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    mode: "0640"
+# Both old dashboards (xaisen-fleet, xaisen-academic-eval) were replaced by
+# the 6-dashboard set under files/dashboards/ -- ansible.builtin.copy's
+# directory sync (below) only adds/updates files, it never deletes a
+# destination file whose source was removed, so the stale rendered files
+# from any host deployed before this change need an explicit cleanup pass.
+- name: Remove stale pre-redesign dashboard JSON files
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards/{{ item }}"
+    state: absent
+  loop:
+    - xaisen-fleet.json
+    - xaisen-academic-eval.json
   when: xaisen_service_item.service == 'grafana'
-  register: xaisen_dashboard_json_write
 
-# Defense-facing evaluation view (separate uid/file from "Xaisen Fleet"), same
-# provider/folder -- Grafana's file-provider polls the whole dashboards dir,
-# so no new provider plumbing is needed for a second dashboard file.
-- name: Write Grafana academic-eval dashboard JSON
-  ansible.builtin.template:
-    src: xaisen-academic-eval.json.j2
-    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards/xaisen-academic-eval.json"
+# Static JSON (no real Jinja templating happens in any of them), so a plain
+# directory-wide copy replaces the old one-template-task-per-dashboard
+# boilerplate -- Grafana's file-provider polls the whole mounted folder
+# (see grafana-dashboard-provider.yml.j2), so adding/removing a dashboard is
+# just adding/removing a file under files/dashboards/, no task changes needed.
+- name: Copy Grafana dashboard JSON files
+  ansible.builtin.copy:
+    src: dashboards/
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards/"
     owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0640"
   when: xaisen_service_item.service == 'grafana'
-  register: xaisen_academic_eval_dashboard_json_write
+  register: xaisen_dashboards_write
 
 # Each worker app expects its own differently-named keypair env var
 # (CP_KEYPAIR, SIGNALING_KEYPAIR, PRIVATE_KEY for relay, SUI_PRIVATE_KEY for
@@ -295,6 +312,32 @@
     xaisen_relay_rtc_max: "{{ xaisen_relay_rtc_min | int + 99 }}"
     xaisen_relay_pipe_min: "{{ 40000 + (xaisen_relay_port_offset | int) }}"
     xaisen_relay_pipe_max: "{{ xaisen_relay_pipe_min | int + 99 }}"
+    # Fleet-wide log shipping (every container this task creates, on every
+    # host) -- two different push targets depending on where this
+    # container lives, since fleet VMs across different cloud providers
+    # share no private network with the observer host (bourbon):
+    #   - The observer host itself (xaisen_provider == 'static') logs
+    #     straight to its own colocated loki container over the shared
+    #     xaisen-net bridge by container name -- no public hop, no auth,
+    #     same trust boundary Grafana already uses to reach Prometheus/
+    #     Tempo.
+    #   - Every fleet VM logs to the PUBLIC, Basic-Auth-gated ingest URL
+    #     the operator copied from `vidctl observer deploy`'s printed
+    #     output into secrets/services/loki.env (xaisen_loki_push_url/
+    #     xaisen_loki_auth_token, sourced via cli/infra/secrets.py's
+    #     loki_shipping_vars() -- see docker_deploy_extra_vars()). Empty
+    #     until seeded, in which case log shipping is simply skipped
+    #     (graceful no-op, same as OTEL's endpoint-unset degradation).
+    xaisen_loki_effective_url: >-
+      {{
+        'http://xaisen-loki:3100/loki/api/v1/push'
+        if xaisen_provider | default('') == 'static'
+        else (
+          (xaisen_loki_push_url | regex_replace('^https://', 'https://xaisen:' ~ xaisen_loki_auth_token ~ '@'))
+          if (xaisen_loki_push_url | default('')) and (xaisen_loki_auth_token | default(''))
+          else ''
+        )
+      }}
   community.docker.docker_container:
     name: "xaisen-{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
     # Pinned upstream images (prometheus/tempo/grafana, see cli/context.py
@@ -312,19 +355,28 @@
     # with no args needed) and grafana's (reads its provisioning dir from a
     # fixed default path too), grafana/tempo's entrypoint requires an
     # explicit -config.file argument pointing at the mounted config (see
-    # volumes: below).
-    command: "{{ '-config.file=/etc/tempo.yaml' if xaisen_service_item.service == 'tempo' else omit }}"
-    # The upstream prom/prometheus, grafana/tempo, grafana/grafana images
-    # each run as their own baked-in unprivileged UID by default, which
-    # can't read the bind-mounted config file above (owned by whichever
-    # user wrote it -- root on Pulumi-managed fleet VMs, the SSH user
-    # itself on static hosts like bourbon, see xaisen_services_root's
+    # volumes: below). node_exporter's flags point it at the host's real
+    # /proc, /sys, and / (bind-mounted read-only under /host below), since
+    # its own container filesystem's /proc/etc reflect the container, not
+    # the host it's meant to be reporting on.
+    command: >-
+      {{
+        '-config.file=/etc/tempo.yaml' if xaisen_service_item.service == 'tempo'
+        else '-config.file=/etc/loki.yaml' if xaisen_service_item.service == 'loki'
+        else '--path.procfs=/host/proc --path.sysfs=/host/sys --path.rootfs=/host/root' if xaisen_service_item.service == 'node_exporter'
+        else omit
+      }}
+    # The upstream prom/prometheus, grafana/tempo, grafana/grafana, and
+    # grafana/loki images each run as their own baked-in unprivileged UID by
+    # default, which can't read the bind-mounted config file above (owned by
+    # whichever user wrote it -- root on Pulumi-managed fleet VMs, the SSH
+    # user itself on static hosts like bourbon, see xaisen_services_root's
     # owner/group conditionals). Running the container AS that same
     # connecting user (ansible_user_uid/gid, gathered by site.yml's
     # "Gather host facts" pre-task) instead of loosening the config
     # file's mode keeps prometheus.yml's real bearer credential
     # (xaisen_metrics_auth_token) unreadable by anyone else on the box.
-    user: "{{ (ansible_user_uid ~ ':' ~ ansible_user_gid) if xaisen_service_item.service in ['prometheus', 'tempo', 'grafana'] else omit }}"
+    user: "{{ (ansible_user_uid ~ ':' ~ ansible_user_gid) if xaisen_service_item.service in ['prometheus', 'tempo', 'grafana', 'loki'] else omit }}"
     # cli/registry.py tags images with the git short SHA, which is stable
     # across repeat `vidctl registry publish` runs on an uncommitted branch
     # -- without forcing a pull, a host that already has that tag cached
@@ -335,6 +387,31 @@
     # defaults true when its computing task above didn't run (e.g. `omit`/
     # not-yet-set), preserving the original always-pull safety net.
     pull: "{{ xaisen_needs_pull | default(true) }}"
+    # node_exporter needs the HOST's pid namespace (not the container's own)
+    # so its process/systemd collectors report on the real host, not on
+    # this one container's near-empty pid 1. community.docker.docker_container
+    # (the version pinned by this repo's ansible requirements) exposes this
+    # as `pid_mode`, not docker CLI's own `--pid` flag name.
+    pid_mode: "{{ 'host' if xaisen_service_item.service == 'node_exporter' else omit }}"
+    # Applies to EVERY container this task creates, unconditionally (not
+    # scoped to any per-service `when:`) -- unlike Tempo (an env-var-based
+    # opt-in fleet apps make themselves), Docker's logging driver operates
+    # at the container-runtime level beneath the app process, so this is
+    # the one place a single change covers every service/role at once. See
+    # xaisen_loki_effective_url above for the static-vs-fleet URL split;
+    # this is `omit` (no log_driver override, falls back to Docker's
+    # default json-file driver) until that URL is actually populated.
+    log_driver: "{{ 'loki' if xaisen_loki_effective_url | default('') else omit }}"
+    log_options: >-
+      {{
+        {
+          'loki-url': xaisen_loki_effective_url,
+          'loki-retries': '3',
+          'loki-batch-size': '400',
+          'loki-external-labels': 'service=' ~ xaisen_service_item.service ~ ',worker=' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ ',host=' ~ inventory_hostname,
+        }
+        if xaisen_loki_effective_url | default('') else omit
+      }}
     restart_policy: unless-stopped
     # Each container's own desired_state, not the host-level aggregate --
     # lets one colocated service be paused/restarted independently of
@@ -346,10 +423,10 @@
         or xaisen_wallet_credentials_write is changed
         or (xaisen_prometheus_config_write is defined and xaisen_prometheus_config_write is changed)
         or (xaisen_tempo_config_write is defined and xaisen_tempo_config_write is changed)
+        or (xaisen_loki_config_write is defined and xaisen_loki_config_write is changed)
         or (xaisen_grafana_config_write is defined and xaisen_grafana_config_write is changed)
         or (xaisen_dashboard_provider_write is defined and xaisen_dashboard_provider_write is changed)
-        or (xaisen_dashboard_json_write is defined and xaisen_dashboard_json_write is changed)
-        or (xaisen_academic_eval_dashboard_json_write is defined and xaisen_academic_eval_dashboard_json_write is changed)
+        or (xaisen_dashboards_write is defined and xaisen_dashboards_write is changed)
       }}
     # UDP RTC/pipe ranges are offset per worker_index (100 ports apart) so
     # colocated relay replicas on the same host don't collide -- mirrors how
@@ -374,7 +451,7 @@
       {{
         ([
           ('127.0.0.1:' ~ (xaisen_service_item.host_port | default(xaisen_service_item.port)) ~ ':' ~ xaisen_service_item.port)
-          if xaisen_service_item.service in ['prometheus', 'tempo', 'grafana', 'pushgateway']
+          if xaisen_service_item.service in ['prometheus', 'tempo', 'grafana', 'pushgateway', 'loki']
           else (xaisen_service_item.port ~ ':' ~ xaisen_service_item.port)
         ] if (xaisen_service_item.port | default(0) | int > 0) else [])
         + (['127.0.0.1:3200:3200'] if xaisen_service_item.service == 'tempo' else [])
@@ -414,11 +491,25 @@
           [
             xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro',
             xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/dashboard-provider.yml:/etc/grafana/provisioning/dashboards/dashboard-provider.yml:ro',
-            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/dashboards/xaisen-fleet.json:/etc/grafana/provisioning/dashboards/xaisen/xaisen-fleet.json:ro',
-            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/dashboards/xaisen-academic-eval.json:/etc/grafana/provisioning/dashboards/xaisen/xaisen-academic-eval.json:ro',
+            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/dashboards:/etc/grafana/provisioning/dashboards/xaisen:ro',
             xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/data:/var/lib/grafana',
           ]
           if xaisen_service_item.service == 'grafana' else []
+        )
+        + (
+          [
+            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/config/loki.yaml:/etc/loki.yaml:ro',
+            xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/data:/var/loki',
+          ]
+          if xaisen_service_item.service == 'loki' else []
+        )
+        + (
+          [
+            '/proc:/host/proc:ro',
+            '/sys:/host/sys:ro',
+            '/:/host/root:ro',
+          ]
+          if xaisen_service_item.service == 'node_exporter' else []
         )
       }}
     # Joins the shared bridge network (main.yml) instead of Docker's default

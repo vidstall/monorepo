@@ -22,13 +22,13 @@ name = "baseline-devnet"
 env = "devnet"
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "signaling"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "relay"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
@@ -39,7 +39,7 @@ name = "baseline-devnet-small"
 env = "devnet"
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "signaling"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
@@ -129,12 +129,29 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         parsed = scenario.load_scenario(path)
         self.assertEqual(parsed["env"], "devnet")
-        self.assertEqual(len(parsed["workers"]), 2)
+        # 2 declared + 1 auto-injected node_exporter (both rows share host "node-1").
+        self.assertEqual(len(parsed["workers"]), 3)
+
+    def test_non_numeric_host_rejected(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            'env = "devnet"\n[[workers]]\nhost = "node-1"\nservice = "relay"\nprovider = "digitalocean"\n',
+        )
+        with self.assertRaises(ValueError):
+            scenario.load_scenario(path)
+
+    def test_non_zero_padded_host_rejected(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            'env = "devnet"\n[[workers]]\nhost = "1"\nservice = "relay"\nprovider = "digitalocean"\n',
+        )
+        with self.assertRaises(ValueError):
+            scenario.load_scenario(path)
 
     def test_unknown_service_rejected(self) -> None:
         path = self.write_scenario(
             "s.toml",
-            'env = "devnet"\n[[workers]]\nhost = "n"\nservice = "bogus"\nprovider = "digitalocean"\n',
+            'env = "devnet"\n[[workers]]\nhost = "001"\nservice = "bogus"\nprovider = "digitalocean"\n',
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
@@ -142,7 +159,7 @@ class LoadScenarioTests(ScenarioTestCase):
     def test_unknown_provider_rejected(self) -> None:
         path = self.write_scenario(
             "s.toml",
-            'env = "devnet"\n[[workers]]\nhost = "n"\nservice = "relay"\nprovider = "bogus"\n',
+            'env = "devnet"\n[[workers]]\nhost = "001"\nservice = "relay"\nprovider = "bogus"\n',
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
@@ -151,8 +168,8 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario(
             "s.toml",
             'env = "devnet"\n'
-            '[[workers]]\nhost = "n"\nservice = "relay"\nprovider = "digitalocean"\n'
-            '[[workers]]\nhost = "n"\nservice = "relay"\nprovider = "digitalocean"\n',
+            '[[workers]]\nhost = "001"\nservice = "relay"\nprovider = "digitalocean"\n'
+            '[[workers]]\nhost = "001"\nservice = "relay"\nprovider = "digitalocean"\n',
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
@@ -207,8 +224,8 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario(
             "s.toml",
             SCENARIO_TOML
-            + '\n[[actions]]\nid = "room1"\ntype = "bot.create_room"\ntimestamp = "+10s"\nhost = "node-1"\n'
-            + '\n[[actions]]\ntype = "bot.delete_room"\ntimestamp = "+1m"\nhost = "node-1"\nbot_id = "$room1.botId"\n',
+            + '\n[[actions]]\nid = "room1"\ntype = "bot.create_room"\ntimestamp = "+10s"\nhost = "001"\n'
+            + '\n[[actions]]\ntype = "bot.delete_room"\ntimestamp = "+1m"\nhost = "001"\nbot_id = "$room1.botId"\n',
         )
         parsed = scenario.load_scenario(path)
         self.assertEqual(len(parsed["actions"]), 2)
@@ -219,7 +236,7 @@ class LoadScenarioTests(ScenarioTestCase):
     def test_action_unknown_type_rejected(self) -> None:
         path = self.write_scenario(
             "s.toml",
-            SCENARIO_TOML + '\n[[actions]]\ntype = "bogus"\ntimestamp = "+1s"\nhost = "node-1"\n',
+            SCENARIO_TOML + '\n[[actions]]\ntype = "bogus"\ntimestamp = "+1s"\nhost = "001"\n',
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
@@ -227,7 +244,7 @@ class LoadScenarioTests(ScenarioTestCase):
     def test_action_bad_timestamp_rejected(self) -> None:
         path = self.write_scenario(
             "s.toml",
-            SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "10s"\nhost = "node-1"\n',
+            SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "10s"\nhost = "001"\n',
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
@@ -235,7 +252,7 @@ class LoadScenarioTests(ScenarioTestCase):
     def test_action_missing_required_field_rejected(self) -> None:
         path = self.write_scenario(
             "s.toml",
-            SCENARIO_TOML + '\n[[actions]]\ntype = "bot.join_room"\ntimestamp = "+1s"\nhost = "node-1"\n',
+            SCENARIO_TOML + '\n[[actions]]\ntype = "bot.join_room"\ntimestamp = "+1s"\nhost = "001"\n',
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
@@ -244,8 +261,8 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario(
             "s.toml",
             SCENARIO_TOML
-            + '\n[[actions]]\nid = "a"\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
-            + '\n[[actions]]\nid = "a"\ntype = "bot.create_room"\ntimestamp = "+2s"\nhost = "node-1"\n',
+            + '\n[[actions]]\nid = "a"\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
+            + '\n[[actions]]\nid = "a"\ntype = "bot.create_room"\ntimestamp = "+2s"\nhost = "001"\n',
         )
         with self.assertRaises(ValueError):
             scenario.load_scenario(path)
@@ -254,7 +271,7 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario(
             "s.toml",
             SCENARIO_TOML
-            + '\n[[actions]]\ntype = "worker.leave"\ntimestamp = "+1s"\nhost = "node-1"\n'
+            + '\n[[actions]]\ntype = "worker.leave"\ntimestamp = "+1s"\nhost = "001"\n'
             + 'service = "relay"\nprovider = "akamai"\n'
             + '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+2s"\n'
             + 'service = "relay"\nprovider = "akamai"\n',
@@ -268,8 +285,8 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario(
             "s.toml",
             SCENARIO_TOML
-            + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+10s"\nhost = "node-1"\n'
-            + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n',
+            + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+10s"\nhost = "001"\n'
+            + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n',
         )
         parsed = scenario.load_scenario(path)  # must not raise
         self.assertEqual(len(parsed["actions"]), 2)
@@ -342,14 +359,15 @@ class ApplyTests(ScenarioTestCase):
         self.assertEqual(scenario.read_lock()["status"], "active")
         # The workers should still have been started despite bake failure (best-effort).
         topology = self.read_topology()
-        self.assertEqual(len(topology.get("workers", [])), 2)
+        # 2 declared + 1 auto-injected node_exporter (both rows share host "node-1").
+        self.assertEqual(len(topology.get("workers", [])), 3)
 
     def test_apply_passes_explicit_region_through_to_control(self) -> None:
         path = self.write_scenario(
             "s.toml",
             SCENARIO_TOML.replace(
-                '[[workers]]\nhost = "node-1"\nservice = "signaling"',
-                '[[workers]]\nhost = "node-1"\nservice = "signaling"\nregion = "sfo3"',
+                '[[workers]]\nhost = "001"\nservice = "signaling"',
+                '[[workers]]\nhost = "001"\nservice = "signaling"\nregion = "sfo3"',
             ),
         )
         with (
@@ -374,7 +392,8 @@ class ApplyTests(ScenarioTestCase):
         self.assertEqual(code, 0)
 
         topology = self.read_topology()
-        self.assertEqual(len(topology["workers"]), 2)
+        # 2 declared + 1 auto-injected node_exporter (both rows share host "node-1").
+        self.assertEqual(len(topology["workers"]), 3)
         self.assertTrue(all(i["desired_state"] == "running" for i in topology["workers"]))
 
         lock = scenario.read_lock()
@@ -488,7 +507,8 @@ class ApplyTests(ScenarioTestCase):
     def test_reconcile_kills_dropped_worker_and_never_touches_objects(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         self.assertEqual(scenario.apply(str(path), True), 0)
-        self.assertEqual(len(self.read_topology()["workers"]), 2)
+        # 2 declared + 1 auto-injected node_exporter (both rows share host "node-1").
+        self.assertEqual(len(self.read_topology()["workers"]), 3)
 
         # Seed an [[objects]] row (frontend/object-storage) that must survive
         # every scenario apply/destroy untouched.
@@ -514,8 +534,12 @@ class ApplyTests(ScenarioTestCase):
 
         topology = self.read_topology()
         active = [i for i in topology["workers"] if i["desired_state"] != "deleted"]
-        self.assertEqual(len(active), 1)
-        self.assertEqual(active[0]["service"], "signaling")
+        # signaling (still declared) + its auto-injected node_exporter --
+        # relay was dropped, along with relay's OWN auto-injected instance
+        # (SCENARIO_TOML_ONE_INSTANCE only declares one host, so there's
+        # only ever one node_exporter for it either way).
+        self.assertEqual(len(active), 2)
+        self.assertEqual({i["service"] for i in active}, {"signaling", "node_exporter"})
         self.assertEqual(len(topology["objects"]), 1)
         self.assertEqual(topology["objects"][0]["name"], "site-1-bucket")
 
@@ -624,17 +648,17 @@ class ActionsExecutionTests(ScenarioTestCase):
 
     def test_bot_create_room_dispatches(self) -> None:
         parsed = self._scenario(
-            '[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+            '[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
         )
         with patch.object(bot_client, "create_room", return_value={"botId": "b1", "roomId": "r1"}) as create_room:
             code = scenario.run_actions(parsed, "devnet")
         self.assertEqual(code, 0)
-        create_room.assert_called_once_with("node-1", "both", None)
+        create_room.assert_called_once_with("001", "both", None)
 
     def test_bot_delete_room_resolves_id_reference(self) -> None:
         parsed = self._scenario(
-            '[[actions]]\nid = "room1"\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
-            '\n[[actions]]\ntype = "bot.delete_room"\ntimestamp = "+2s"\nhost = "node-1"\nbot_id = "$room1.botId"\n'
+            '[[actions]]\nid = "room1"\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
+            '\n[[actions]]\ntype = "bot.delete_room"\ntimestamp = "+2s"\nhost = "001"\nbot_id = "$room1.botId"\n'
         )
         with (
             patch.object(bot_client, "create_room", return_value={"botId": "b1", "roomId": "r1"}),
@@ -642,19 +666,19 @@ class ActionsExecutionTests(ScenarioTestCase):
         ):
             code = scenario.run_actions(parsed, "devnet")
         self.assertEqual(code, 0)
-        delete_room.assert_called_once_with("node-1", "b1")
+        delete_room.assert_called_once_with("001", "b1")
 
     def test_unresolved_reference_fails_cleanly(self) -> None:
         parsed = self._scenario(
-            '[[actions]]\ntype = "bot.delete_room"\ntimestamp = "+1s"\nhost = "node-1"\nbot_id = "$missing.botId"\n'
+            '[[actions]]\ntype = "bot.delete_room"\ntimestamp = "+1s"\nhost = "001"\nbot_id = "$missing.botId"\n'
         )
         code = scenario.run_actions(parsed, "devnet")
         self.assertNotEqual(code, 0)
 
     def test_bot_action_failure_stops_run(self) -> None:
         parsed = self._scenario(
-            '[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
-            '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+2s"\nhost = "node-1"\n'
+            '[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
+            '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+2s"\nhost = "001"\n'
         )
         with patch.object(bot_client, "create_room", return_value=None) as create_room:
             code = scenario.run_actions(parsed, "devnet")
@@ -664,13 +688,13 @@ class ActionsExecutionTests(ScenarioTestCase):
     def test_worker_join_provisions_fresh_when_pool_empty(self) -> None:
         parsed = self._scenario(
             '[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
-            'service = "relay"\nprovider = "akamai"\nhost = "akamai-node-9"\n'
+            'service = "relay"\nprovider = "akamai"\nhost = "009"\n'
         )
         with patch.object(infra, "control", return_value=0) as control:
             code = scenario.run_actions(parsed, "devnet")
         self.assertEqual(code, 0)
         control.assert_called_once_with(
-            "start", "akamai-node-9", "relay", "akamai", yes=True, size=None, worker_index=1, region=None
+            "start", "009", "relay", "akamai", yes=True, size=None, worker_index=1, region=None
         )
 
     def test_worker_join_without_host_and_empty_pool_fails(self) -> None:
@@ -683,18 +707,18 @@ class ActionsExecutionTests(ScenarioTestCase):
     def test_worker_leave_pauses_worker(self) -> None:
         parsed = self._scenario(
             '[[actions]]\ntype = "worker.leave"\ntimestamp = "+1s"\n'
-            'host = "akamai-node-1"\nservice = "relay"\nprovider = "akamai"\n'
+            'host = "001"\nservice = "relay"\nprovider = "akamai"\n'
         )
         with patch.object(infra, "control", return_value=0) as control:
             code = scenario.run_actions(parsed, "devnet")
         self.assertEqual(code, 0)
-        control.assert_called_once_with("pause", "akamai-node-1", "relay", "akamai", yes=True, worker_index=1)
+        control.assert_called_once_with("pause", "001", "relay", "akamai", yes=True, worker_index=1)
 
     def test_worker_join_reuses_pooled_worker_over_provisioning(self) -> None:
         topology = infra.ensure_topology("devnet")
         topology["workers"].append(
             {
-                "host": "akamai-node-1",
+                "host": "001",
                 "service": "relay",
                 "provider": "akamai",
                 "env": "devnet",
@@ -711,27 +735,27 @@ class ActionsExecutionTests(ScenarioTestCase):
             code = scenario.run_actions(parsed, "devnet")
         self.assertEqual(code, 0)
         control.assert_called_once_with(
-            "restart", "akamai-node-1", "relay", "akamai", yes=True, worker_index=1
+            "restart", "001", "relay", "akamai", yes=True, worker_index=1
         )
 
 
 class RunTests(ScenarioTestCase):
     def test_run_without_yes_is_refused(self) -> None:
         path = self.write_scenario(
-            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
         )
         code = scenario.run(str(path), False)
         self.assertEqual(code, 2)
 
     def test_run_without_active_lock_is_refused(self) -> None:
         path = self.write_scenario(
-            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
         )
         code = scenario.run(str(path), True)
         self.assertEqual(code, 1)
 
     def test_run_against_different_locked_scenario_is_refused(self) -> None:
-        actions_toml = '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+        actions_toml = '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
         path_a = self.write_scenario("a.toml", SCENARIO_TOML + actions_toml)
         path_b = self.write_scenario("b.toml", SCENARIO_TOML_ONE_INSTANCE + actions_toml)
         self.assertEqual(scenario.apply(str(path_a), True), 0)
@@ -741,7 +765,7 @@ class RunTests(ScenarioTestCase):
 
     def test_run_executes_actions_against_active_scenario(self) -> None:
         path = self.write_scenario(
-            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "node-1"\n'
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
         )
         self.assertEqual(scenario.apply(str(path), True), 0)
 

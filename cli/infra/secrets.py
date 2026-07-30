@@ -75,6 +75,31 @@ def otel_exporter_vars() -> dict[str, str]:
     return result
 
 
+def loki_shipping_vars() -> dict[str, str]:
+    """Read (never generate) LOKI_PUSH_URL/LOKI_AUTH_TOKEN from
+    secrets/services/loki.env -- a plain, hand-seeded file, same shape as
+    otel_exporter_vars() and for the same reason: the actual ingest URL/
+    token belong to `vidctl observer`'s loki deployment (see
+    cli/observer/secrets.py's loki_auth_token(), and the ingest URL
+    `vidctl observer deploy` prints on success) -- the operator copies
+    those into this file once, by hand, keeping `cli/infra` and
+    `cli/observer` decoupled (no direct import between the two packages).
+    Returns {} if the file or the URL is missing, so every call site stays
+    a graceful no-op until the operator actually seeds it -- fleet
+    containers simply don't get a `loki` log_driver until then."""
+    from .. import infra
+
+    values = read_env_file(infra.SERVICE_SECRETS_DIR / "loki.env")
+    push_url = values.get("LOKI_PUSH_URL", "")
+    auth_token = values.get("LOKI_AUTH_TOKEN", "")
+    if not push_url:
+        return {}
+    result = {"LOKI_PUSH_URL": push_url}
+    if auth_token:
+        result["LOKI_AUTH_TOKEN"] = auth_token
+    return result
+
+
 def metrics_auth_token() -> str:
     """Read (or generate + persist) METRICS_AUTH_TOKEN -- the bearer token
     gating every worker's Prometheus-format /metrics(/prom) scrape endpoint,

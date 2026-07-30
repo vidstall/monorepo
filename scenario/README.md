@@ -45,7 +45,18 @@ to reconcile drift.
   existing site in place rather than creating a new one.
 - `[[workers]]` -- one entry per VM-backed worker (a service daemon deployed
   onto a host): `host` (the VM/droplet it runs on -- multiple `[[workers]]`
-  entries sharing the same `host` colocate several services on ONE VM),
+  entries sharing the same `host` colocate several services on ONE VM). A
+  `host` is a zero-padded, >=3-digit instance id counting from 1 (`"001"`,
+  `"002"`, ...), unique across the WHOLE scenario file regardless of how
+  many providers it spans -- not a real provider VM/droplet id, since that's
+  only assigned by the provider after `pulumi up` and would churn on every
+  redeploy (see `worker_identifier()` in `cli/infra/topology.py`). Combined
+  with `provider`/`service`/`worker_index` it forms the worker's stable
+  identity string (container name, public hostname, registry key):
+  `<provider>-<host>-<service>-<worker_index>`, e.g. `digitalocean-001-relay-2`.
+  A non-conforming `host` is rejected at `load_scenario()` time. See
+  `multicloud.toml` for how a multi-provider scenario renumbers each source
+  file's hosts into one continuous sequence.
   `service` (one of the worker services), `provider`, optional `size`
   (VM SKU override) and `worker_index` (defaults to `1`; only meaningful
   when running multiple replicas of the same service under one `host`).

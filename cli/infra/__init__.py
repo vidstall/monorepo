@@ -36,7 +36,7 @@ from .pulumi import (
     set_vm_defaults,
     stack_has_urns,
 )
-from .secrets import bot_control_token, metrics_auth_token, otel_exporter_vars
+from .secrets import bot_control_token, loki_shipping_vars, metrics_auth_token, otel_exporter_vars
 from .topology import (
     active_stack,
     default_topology,
@@ -105,6 +105,7 @@ __all__ = [
     "bot_control_token",
     "metrics_auth_token",
     "otel_exporter_vars",
+    "loki_shipping_vars",
     "active_stack",
     "default_topology",
     "ensure_topology",

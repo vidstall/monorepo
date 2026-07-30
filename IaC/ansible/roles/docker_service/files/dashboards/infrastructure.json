@@ -1,0 +1,149 @@
+{
+  "uid": "infrastructure",
+  "title": "Infrastructure",
+  "tags": ["xaisen"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "host",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "Prometheus" },
+        "query": { "query": "label_values(node_uname_info, instance)", "refId": "hostVariable" },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "node_exporter targets up",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "up{job=\"xaisen-node-exporter\", instance=~\"$host\"}", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name" }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "CPU usage per droplet",
+      "description": "1 - idle-rate, node_exporter's standard CPU-busy derivation.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\", instance=~\"$host\"}[5m]))", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 } }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Memory available",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_memory_MemAvailable_bytes{instance=~\"$host\"}", "legendFormat": "available {{instance}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_memory_MemTotal_bytes{instance=~\"$host\"}", "legendFormat": "total {{instance}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Network throughput",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(node_network_receive_bytes_total{instance=~\"$host\", device!=\"lo\"}[5m])", "legendFormat": "rx {{instance}}/{{device}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(node_network_transmit_bytes_total{instance=~\"$host\", device!=\"lo\"}[5m])", "legendFormat": "tx {{instance}}/{{device}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Disk space available",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_filesystem_avail_bytes{instance=~\"$host\", fstype!~\"tmpfs|overlay\"}", "legendFormat": "{{instance}}/{{mountpoint}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Load average",
+      "description": "node_load1/5/15 -- saturation signal beyond raw CPU%, since a busy-but-not-100%-CPU host can still be queueing work.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_load1{instance=~\"$host\"}", "legendFormat": "1m {{instance}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_load5{instance=~\"$host\"}", "legendFormat": "5m {{instance}}", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_load15{instance=~\"$host\"}", "legendFormat": "15m {{instance}}", "refId": "C" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Filesystem used %",
+      "description": "1 - (avail/size) -- easier to read/alert on at a glance than the raw-bytes-available panel above (which stays, for exact-size detail).",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "1 - (node_filesystem_avail_bytes{instance=~\"$host\", fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{instance=~\"$host\", fstype!~\"tmpfs|overlay\"})", "legendFormat": "{{instance}}/{{mountpoint}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 } }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Host uptime",
+      "description": "time() - node_boot_time_seconds -- surfaces a silent VM reboot, a distinct failure mode from a container restart that nothing else on this dashboard detects.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 30 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "time() - node_boot_time_seconds{instance=~\"$host\"}", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "colorMode": "value", "graphMode": "none", "textMode": "value_and_name" }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Open file descriptors / TCP sockets",
+      "description": "node_filefd_allocated and node_sockstat_TCP_alloc -- relay/signaling under heavy WebRTC/TCP load can hit fd/socket exhaustion before CPU/memory look stressed at all.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_filefd_allocated{instance=~\"$host\"}", "legendFormat": "fds {{instance}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_sockstat_TCP_alloc{instance=~\"$host\"}", "legendFormat": "tcp sockets {{instance}}", "refId": "B" }
+      ]
+    }
+  ]
+}

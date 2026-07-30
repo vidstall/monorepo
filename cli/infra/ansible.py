@@ -6,7 +6,7 @@ from typing import Any
 
 from ..context import ANSIBLE_DIR, CONTRACT_RUNTIME_DIR, PINNED_IMAGES, read_env_file, venv_bin
 from .history import record_history
-from .secrets import metrics_auth_token, otel_exporter_vars
+from .secrets import loki_shipping_vars, metrics_auth_token, otel_exporter_vars
 from .topology import active_stack
 
 
@@ -75,6 +75,18 @@ def _otel_extra_vars() -> dict[str, str]:
     }
 
 
+def _loki_extra_vars() -> dict[str, str]:
+    """Flat xaisen_loki_push_url/auth_token vars, same style/rationale as
+    _otel_extra_vars() -- empty strings (not omitted keys) when unset, so
+    deploy_one_service.yml's fleet-wide log_driver/log_options expression
+    can uniformly check truthiness without an `is defined` guard."""
+    values = loki_shipping_vars()
+    return {
+        "xaisen_loki_push_url": values.get("LOKI_PUSH_URL", ""),
+        "xaisen_loki_auth_token": values.get("LOKI_AUTH_TOKEN", ""),
+    }
+
+
 def docker_deploy_extra_vars() -> dict[str, Any]:
     from .. import registry
 
@@ -89,6 +101,7 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
             "xaisen_pinned_images": dict(PINNED_IMAGES),
             "xaisen_metrics_auth_token": metrics_auth_token(),
             **_otel_extra_vars(),
+            **_loki_extra_vars(),
         }
 
     # loadNetworkConfig() (services/worker/packages/shared/src/chain/client.ts)
@@ -132,6 +145,7 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
         "xaisen_pinned_images": dict(PINNED_IMAGES),
         "xaisen_metrics_auth_token": metrics_auth_token(),
         **_otel_extra_vars(),
+        **_loki_extra_vars(),
     }
     try:
         config = registry.provider_config(state.provider, require_credentials=True)

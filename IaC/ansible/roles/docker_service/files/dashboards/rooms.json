@@ -1,0 +1,83 @@
+{
+  "uid": "rooms",
+  "title": "Rooms",
+  "tags": ["xaisen"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "room",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "Prometheus" },
+        "query": { "query": "label_values(dvconf_room_participants, roomId)", "refId": "roomVariable" },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active rooms",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_rooms_active", "legendFormat": "rooms active", "refId": "A" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Participants per room",
+      "description": "dvconf_room_participants{roomId} -- apps/signaling/src/rooms.ts, set on join/leave.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_room_participants{roomId=~\"$room\"}", "legendFormat": "{{roomId}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "heatmap",
+      "title": "Room duration distribution",
+      "description": "dvconf_room_duration_seconds -- observed on room close, apps/signaling/src/rooms.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "sum(rate(dvconf_room_duration_seconds_bucket[5m])) by (le)", "format": "heatmap", "legendFormat": "{{le}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "RTT + jitter by room",
+      "description": "dvconf_rtc_rtt_ms / dvconf_rtc_jitter_ms{roomId,direction} -- server-observed mediasoup Consumer/Producer RTP-stream stats.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_rtc_rtt_ms{roomId=~\"$room\"}) by (roomId, direction)", "legendFormat": "rtt {{roomId}}/{{direction}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_rtc_jitter_ms{roomId=~\"$room\"}) by (roomId, direction)", "legendFormat": "jitter {{roomId}}/{{direction}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Packet loss + bitrate by room",
+      "description": "dvconf_rtc_packet_loss_ratio / dvconf_rtc_bitrate_kbps{roomId,direction}.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_rtc_packet_loss_ratio{roomId=~\"$room\"}) by (roomId, direction)", "legendFormat": "loss {{roomId}}/{{direction}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "sum(dvconf_rtc_bitrate_kbps{roomId=~\"$room\"}) by (roomId, direction)", "legendFormat": "kbps {{roomId}}/{{direction}}", "refId": "B" }
+      ]
+    }
+  ]
+}

@@ -55,16 +55,30 @@ def vm_host_entry(
     # host it's absent, so fall back to the singular service/port pair --
     # xaisen_service/xaisen_port stay populated too either way, for any
     # Ansible task not yet converted to loop over xaisen_services.
+    _fallback_service = instance.get("service", "")
+    _fallback_index = instance.get("worker_index", 1)
+    # node_exporter is auto-injected once per HOST, never colocated with a
+    # same-typed sibling -- same host-level identity rationale as
+    # program.py's _service_port() (<provider>-<host>, e.g.
+    # "digitalocean-001"), instead of falling through to the bare literal
+    # "node_exporter" (index is always 1 for it) that prometheus.yml.j2's
+    # node_exporter scrape target hostname used to be built from.
+    if _fallback_service == "node_exporter":
+        _fallback_worker_key = f"{instance.get('provider', '')}-{instance.get('host', '')}"
+    else:
+        # <provider>-<host>-<service>-<index> -- MUST match program.py's
+        # _service_port() and cli/infra/topology.py's worker_identifier()
+        # exactly; see that function's comment for why a mismatch here
+        # silently breaks wallet/keypair injection fleet-wide.
+        _fallback_worker_key = f"{instance.get('provider', '')}-{instance.get('host', '')}-{_fallback_service}-{_fallback_index}"
     services = instance.get("services") or (
         [
             {
-                "service": instance.get("service", ""),
+                "service": _fallback_service,
                 "port": instance.get("port", 0),
                 "desired_state": instance.get("desired_state", ""),
-                "index": instance.get("worker_index", 1),
-                "worker_key": instance.get("service", "")
-                if instance.get("worker_index", 1) == 1
-                else f"{instance.get('service', '')}-{instance.get('worker_index', 1)}",
+                "index": _fallback_index,
+                "worker_key": _fallback_worker_key,
             }
         ]
         if instance.get("service")

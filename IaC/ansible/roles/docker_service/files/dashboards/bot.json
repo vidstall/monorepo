@@ -1,0 +1,58 @@
+{
+  "uid": "bot",
+  "title": "Bot",
+  "tags": ["xaisen"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "heatmap",
+      "title": "Join-phase latency",
+      "description": "dvconf_bot_join_phase_seconds{phase} -- register/create-room/ws-connect/media-start step durations, apps/bot/src/session.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "sum(rate(dvconf_bot_join_phase_seconds_bucket[5m])) by (le, phase)", "format": "heatmap", "legendFormat": "{{phase}} {{le}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Join-phase p95 by phase",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "histogram_quantile(0.95, sum(rate(dvconf_bot_join_phase_seconds_bucket[5m])) by (le, phase))", "legendFormat": "p95 {{phase}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Sessions started / errored",
+      "description": "dvconf_bot_sessions_total and dvconf_bot_session_errors_total -- apps/bot/src/session.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_bot_sessions_total[5m])", "legendFormat": "sessions/s", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_bot_session_errors_total[5m])", "legendFormat": "errors/s", "refId": "B" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "CPU + resident memory",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(process_cpu_seconds_total{job=\"xaisen-bot\"}[5m])", "legendFormat": "cpu {{instance}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "process_resident_memory_bytes{job=\"xaisen-bot\"}", "legendFormat": "rss {{instance}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    }
+  ]
+}

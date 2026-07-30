@@ -33,91 +33,91 @@ tag = ""
 # use) since per-worker OCPU/memory isn't plumbed through scenario TOML.
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "signaling"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 1
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "signaling"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 2
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "relay"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 1
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "relay"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 2
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "cp-daemon"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 1
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "cp-daemon"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 2
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "cp-daemon"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 3
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "cp-daemon"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 4
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "validator-daemon"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 1
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "validator-daemon"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 2
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "validator-daemon"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 3
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "validator-daemon"
 provider = "oci"
 size = "VM.Standard.A1.Flex"
 worker_index = 4
 
 [[workers]]
-host = "oracle-node-1"
+host = "001"
 service = "validator-daemon"
 provider = "oci"
 size = "VM.Standard.A1.Flex"

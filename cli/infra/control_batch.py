@@ -11,7 +11,15 @@ from ._constants import PROVIDERS
 from .history import record_history, timestamp
 from .inventory import registry_status
 from .pulumi import set_vm_defaults
-from .topology import find_worker, new_worker, read_topology, relative_contract_env, service_backend, write_topology
+from .topology import (
+    find_worker,
+    new_worker,
+    read_topology,
+    relative_contract_env,
+    service_backend,
+    worker_identifier,
+    write_topology,
+)
 from .validation import desired_state_for, missing_contract_keys, missing_vm_provider_keys, validate_network, vm_provider_error
 
 
@@ -96,7 +104,7 @@ def control_many(
     for row in rows:
         service = str(row["service"])
         worker_index = int(row.get("worker_index") or 1)
-        worker_key = service if worker_index == 1 else f"{service}-{worker_index}"
+        worker_key = worker_identifier(provider, host, service, worker_index)
         from ..image_bake import BAKE_SERVICE
 
         if service not in DOCKER_SERVICES and service not in PINNED_IMAGES and service != BAKE_SERVICE:

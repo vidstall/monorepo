@@ -43,6 +43,37 @@ def tempo_auth_token() -> str:
     return token
 
 
+def loki_auth_token() -> str:
+    """Read (or generate + persist) the token gating the observer ingress
+    Caddy's reverse-proxy to loki's push API (see observer-caddyfile.j2) --
+    loki has no authentication of its own, same as tempo. Unlike
+    tempo_auth_token(), this is NOT sent as a Bearer header: Docker's
+    `loki` logging driver can only attach credentials via HTTP Basic Auth
+    embedded in the log-driver URL's userinfo (`https://xaisen:<token>@...`),
+    since the driver has no way to inject a custom Authorization header. So
+    this token is consumed as the Basic Auth password (fixed username
+    "xaisen") both when deploy_one_service.yml builds each container's
+    `loki-url` log-option and when observer-caddyfile.j2 matches the
+    resulting `Authorization: Basic base64("xaisen:<token>")` header.
+    Persisted in secrets/services/observer-loki.env, generated once on
+    first use, same shape as tempo_auth_token()."""
+    from .. import context
+
+    path = context.SERVICE_SECRETS_DIR / "observer-loki.env"
+    values = read_env_file(path)
+    token = values.get("LOKI_AUTH_TOKEN", "")
+    if token:
+        return token
+    token = py_secrets.token_urlsafe(32)
+    values["LOKI_AUTH_TOKEN"] = token
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(f"{key}={value}" for key, value in values.items()) + "\n",
+        encoding="utf-8",
+    )
+    return token
+
+
 def grafana_admin_password() -> str:
     """Read (or generate + persist) Grafana's admin login password, injected
     as GF_SECURITY_ADMIN_PASSWORD (see deploy_one_service.yml). Grafana is

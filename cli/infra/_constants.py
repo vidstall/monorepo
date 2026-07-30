@@ -15,7 +15,12 @@ REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "NETWORK_REGISTRY_ID")
 # (Grafana, the only thing that used to reach it over xaisen-net, is no
 # longer managed here -- it's self-hosted by the operator), so base_port
 # stays 0 for it, same as cp-daemon/validator-daemon.
-SERVICE_PORTS = {"signaling": 8080, "relay": 4000, "bot": 8095}
+# node_exporter is public (not loopback-gated like prometheus/tempo/grafana/
+# pushgateway below) -- unlike those, it colocates on the REMOTE worker
+# droplet, not on the same host as Prometheus, so Prometheus can only reach
+# it over the public sslip.io endpoint (same reasoning as relay/signaling's
+# public ports), never over loopback.
+SERVICE_PORTS = {"signaling": 8080, "relay": 4000, "bot": 8095, "node_exporter": 9100}
 VM_INSTANCE_SIZES = {
     "aws": "t3.micro",
     "gcp": "e2-micro",

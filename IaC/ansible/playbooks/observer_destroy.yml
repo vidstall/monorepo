@@ -26,3 +26,4 @@
         - xaisen-tempo
         - xaisen-grafana
         - xaisen-pushgateway
+        - xaisen-loki

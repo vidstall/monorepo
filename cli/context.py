@@ -75,8 +75,10 @@ DOCKERFILES = {name: WORKER_DIR / "apps" / name / "Dockerfile" for name in DOCKE
 PINNED_IMAGES = {
     "prometheus": "prom/prometheus:v2.53.0",
     "tempo": "grafana/tempo:2.5.0",
+    "loki": "grafana/loki:3.2.1",
     "grafana": "grafana/grafana:11.2.0",
     "pushgateway": "prom/pushgateway:v1.9.0",
+    "node_exporter": "prom/node-exporter:v1.8.2",
 }
 
 

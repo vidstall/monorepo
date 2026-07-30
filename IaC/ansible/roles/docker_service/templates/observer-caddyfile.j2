@@ -49,3 +49,26 @@ pushgateway.{{ ansible_host | replace('.', '-') }}.sslip.io {
     respond 401
 }
 {% endif %}
+
+{# Loki's push API has no authentication of its own either, but unlike
+   every other gated site block above this one matches on Basic Auth, not
+   Bearer -- deliberately. Docker's native `loki` logging driver (used by
+   EVERY container this role deploys, fleet-wide, to ship logs here -- see
+   deploy_one_service.yml's log_driver/log_options) can only attach
+   credentials via HTTP Basic Auth embedded in the loki-url's userinfo
+   (https://xaisen:<token>@...); it has no way to send a custom
+   Authorization: Bearer header the way OTEL exporters can. So this block
+   compares against the literal Basic-Auth header value Docker's HTTP
+   client will actually send, computed the same way (b64encode of
+   "xaisen:<token>") -- do NOT "fix" this into a Bearer matcher like the
+   other blocks; that would silently break every fleet container's log
+   shipping. #}
+{% if xaisen_observer_loki_service | length > 0 %}
+loki.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    @authorized {
+        header Authorization "Basic {{ ('xaisen:' ~ xaisen_loki_auth_token) | b64encode }}"
+    }
+    reverse_proxy @authorized xaisen-loki:3100
+    respond 401
+}
+{% endif %}

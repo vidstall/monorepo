@@ -24,14 +24,16 @@ name = "monitoring-demo"
 env = "devnet"
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "prometheus"
 provider = "digitalocean"
 """,
             )
             data = scenario.load_scenario(path)
             services = {w["service"] for w in data["workers"]}
-            self.assertEqual(services, {"prometheus"})
+            # node_exporter is auto-injected once per host regardless of
+            # which service(s) are declared there (see load_scenario()).
+            self.assertEqual(services, {"prometheus", "node_exporter"})
 
     def test_load_scenario_accepts_grafana_worker(self) -> None:
         # Grafana is a pinned upstream image (cli/context.py PINNED_IMAGES),
@@ -49,14 +51,43 @@ name = "monitoring-demo"
 env = "devnet"
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "grafana"
 provider = "digitalocean"
 """,
             )
             data = scenario.load_scenario(path)
             services = {w["service"] for w in data["workers"]}
-            self.assertEqual(services, {"grafana"})
+            # node_exporter is auto-injected once per host regardless of
+            # which service(s) are declared there (see load_scenario()).
+            self.assertEqual(services, {"grafana", "node_exporter"})
+
+    def test_load_scenario_accepts_loki_worker(self) -> None:
+        # Loki is a pinned upstream image (cli/context.py PINNED_IMAGES),
+        # same as prometheus/tempo/grafana -- syntactically valid here, but
+        # rejected at runtime by infra.control() (see
+        # test_infra_topology.py::test_loki_start_is_rejected_in_favor_of_vidctl_observer),
+        # since it's only ever deployed via `vidctl observer`, never a
+        # disposable scenario worker.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "s.toml"
+            _write(
+                path,
+                """
+name = "monitoring-demo"
+env = "devnet"
+
+[[workers]]
+host = "001"
+service = "loki"
+provider = "digitalocean"
+""",
+            )
+            data = scenario.load_scenario(path)
+            services = {w["service"] for w in data["workers"]}
+            # node_exporter is auto-injected once per host regardless of
+            # which service(s) are declared there (see load_scenario()).
+            self.assertEqual(services, {"loki", "node_exporter"})
 
     def test_load_scenario_still_rejects_unknown_service(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -68,7 +99,7 @@ name = "bad"
 env = "devnet"
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "not-a-real-service"
 provider = "digitalocean"
 """,
@@ -120,6 +151,31 @@ class MonitoringSecretsTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20tok\n", encoding="utf-8")
         self.assertEqual(infra.otel_exporter_vars(), {})
+
+    def test_loki_shipping_vars_empty_when_unseeded(self) -> None:
+        self.assertEqual(infra.loki_shipping_vars(), {})
+
+    def test_loki_shipping_vars_reads_seeded_file(self) -> None:
+        path = infra.SERVICE_SECRETS_DIR / "loki.env"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "LOKI_PUSH_URL=https://loki.1-2-3-4.sslip.io/loki/api/v1/push\n"
+            "LOKI_AUTH_TOKEN=tok123\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(
+            infra.loki_shipping_vars(),
+            {
+                "LOKI_PUSH_URL": "https://loki.1-2-3-4.sslip.io/loki/api/v1/push",
+                "LOKI_AUTH_TOKEN": "tok123",
+            },
+        )
+
+    def test_loki_shipping_vars_ignores_token_without_url(self) -> None:
+        path = infra.SERVICE_SECRETS_DIR / "loki.env"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("LOKI_AUTH_TOKEN=tok123\n", encoding="utf-8")
+        self.assertEqual(infra.loki_shipping_vars(), {})
 
 
 if __name__ == "__main__":

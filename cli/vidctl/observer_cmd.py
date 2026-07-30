@@ -99,3 +99,27 @@ def add_observer_parser(subparsers: argparse._SubParsersAction[argparse.Argument
     )
     _add_host_arg(clean_parser)
     clean_parser.set_defaults(handler=lambda args: observer.clean(args.host))
+
+    export_parser = actions.add_parser(
+        "export-contract-state",
+        help=(
+            "Push wallet-pool and on-chain registration state to the observer host's Pushgateway "
+            "(Contract & Chain dashboard). One-shot by default; only as fresh as the last run."
+        ),
+    )
+    _add_host_arg(export_parser)
+    export_parser.add_argument("--env", default="devnet", help="Contract network to read. Default: devnet.")
+    export_parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Keep re-pushing every --interval seconds instead of exiting after one push.",
+    )
+    export_parser.add_argument(
+        "--interval",
+        type=int,
+        default=60,
+        help="Seconds between pushes when --watch is set. Default: 60.",
+    )
+    export_parser.set_defaults(
+        handler=lambda args: observer.export_contract_state(args.env, args.host, args.watch, args.interval)
+    )

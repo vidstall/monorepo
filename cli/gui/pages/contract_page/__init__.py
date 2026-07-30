@@ -52,10 +52,16 @@ def build_contract_page(state) -> ft.Control:
         options=[ft.dropdown.Option(name) for name in WALLET_FILTERS],
     )
     # Repopulated by every refresh(); walked by sync_chain_data() below to
-    # drive the 30s live poll of on-chain reads (object values, wallet caps)
-    # against whatever rows are currently on screen.
+    # drive the 30s live poll of on-chain reads (object values, wallet caps,
+    # wallet balances) against whatever rows are currently on screen.
     object_targets: list[tuple[str, ft.Text]] = []
-    wallet_targets: list[tuple[str, ft.Container]] = []
+    wallet_targets: list[tuple[str, str, ft.Container, ft.Text]] = []
+    # address -> live on-chain balance (mist), populated by sync_chain_data()'s
+    # 30s poll and persisted across ticks so a transient fetch failure doesn't
+    # blank a wallet's balance back to zero. Falls back to wallet.toml's
+    # last_balance_mist (a stale, pre-faucet snapshot -- see chain_ops.
+    # faucet_if_needed) only until the first successful live fetch lands.
+    live_balances: dict[str, int] = {}
 
     def selected_env() -> str:
         return env_dropdown.value or "devnet"
@@ -110,7 +116,8 @@ def build_contract_page(state) -> ft.Control:
         for entry in wallets:
             chart_key = _chart_status_key(entry)
             role_counts[chart_key] = role_counts.get(chart_key, 0) + 1
-            role_balances[chart_key] = role_balances.get(chart_key, 0.0) + float(entry.get("last_balance_mist", 0) or 0) / 1_000_000_000
+            mist = live_balances.get(entry.get("address", ""), entry.get("last_balance_mist", 0) or 0)
+            role_balances[chart_key] = role_balances.get(chart_key, 0.0) + float(mist) / 1_000_000_000
         role_chart.content = _role_pie_chart(role_counts)
         balance_chart.content = _role_balance_bar_chart(role_balances)
 
@@ -139,8 +146,11 @@ def build_contract_page(state) -> ft.Control:
             status_text = ft.Container(content=status_badge("unverified", "neutral"))
             verify_button = ft.TextButton("Verify on-chain", icon=ft.Icons.FACT_CHECK)
             verify_button.on_click = _make_verify_handler(runner, page, address, env, status_text)
+            balance_text = ft.Text(
+                _format_sui(live_balances.get(address, entry.get("last_balance_mist", 0))), size=12
+            )
             if address:
-                wallet_targets.append((address, status_text))
+                wallet_targets.append((address, _chart_status_key(entry), status_text, balance_text))
             wallet_rows.append(
                 ft.Container(
                     padding=8,
@@ -151,7 +161,7 @@ def build_contract_page(state) -> ft.Control:
                             ft.Container(ft.Text(entry.get("alias", ""), weight=ft.FontWeight.BOLD), width=140),
                             ft.Container(copyable_id(address, page), width=200),
                             ft.Container(status_badge(role, "info" if role in ROLE_COLORS else "neutral"), width=150),
-                            ft.Container(ft.Text(_format_sui(entry.get("last_balance_mist", 0)), size=12), width=120),
+                            ft.Container(balance_text, width=120),
                             ft.Container(ft.Text(_format_ts(_last_action(entry)), size=11, color=ft.Colors.OUTLINE), width=160),
                             status_text,
                             verify_button,
@@ -178,10 +188,11 @@ def build_contract_page(state) -> ft.Control:
 
     async def sync_chain_data() -> None:
         """Live on-chain half of the 30s poll: re-fetches every shared
-        object's current fields and re-verifies every wallet's cap,
-        against whatever rows refresh() last put on screen. Sequential
-        (not gathered) so a poll tick makes at most one Sui CLI call at a
-        time instead of firing a dozen+ subprocesses at once."""
+        object's current fields, re-verifies every wallet's cap, and
+        re-fetches every wallet's real SUI balance, against whatever rows
+        refresh() last put on screen. Sequential (not gathered) so a poll
+        tick makes at most one Sui CLI call at a time instead of firing a
+        dozen+ subprocesses at once."""
         now_label = datetime.now(timezone.utc).strftime("%H:%M UTC")
         for object_id, value_text in list(object_targets):
             try:
@@ -193,7 +204,8 @@ def build_contract_page(state) -> ft.Control:
             value_text.value = f"synced {now_label}" if fields is not None else "(fetch failed)"
             value_text.italic = fields is None
         env = selected_env()
-        for address, status_container in list(wallet_targets):
+        role_balances: dict[str, float] = {}
+        for address, chart_key, status_container, balance_text in list(wallet_targets):
             try:
                 found = await asyncio.to_thread(wallet_cli.find_cap_id, address, env)
             except Exception:  # noqa: BLE001 - a poll tick must never crash the app
@@ -203,6 +215,15 @@ def build_contract_page(state) -> ft.Control:
                 status_container.content = status_badge(f"{struct_name} ({object_id[:10]}…)", "success")
             else:
                 status_container.content = status_badge("not registered", "warning")
+            try:
+                mist = await asyncio.to_thread(wallet_cli.current_balance_mist, address)
+                live_balances[address] = mist
+            except Exception:  # noqa: BLE001 - a poll tick must never crash the app
+                pass  # keep whatever live_balances already has (or the stale fallback)
+            balance_text.value = _format_sui(live_balances.get(address, 0))
+            role_balances[chart_key] = role_balances.get(chart_key, 0.0) + live_balances.get(address, 0) / 1_000_000_000
+        if wallet_targets:
+            balance_chart.content = _role_balance_bar_chart(role_balances)
         page.update()
 
     async def poll_forever() -> None:

@@ -85,6 +85,24 @@ scrape_configs:
 {% endif %}
 {% endfor %}
 {% endfor %}
+  # node_exporter runs on every worker droplet (one per host, auto-injected
+  # by cli/scenario/spec.py's load_scenario() -- see PINNED_IMAGES), never
+  # colocated with Prometheus like pushgateway below. It has no TLS/Caddy
+  # front door of its own (unlike the bearer-gated jobs above, which reverse
+  # -proxy through each droplet's Caddy sidecar) and no auth -- scraped
+  # directly over plain HTTP on its published public port. One target per
+  # HOST (not per xaisen_services entry -- node_exporter reports on the
+  # whole machine, so de-dup by host to avoid one duplicate target per
+  # colocated daemon sharing that droplet).
+  - job_name: xaisen-node-exporter
+    static_configs:
+      - targets:
+{% for host in groups['xaisen'] %}
+{% set ne = hostvars[host].get('xaisen_services', []) | selectattr('service', 'equalto', 'node_exporter') | list %}
+{% if ne %}
+          - "{{ ne[0].worker_key | default(ne[0].service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:9100"
+{% endif %}
+{% endfor %}
   # Pushgateway is colocated on THIS SAME observer host (see
   # cli/observer/inventory.py's _host_entry()), reachable directly over the
   # internal xaisen-net bridge by container name -- no public hostname/

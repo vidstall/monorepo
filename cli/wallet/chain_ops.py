@@ -49,6 +49,14 @@ def faucet_if_needed(entry: dict[str, Any], env_name: str) -> None:
     code = run(["sui", "client", "faucet", "--address", entry["address"]])
     if code == 0:
         entry["last_faucet_at"] = _timestamp()
+        # Re-check so last_balance_mist reflects the post-faucet balance --
+        # otherwise it's stuck at the pre-faucet snapshot taken above
+        # (near-zero for a fresh wallet) forever, even though the wallet is
+        # actually funded from here on.
+        try:
+            entry["last_balance_mist"] = current_balance_mist(entry["address"])
+        except (subprocess.CalledProcessError, json.JSONDecodeError):
+            pass  # keep the pre-faucet snapshot; next checkout will retry
     else:
         print(f"Warning: faucet request failed for {entry['address']}.", file=sys.stderr)
 

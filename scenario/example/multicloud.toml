@@ -1,10 +1,14 @@
 # Straight merge of digitalocean.toml + akamai.toml + azure.toml -- one
-# scenario spanning three providers at once. DigitalOcean's hosts are
-# renamed node-1/2/3 -> do-node-1/2/3 here for consistency with the other
-# two providers' <provider>-node-N convention; the topology/inventory
-# resolve host identity dynamically at deploy time, so nothing else needed
-# to change for the rename. Every other field (service/size/worker_index/
-# region) is carried over unchanged from its source file.
+# scenario spanning three providers at once. `host` is a zero-padded,
+# >=3-digit instance id counting from 1, unique across the WHOLE scenario
+# file regardless of provider (see _validate_host_id() in
+# cli/scenario/spec.py and _group_vm_workers() in
+# IaC/pulumi/app/program.py, which groups VM rows to colocate by this raw
+# string -- two providers sharing the same id would be wrongly merged into
+# one VM group). So each source file's hosts are renumbered here into one
+# continuous sequence: digitalocean 001-003, akamai 004-007, azure 008-011.
+# Every other field (service/size/worker_index/region) is carried over
+# unchanged from its source file.
 name = "multicloud-devnet-sample"
 env = "devnet"
 
@@ -22,59 +26,59 @@ name = "site-2-bucket"
 object = "frontend"
 provider = "alibaba"
 
-# --- DigitalOcean (from digitalocean.toml, node-1/2/3 -> do-node-1/2/3) ---
+# --- DigitalOcean (from digitalocean.toml, hosts 001-003) ---
 
 [[workers]]
-host = "do-node-1"
+host = "001"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-1"
+host = "001"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "do-node-1"
+host = "001"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-1"
+host = "001"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "do-node-1"
+host = "001"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-1"
+host = "001"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "do-node-1"
+host = "001"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-1"
+host = "001"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
@@ -84,7 +88,7 @@ worker_index = 2
 # HTTP control API is reached directly at a single host). Test/demo tool
 # only, not part of network role economics -- see apps/bot/README.md.
 [[workers]]
-host = "do-node-1"
+host = "001"
 service = "bot"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
@@ -98,219 +102,219 @@ worker_index = 1
 # reason (see cli/infra/control.py).
 
 [[workers]]
-host = "do-node-2"
+host = "002"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-2"
+host = "002"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "do-node-2"
+host = "002"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-2"
+host = "002"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "do-node-2"
+host = "002"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-2"
+host = "002"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "do-node-2"
+host = "002"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-2"
+host = "002"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "do-node-3"
+host = "003"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-3"
+host = "003"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "do-node-3"
+host = "003"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-3"
+host = "003"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "do-node-3"
+host = "003"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-3"
+host = "003"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "do-node-3"
+host = "003"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "do-node-3"
+host = "003"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
-# --- Akamai (from akamai.toml, unchanged) ---
+# --- Akamai (from akamai.toml, renumbered hosts 004-007) ---
 
 [[workers]]
-host = "akamai-node-1"
+host = "004"
 service = "signaling"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-1"
+host = "004"
 service = "relay"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-1"
+host = "004"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-1"
+host = "004"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 2
 
 [[workers]]
-host = "akamai-node-1"
+host = "004"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-2"
+host = "005"
 service = "signaling"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-2"
+host = "005"
 service = "relay"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-2"
+host = "005"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-2"
+host = "005"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 2
 
 [[workers]]
-host = "akamai-node-2"
+host = "005"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-3"
+host = "006"
 service = "signaling"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-3"
+host = "006"
 service = "relay"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-3"
+host = "006"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-3"
+host = "006"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 2
 
 [[workers]]
-host = "akamai-node-3"
+host = "006"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
@@ -320,72 +324,72 @@ worker_index = 1
 # liveness-voting quorum (2/3 of ALL registered active validators, live or
 # not) stays reachable. See akamai.toml for the full rationale.
 [[workers]]
-host = "akamai-node-4"
+host = "007"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
 [[workers]]
-host = "akamai-node-4"
+host = "007"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 2
 
 [[workers]]
-host = "akamai-node-4"
+host = "007"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 3
 
 [[workers]]
-host = "akamai-node-4"
+host = "007"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 4
 
 [[workers]]
-host = "akamai-node-4"
+host = "007"
 service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 5
 
-# --- Azure (from azure.toml, unchanged, multi-region) ---
+# --- Azure (from azure.toml, renumbered hosts 008-011, multi-region) ---
 
 [[workers]]
-host = "azure-node-1"
+host = "008"
 service = "signaling"
 provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 
 [[workers]]
-host = "azure-node-1"
+host = "008"
 service = "relay"
 provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 
 [[workers]]
-host = "azure-node-1"
+host = "008"
 service = "cp-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 
 [[workers]]
-host = "azure-node-1"
+host = "008"
 service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 
 [[workers]]
-host = "azure-node-2"
+host = "009"
 service = "signaling"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -393,7 +397,7 @@ worker_index = 1
 region = "westus2"
 
 [[workers]]
-host = "azure-node-2"
+host = "009"
 service = "relay"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -401,7 +405,7 @@ worker_index = 1
 region = "westus2"
 
 [[workers]]
-host = "azure-node-2"
+host = "009"
 service = "cp-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -409,7 +413,7 @@ worker_index = 1
 region = "westus2"
 
 [[workers]]
-host = "azure-node-2"
+host = "009"
 service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -417,7 +421,7 @@ worker_index = 1
 region = "westus2"
 
 [[workers]]
-host = "azure-node-3"
+host = "010"
 service = "cp-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -425,7 +429,7 @@ worker_index = 1
 region = "centralus"
 
 [[workers]]
-host = "azure-node-3"
+host = "010"
 service = "cp-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -433,7 +437,7 @@ worker_index = 2
 region = "centralus"
 
 [[workers]]
-host = "azure-node-3"
+host = "010"
 service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -441,7 +445,7 @@ worker_index = 1
 region = "centralus"
 
 [[workers]]
-host = "azure-node-4"
+host = "011"
 service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -449,7 +453,7 @@ worker_index = 1
 region = "westeurope"
 
 [[workers]]
-host = "azure-node-4"
+host = "011"
 service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -470,7 +474,7 @@ region = "westeurope"
 id = "room1"
 type = "bot.create_room"
 timestamp = "+10s"
-host = "do-node-1"
+host = "001"
 media_mode = "both"
 
 # 30s in: take one akamai relay out of the network. It's paused (VM stays
@@ -480,7 +484,7 @@ media_mode = "both"
 [[actions]]
 type = "worker.leave"
 timestamp = "+30s"
-host = "akamai-node-3"
+host = "006"
 service = "relay"
 provider = "akamai"
 worker_index = 1
@@ -500,5 +504,5 @@ provider = "akamai"
 [[actions]]
 type = "bot.delete_room"
 timestamp = "+5m"
-host = "do-node-1"
+host = "001"
 bot_id = "$room1.botId"

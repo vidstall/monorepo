@@ -6,10 +6,10 @@ from typing import Callable
 import flet as ft
 
 from .... import observer as observer_cli
-from ...dialogs import confirm, prompt_form, show_info
+from ...dialogs import confirm, show_info
 from ...widgets import copyable_id, masked_secret
 from . import theme
-from .render import _panel, _data_text, _host_card, _label
+from .render import _panel, _data_text, _dashboard_tab, _label
 
 # flet-webview is a separate add-on package (not bundled with flet core) --
 # degrade to a plain "Open Grafana" launch button if it's ever missing,
@@ -22,146 +22,211 @@ except ImportError:
     WebView = None  # type: ignore[assignment, misc]
     _WEBVIEW_SUPPORTED = False
 
+# The single, static monitoring box this whole page watches (see cli/observer's
+# design rationale: one static, never-Pulumi-managed, never-rebooted host --
+# there is no multi-host fleet of observer boxes to pick between, so this is
+# hardcoded rather than exposed as an add/remove-able list in the UI). Kept
+# as module constants (not a form default) since nothing here ever prompts
+# for these values anymore -- see _ensure_host() below.
 DEFAULT_HOST = "bourbon"
-# The operator's one real static monitoring box (see cli/observer's whole
-# design rationale: a static, never-Pulumi-managed, never-rebooted host).
-# Prefilled here purely as a form convenience -- still fully editable, and
-# add_host() is idempotent by name so resubmitting with the same name just
-# updates the existing entry rather than creating a duplicate.
 DEFAULT_ADDRESS = "161.118.232.63"
 DEFAULT_SSH_USER = "deploy"
 DEFAULT_SSH_KEY = "~/.ssh/rotexai/bourbon-deploy"
 
+# (dashboard uid, display name, description, icon) for every dashboard
+# provisioned by grafana-dashboard-provider.yml.j2 -- see
+# IaC/ansible/roles/docker_service/files/dashboards/*.json for the fixed
+# uids (uid == filename stem == URL slug, by convention). Add a row here
+# whenever a new dashboard file is provisioned; there's no dashboard-search
+# API call to populate this dynamically.
+DASHBOARDS = [
+    (
+        "overview",
+        "Overview",
+        "Pane of glass -- targets up, active sessions/rooms, chain-consensus rate, fleet-wide error logs",
+        ft.Icons.DASHBOARD,
+    ),
+    (
+        "contract-chain",
+        "Contract & Chain",
+        "Wallet pool, on-chain registration counts, contract/registry metadata",
+        ft.Icons.ACCOUNT_BALANCE,
+    ),
+    (
+        "infrastructure",
+        "Infrastructure",
+        "Per-droplet CPU/RAM/network/disk",
+        ft.Icons.DNS,
+    ),
+    (
+        "workers",
+        "Workers",
+        "Per-role CPU/RSS and delay -- RTT/jitter, chain-tx/vote latency",
+        ft.Icons.MONITOR_HEART,
+    ),
+    (
+        "rooms",
+        "Rooms",
+        "Per-room participants, duration, RTC quality",
+        ft.Icons.MEETING_ROOM,
+    ),
+    (
+        "bot",
+        "Bot",
+        "Join-phase breakdown, session counts/errors",
+        ft.Icons.SMART_TOY,
+    ),
+]
+DEFAULT_DASHBOARD_UID = "overview"
 
-def _grafana_url(address: str) -> str:
-    # /d/xaisen-fleet/xaisen-fleet -- the "Xaisen Fleet" dashboard
-    # provisioned by grafana-dashboard-provider.yml.j2 +
-    # xaisen-fleet-dashboard.json.j2 (fixed uid "xaisen-fleet"), not
-    # Grafana's bare landing page. ?kiosk hides Grafana's own nav chrome.
-    # theme=light forces Grafana's OWN UI into light mode -- Grafana
-    # defaults to dark regardless of this app's page.theme_mode (a
-    # separate app entirely, embedded via webview), and this page is
-    # deliberately light (see theme.py) -- without this the embed clashes.
-    return f"https://grafana.{address.replace('.', '-')}.sslip.io/d/xaisen-fleet/xaisen-fleet?kiosk&theme=light"
+
+def _ensure_host() -> dict:
+    """Register the one hardcoded observer host if it isn't already in
+    runtime/observer.toml -- idempotent (add_host() updates in place by
+    name), so this is safe to call on every page build."""
+    host = observer_cli.find_host(DEFAULT_HOST)
+    if host is not None:
+        return host
+    return observer_cli.add_host(DEFAULT_HOST, DEFAULT_ADDRESS, DEFAULT_SSH_USER, DEFAULT_SSH_KEY)
+
+
+def _grafana_url(address: str, dashboard_uid: str) -> str:
+    # ?kiosk hides Grafana's own nav chrome. theme=light forces Grafana's
+    # OWN UI into light mode -- Grafana defaults to dark regardless of this
+    # app's page.theme_mode (a separate app entirely, embedded via webview),
+    # and this page is deliberately light (see theme.py) -- without this the
+    # embed clashes.
+    return f"https://grafana.{address.replace('.', '-')}.sslip.io/d/{dashboard_uid}/{dashboard_uid}?kiosk&theme=light"
 
 
 def _tempo_ingest_url(address: str) -> str:
     return f"https://tempo.{address.replace('.', '-')}.sslip.io/v1/traces"
 
 
-def _grafana_hero_panel(address: str, page: ft.Page) -> ft.Control:
-    """The page's dominant element -- a live embedded Grafana view of the
-    provisioned "Xaisen Fleet" dashboard when flet-webview is available,
-    degrading to a big launch button otherwise. Panels show "No data"
-    until the fleet is actually deployed and scraping -- an honest
-    first-run state, not something to fake around."""
-    if not address:
-        return _panel(ft.Text("No address on file.", color=theme.INK_MUTED))
-    if _WEBVIEW_SUPPORTED:
-        panel = _panel(ft.Container(content=WebView(url=_grafana_url(address), expand=True), expand=True), padding=0)
-        panel.expand = True
-        return panel
-    return _panel(
-        ft.Column(
-            [
-                ft.Text("Live embed unavailable in this environment (flet-webview not installed).", color=theme.INK_MUTED),
-                ft.FilledButton("Open Grafana", icon=ft.Icons.OPEN_IN_NEW, on_click=lambda e: page.launch_url(_grafana_url(address))),
-            ],
-            spacing=10,
-        )
-    )
+def _loki_ingest_url(address: str) -> str:
+    return f"https://loki.{address.replace('.', '-')}.sslip.io/loki/api/v1/push"
 
 
 def build_observation_page(state) -> ft.Control:
     page = state.page
     runner = state.runner
 
-    hosts_list = ft.Column(spacing=6)
-    # No scroll here: the Grafana hero panel below uses expand=True to fill
-    # all remaining vertical space, which Flet (Flutter underneath) can't
-    # combine with a scrollable parent -- an expand child inside a
-    # scrolling container has no bounded height to expand into. Detail
-    # content is short now that "Manage host" lives in its own dialog, so
-    # there's nothing else here that would ever need to overflow/scroll.
-    detail_column = ft.Column(spacing=12, expand=True)
-    detail_column.controls = [
-        ft.Text("Select a host to watch its dashboards.", color=theme.INK_MUTED, font_family=theme.DATA_FONT)
-    ]
-    selected = {"name": None}
+    dashboard_tabs = ft.Row(spacing=4, scroll=ft.ScrollMode.AUTO)
+    selected = {"uid": DEFAULT_DASHBOARD_UID}
 
-    def refresh_hosts_list() -> None:
-        hosts = observer_cli.read_hosts()
-        if not hosts:
-            hosts_list.controls = [ft.Text("No observer hosts registered yet.", color=theme.INK_MUTED, size=12)]
-        else:
-            hosts_list.controls = [
-                _host_card(host, host.get("name") == selected["name"], show_host, open_manage_dialog) for host in hosts
-            ]
+    def current_address() -> str:
+        host = observer_cli.find_host(DEFAULT_HOST)
+        return str(host.get("address", "")) if host else ""
 
-    def show_host(name: str) -> None:
-        selected["name"] = name
-        refresh_hosts_list()
-        host = observer_cli.find_host(name)
-        if host is None:
-            detail_column.controls = [ft.Text("This host is no longer registered.", color=theme.INK_MUTED)]
-            page.update()
-            return
+    def refresh_dashboard_tabs() -> None:
+        dashboard_tabs.controls = [
+            _dashboard_tab(uid, name, description, icon, uid == selected["uid"], show_dashboard)
+            for uid, name, description, icon in DASHBOARDS
+        ]
 
-        address = str(host.get("address", ""))
+    # The Grafana embed is a native platform view (flet-webview). Two prior
+    # fix attempts both failed on the real native desktop app (confirmed by
+    # the user, not just theory):
+    #   1. Recreating a WebView control on every switch -- Flet's patcher
+    #      diffs by tree position, not Python object identity, so a "new"
+    #      control at the same position is indistinguishable on the wire
+    #      from a plain property patch.
+    #   2. Reassigning the existing control's `.url` and calling
+    #      `.update()` -- still just a property patch; the mounted native
+    #      WKWebView apparently never reacts to it.
+    # Both were passive (property-patch) approaches. `WebView.load_request()`
+    # is flet-webview's IMPERATIVE navigation method -- it invokes a runtime
+    # method on the client's already-mounted WebView instance directly
+    # (native platform channel call), which is the actual supported way to
+    # navigate a webview after initial mount; a passive property patch was
+    # never going to do it. Only supported on Android/iOS/macOS (raises on
+    # Flet Web), which matches this GUI's real target -- the native desktop
+    # app. One persistent WebView control (never recreated) built once, up
+    # front, off the address available at page-build time -- this page only
+    # ever watches the one hardcoded DEFAULT_HOST, whose address doesn't
+    # change without a full page rebuild anyway.
+    _ensure_host()
+    address = current_address()
+    webview_control: WebView | None = None
 
-        # No header/status-strip here on purpose -- this view's whole job is
-        # the live dashboard, so it gets the entire page. Name/address/pulse
-        # live on the sidebar card, and the settings gear there opens
-        # open_manage_dialog() -- nothing here needs that surfaced twice.
-        detail_column.controls = [_grafana_hero_panel(address, page)]
+    def _is_mounted(control: ft.Control) -> bool:
+        # control.page doesn't return None for an unmounted control -- it
+        # raises RuntimeError (walks the .parent chain looking for a Page
+        # instance and gives up loudly). Only meaningful during the very
+        # first show_dashboard() call, made before build_observation_page()
+        # returns and its tree is actually attached to the page.
+        try:
+            return control.page is not None
+        except RuntimeError:
+            return False
+
+    if address and _WEBVIEW_SUPPORTED:
+        webview_control = WebView(url=_grafana_url(address, selected["uid"]), expand=True)
+        detail_content: ft.Control = _panel(ft.Container(content=webview_control, expand=True), padding=0)
+        detail_content.expand = True
+    elif address:
+        detail_content = _panel(
+            ft.Column(
+                [
+                    ft.Text(
+                        "Live embed unavailable in this environment (flet-webview not installed).",
+                        color=theme.INK_MUTED,
+                    ),
+                    ft.FilledButton(
+                        "Open Grafana",
+                        icon=ft.Icons.OPEN_IN_NEW,
+                        on_click=lambda e: page.launch_url(_grafana_url(current_address(), selected["uid"])),
+                    ),
+                ],
+                spacing=10,
+            )
+        )
+    else:
+        detail_content = _panel(ft.Text("No address on file.", color=theme.INK_MUTED))
+
+    detail_column = ft.Column([detail_content], spacing=12, expand=True)
+    detail_wrapper = ft.Container(content=detail_column, padding=20, expand=True)
+
+    def show_dashboard(uid: str) -> None:
+        selected["uid"] = uid
+        refresh_dashboard_tabs()
+        if webview_control is not None:
+            new_url = _grafana_url(current_address(), uid)
+            if webview_control.url != new_url:
+                webview_control.url = new_url
+                if _is_mounted(webview_control):
+                    # load_request() is async (a runtime method call to the
+                    # client) -- schedule it rather than await, since
+                    # show_dashboard() itself is a synchronous on_click
+                    # handler.
+                    page.run_task(webview_control.load_request, new_url)
         page.update()
 
-    def open_manage_dialog(name: str) -> None:
-        """Everything that isn't "watch the dashboard" -- secrets and
-        lifecycle actions -- lives behind this settings button/gear
-        instead of on the main page, which is the live monitoring view
-        first and a control panel only on request."""
-        host = observer_cli.find_host(name)
-        if host is None:
-            runner.log(f"{name!r} is no longer registered.")
-            return
-        address = str(host.get("address", ""))
+    def open_manage_dialog(_: ft.ControlEvent) -> None:
+        """Everything that isn't "watch a dashboard" -- secrets and
+        lifecycle actions for the one hardcoded observer host -- lives
+        behind this settings button instead of on the main page, which is
+        the live monitoring view first and a control panel only on
+        request."""
+        address = current_address()
 
         def action(action_name: str, fn, needs_confirm: bool = False, confirm_message: str = "") -> Callable[[ft.ControlEvent], None]:
             def run_it(e: ft.ControlEvent) -> None:
                 runner.run(
-                    f"observer {action_name} --host {name}",
+                    f"observer {action_name} --host {DEFAULT_HOST}",
                     fn,
-                    name,
+                    DEFAULT_HOST,
                     trigger=e.control,
-                    on_done=lambda _r: show_host(name) if selected["name"] == name else None,
+                    on_done=lambda _r: page.update(),
                 )
 
             def fire(e: ft.ControlEvent) -> None:
                 if needs_confirm:
-                    confirm(page, f"{action_name.capitalize()} {name}?", confirm_message, lambda: run_it(e))
+                    confirm(page, f"{action_name.capitalize()} {DEFAULT_HOST}?", confirm_message, lambda: run_it(e))
                 else:
                     run_it(e)
 
             return fire
-
-        def do_remove(e: ft.ControlEvent) -> None:
-            def run_it() -> None:
-                observer_cli.remove_host(name)
-                if selected["name"] == name:
-                    selected["name"] = None
-                    detail_column.controls = [ft.Text("Select a host to watch its dashboards.", color=theme.INK_MUTED)]
-                refresh_hosts_list()
-                page.pop_dialog()
-                page.update()
-
-            confirm(
-                page,
-                f"Remove {name}?",
-                "Removes this host from vidctl's local registry only -- no SSH connection is made, "
-                "nothing on the remote host itself is touched (still running whatever it was running).",
-                run_it,
-            )
 
         manage_body = ft.Column(
             [
@@ -169,7 +234,7 @@ def build_observation_page(state) -> ft.Control:
                     ft.Column(
                         [
                             ft.Row([ft.Icon(ft.Icons.DASHBOARD, color=theme.INK_MUTED, size=16), _label("GRAFANA")]),
-                            copyable_id(_grafana_url(address), page) if address else _data_text("-"),
+                            copyable_id(_grafana_url(address, selected["uid"]), page) if address else _data_text("-"),
                             ft.Text(
                                 "Anonymous viewers see dashboards read-only -- this password is for editing:",
                                 size=11,
@@ -187,6 +252,17 @@ def build_observation_page(state) -> ft.Control:
                             copyable_id(_tempo_ingest_url(address), page) if address else _data_text("-"),
                             ft.Text("Authorization: Bearer <token>", size=11, color=theme.INK_MUTED),
                             masked_secret(observer_cli.tempo_auth_token(), page),
+                        ],
+                        spacing=6,
+                    )
+                ),
+                _panel(
+                    ft.Column(
+                        [
+                            ft.Row([ft.Icon(ft.Icons.ARTICLE, color=theme.INK_MUTED, size=16), _label("LOKI LOG INGEST")]),
+                            copyable_id(_loki_ingest_url(address), page) if address else _data_text("-"),
+                            ft.Text("Authorization: Basic base64('xaisen:<token>')", size=11, color=theme.INK_MUTED),
+                            masked_secret(observer_cli.loki_auth_token(), page),
                         ],
                         spacing=6,
                     )
@@ -211,7 +287,7 @@ def build_observation_page(state) -> ft.Control:
                                 "destroy",
                                 observer_cli.destroy,
                                 needs_confirm=True,
-                                confirm_message="Removes the prometheus/tempo/grafana containers, but keeps their "
+                                confirm_message="Removes the prometheus/tempo/grafana/loki containers, but keeps their "
                                 "stored data on disk -- a later deploy/start recreates them with history intact.",
                             ),
                         ),
@@ -223,106 +299,52 @@ def build_observation_page(state) -> ft.Control:
                                 "clean",
                                 observer_cli.clean,
                                 needs_confirm=True,
-                                confirm_message="Removes the containers AND wipes Prometheus/Tempo's stored history "
+                                confirm_message="Removes the containers AND wipes Prometheus/Tempo/Loki's stored history "
                                 "permanently (Grafana's dashboards/login are kept). This cannot be undone.",
                             ),
                         ),
-                        ft.TextButton("Remove host", icon=ft.Icons.PLAYLIST_REMOVE, on_click=do_remove),
                     ],
                     wrap=True,
                 ),
             ],
             spacing=10,
         )
-        show_info(page, f"Manage {name}", manage_body, width=460, height=520)
-
-    def do_add_host(_: ft.ControlEvent) -> None:
-        def submitted(values: dict[str, str]) -> None:
-            name = values.get("name", "").strip() or DEFAULT_HOST
-            address = values.get("address", "").strip()
-            ssh_user = values.get("ssh_user", "").strip()
-            ssh_key = values.get("ssh_key", "").strip()
-            port_raw = values.get("port", "").strip()
-            if not address or not ssh_user or not ssh_key:
-                runner.log("Add host: address, ssh user, and ssh key are all required.")
-                return
-            port = int(port_raw) if port_raw else None
-            observer_cli.add_host(name, address, ssh_user, ssh_key, port=port)
-            refresh_hosts_list()
-            show_host(name)
-
-        prompt_form(
-            page,
-            "Add observer host",
-            [
-                ("name", "Host name", DEFAULT_HOST),
-                ("address", "Address (IP)", DEFAULT_ADDRESS),
-                ("ssh_user", "SSH user", DEFAULT_SSH_USER),
-                ("ssh_key", "SSH key path", DEFAULT_SSH_KEY),
-                ("port", "Published port", str(observer_cli.DEFAULT_HOST_PORT)),
-            ],
-            submitted,
-        )
+        show_info(page, f"Manage {DEFAULT_HOST}", manage_body, width=460, height=520)
 
     async def poll_forever() -> None:
         while True:
             await asyncio.sleep(30)
-            refresh_hosts_list()
-            if selected["name"]:
-                show_host(selected["name"])
-            page.update()
+            show_dashboard(selected["uid"])
 
-    refresh_hosts_list()
+    refresh_dashboard_tabs()
+    show_dashboard(selected["uid"])
     page.run_task(poll_forever)
 
-    sidebar_visible = {"value": True}
-
-    sidebar = ft.Container(
-        width=300,
-        padding=12,
-        content=ft.Column(
+    header = ft.Container(
+        padding=ft.Padding.only(left=12, right=8),
+        content=ft.Row(
             [
-                ft.Row([ft.FilledButton("Add host", icon=ft.Icons.ADD, on_click=do_add_host)]),
-                ft.Text("OBSERVER HOSTS", size=11, color=theme.INK_MUTED, font_family=theme.DISPLAY_FONT),
-                hosts_list,
+                ft.Container(content=dashboard_tabs, expand=True),
+                ft.IconButton(
+                    icon=ft.Icons.SETTINGS_OUTLINED,
+                    icon_color=theme.INK_MUTED,
+                    icon_size=18,
+                    tooltip="Manage observer host",
+                    on_click=open_manage_dialog,
+                ),
             ],
-            scroll=ft.ScrollMode.AUTO,
-        ),
-    )
-    sidebar_divider = ft.VerticalDivider(width=1, color=theme.HAIRLINE)
-
-    def toggle_sidebar(e: ft.ControlEvent) -> None:
-        sidebar_visible["value"] = not sidebar_visible["value"]
-        sidebar.visible = sidebar_visible["value"]
-        sidebar_divider.visible = sidebar_visible["value"]
-        e.control.icon = ft.Icons.CHEVRON_RIGHT if not sidebar_visible["value"] else ft.Icons.CHEVRON_LEFT
-        e.control.tooltip = "Show observer hosts" if not sidebar_visible["value"] else "Hide observer hosts, show only this dashboard"
-        page.update()
-
-    # A persistent narrow rail (never itself hidden) so the toggle stays
-    # reachable even with the host list collapsed -- the whole point is
-    # freeing up width for the Grafana embed while watching it.
-    rail = ft.Container(
-        width=32,
-        alignment=ft.Alignment.TOP_CENTER,
-        padding=ft.Padding.only(top=8),
-        content=ft.IconButton(
-            icon=ft.Icons.CHEVRON_LEFT,
-            icon_color=theme.INK_MUTED,
-            tooltip="Hide observer hosts, show only this dashboard",
-            on_click=toggle_sidebar,
+            spacing=0,
         ),
     )
 
     return ft.Container(
         bgcolor=theme.VOID,
         expand=True,
-        content=ft.Row(
+        content=ft.Column(
             [
-                rail,
-                sidebar,
-                sidebar_divider,
-                ft.Container(content=detail_column, padding=20, expand=True),
+                header,
+                ft.Divider(height=1, color=theme.HAIRLINE),
+                detail_wrapper,
             ],
             expand=True,
             spacing=0,

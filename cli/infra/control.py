@@ -17,6 +17,7 @@ from .topology import (
     read_topology,
     relative_contract_env,
     service_backend,
+    worker_identifier,
     write_topology,
 )
 from .validation import (
@@ -61,15 +62,14 @@ def control(
     env_name = validate_network(str(topology.get("active_env", "devnet")))
     contract_path = infra.contract_env_path(env_name)
     backend = service_backend(service)
-    # worker_index (1-based) distinguishes multiple colocated workers of
-    # the SAME service on one --host (vidctl.py's count-prefix --service
-    # syntax, e.g. `5cp-daemon`). Index 1 is identical to the pre-existing
-    # single-worker identity (no suffix); index >=2 gets a `-N` suffix
-    # everywhere namespaced by service alone (container host, state/wallet
-    # dir, xaisen_operator_wallets key) -- but NOT for the base docker
-    # image/tag or the wallet's permanent registered_role pin, which stay
-    # keyed on the bare `service` string.
-    worker_key = service if worker_index == 1 else f"{service}-{worker_index}"
+    # worker_index (1-based) distinguishes multiple colocated workers of the
+    # SAME service on one --host (vidctl.py's count-prefix --service syntax,
+    # e.g. `5cp-daemon`). worker_key (<provider>-<host>-<service>-<index>,
+    # see topology.worker_identifier()) namespaces everything unique per
+    # replica (container name, state/wallet dir, xaisen_operator_wallets
+    # key) -- but NOT the base docker image/tag or the wallet's permanent
+    # registered_role pin, which stay keyed on the bare `service` string.
+    worker_key = worker_identifier(provider, host, service, worker_index)
 
     if backend == "vm" and action in {"pause", "restart"} and provider not in {"alibaba", "akamai"}:
         message = (
@@ -112,7 +112,7 @@ def control(
             record_history(action, env=env_name, name=host, service=worker_key, provider=provider, result_for_code=1, error=message)
             return 1
         if backend == "vm":
-            if service in ("prometheus", "tempo", "grafana", "pushgateway"):
+            if service in ("prometheus", "tempo", "grafana", "pushgateway", "loki"):
                 message = (
                     f"{service} is no longer deployed via `vidctl infra` -- it now runs on a dedicated, "
                     "operator-owned monitoring host managed by `vidctl observer` (see `vidctl observer --help`), "

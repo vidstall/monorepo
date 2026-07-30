@@ -23,9 +23,3 @@ DISPLAY_FONT = "Chakra Petch"
 # IBM Plex Mono replaces the generic "monospace" alias for every piece of
 # live data on this page (addresses, ports, timestamps, secrets).
 DATA_FONT = "IBM Plex Mono"
-
-STATUS_COLORS = {
-    "signal": SIGNAL,
-    "alert": ALERT,
-    "critical": CRITICAL,
-}

@@ -16,56 +16,56 @@ object = "frontend"
 provider = "alibaba"
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-1"
+host = "001"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
@@ -75,7 +75,7 @@ worker_index = 2
 # HTTP control API is reached directly at a single host). Test/demo tool
 # only, not part of network role economics -- see apps/bot/README.md.
 [[workers]]
-host = "node-1"
+host = "001"
 service = "bot"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
@@ -89,112 +89,112 @@ worker_index = 1
 # reason (see cli/infra/control.py).
 
 [[workers]]
-host = "node-2"
+host = "002"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-2"
+host = "002"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "node-2"
+host = "002"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-2"
+host = "002"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "node-2"
+host = "002"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-2"
+host = "002"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "node-2"
+host = "002"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-2"
+host = "002"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "node-3"
+host = "003"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-3"
+host = "003"
 service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "node-3"
+host = "003"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-3"
+host = "003"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "node-3"
+host = "003"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-3"
+host = "003"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
 [[workers]]
-host = "node-3"
+host = "003"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
 [[workers]]
-host = "node-3"
+host = "003"
 service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
