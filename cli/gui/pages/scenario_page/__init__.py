@@ -12,6 +12,7 @@ from ..infra_page.worker_card import worker_card
 from ._shared import LOCK_STATUS_KIND, _no_scenario_overlay, _placeholder_card, _stat, _tab_button_style, _worker_state_pie
 from .bot import refresh_bot_tab
 from .gallery import build_gallery_tab
+from .room import refresh_room_tab
 
 
 def build_scenario_page(state) -> ft.Control:
@@ -25,6 +26,7 @@ def build_scenario_page(state) -> ft.Control:
     destroy_button = ft.OutlinedButton("Destroy active scenario", icon=ft.Icons.STOP_CIRCLE_OUTLINED)
     status_tab_container = ft.Container(expand=True)
     bot_tab_container = ft.Container(expand=True)
+    room_tab_container = ft.Container(expand=True)
     monitor_tab_container = ft.Container(expand=True)
 
     def refresh(_: ft.ControlEvent | None = None) -> None:
@@ -40,6 +42,7 @@ def build_scenario_page(state) -> ft.Control:
             destroy_button.disabled = True
             refresh_status_tab(None)
             refresh_bot_tab(bot_tab_container, None, page, runner)
+            refresh_room_tab(room_tab_container, None, page, runner)
             refresh_monitor_tab(None)
             page.update()
             return
@@ -112,6 +115,7 @@ def build_scenario_page(state) -> ft.Control:
         )
         refresh_status_tab(lock)
         refresh_bot_tab(bot_tab_container, lock, page, runner)
+        refresh_room_tab(room_tab_container, lock, page, runner)
         refresh_monitor_tab(lock)
         page.update()
 
@@ -189,11 +193,13 @@ def build_scenario_page(state) -> ft.Control:
         view_state["active"] = name
         status_tab_button.style = _tab_button_style(name == "status")
         bot_tab_button.style = _tab_button_style(name == "bot")
+        room_tab_button.style = _tab_button_style(name == "room")
         monitor_tab_button.style = _tab_button_style(name == "monitor")
         gallery_tab_button.style = _tab_button_style(name == "gallery")
         body.content = {
             "status": status_tab_container,
             "bot": bot_tab_container,
+            "room": room_tab_container,
             "monitor": monitor_tab_container,
             "gallery": gallery_view,
         }[name]
@@ -209,6 +215,12 @@ def build_scenario_page(state) -> ft.Control:
         "Bot",
         icon=ft.Icons.SMART_TOY,
         on_click=lambda e: switch_view("bot"),
+        style=_tab_button_style(False),
+    )
+    room_tab_button = ft.TextButton(
+        "Room",
+        icon=ft.Icons.MEETING_ROOM,
+        on_click=lambda e: switch_view("room"),
         style=_tab_button_style(False),
     )
     monitor_tab_button = ft.TextButton(
@@ -239,7 +251,7 @@ def build_scenario_page(state) -> ft.Control:
         content=ft.Column(
             [
                 ft.Row(
-                    [status_tab_button, bot_tab_button, monitor_tab_button, gallery_tab_button],
+                    [status_tab_button, bot_tab_button, room_tab_button, monitor_tab_button, gallery_tab_button],
                     spacing=4,
                 ),
                 ft.Divider(height=1),

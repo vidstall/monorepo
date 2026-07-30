@@ -8,6 +8,7 @@ from .chain_io import (
     parse_sender,
     parse_transaction_digest,
     parse_upgrade_cap_id,
+    run_sui_devinspect,
     run_sui_json,
     run_sui_json_list,
 )
@@ -33,6 +34,7 @@ from .publish_ops import (
     test_publish,
     test_upgrade,
 )
+from .rooms import ROOM_STATUS_NAMES, list_active_rooms
 
 __all__ = [
     "build",
@@ -61,6 +63,9 @@ __all__ = [
     "MOVE_TOML",
     "run_sui_json",
     "run_sui_json_list",
+    "run_sui_devinspect",
+    "list_active_rooms",
+    "ROOM_STATUS_NAMES",
     "parse_json_payload",
     "fetch_object",
     "parse_published_package_id",

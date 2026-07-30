@@ -46,6 +46,39 @@ def fetch_object(object_id: str) -> dict | None:
     return content.get("fields")
 
 
+def run_sui_devinspect(args: list[str]) -> tuple[int, dict | None, str]:
+    """Same idea as run_sui_json(), for `sui client call --dev-inspect --json`
+    (or `sui client ptb --dev-inspect --json`, though as of sui 1.77 that
+    subcommand ignores --json for dev-inspect and prints a terminal box
+    instead -- use `sui client call` for devInspect reads). The dev-inspect
+    payload's shape (top-level keys: transaction/command_outputs/
+    suggested_gas_price) doesn't contain "objectChanges" or "effects" as a
+    TOP-LEVEL key the way publish/upgrade payloads do (parse_json_payload()'s
+    scoring bonus for those keys would wrongly prefer the much shorter nested
+    transaction.effects sub-object instead) -- so this picks the candidate
+    with the largest raw_decode span instead, which is simply the outermost
+    object for any clean `--json` output. Each Move return value ends up at
+    payload["command_outputs"][i]["returnValues"][j]["json"] -- the `sui` CLI
+    itself decodes the raw BCS bytes into plain JSON, no manual BCS parsing
+    needed."""
+    completed = subprocess.run([str(arg) for arg in args], capture_output=True, text=True, check=False)
+    output = f"{completed.stdout}{completed.stderr}"
+    decoder = json.JSONDecoder()
+    best: tuple[int, dict] | None = None
+    for index, char in enumerate(output):
+        if char != "{":
+            continue
+        try:
+            value, end = decoder.raw_decode(output[index:])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(value, dict):
+            continue
+        if best is None or end > best[0]:
+            best = (end, value)
+    return completed.returncode, (best[1] if best else None), output
+
+
 def run_sui_json_list(args: list[str]) -> tuple[int, list | None, str]:
     """Same shape as run_sui_json(), for Sui CLI subcommands (e.g. `sui
     client objects <address> --json`) whose --json output is a JSON array
