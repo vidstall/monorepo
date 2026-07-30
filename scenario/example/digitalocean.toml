@@ -199,3 +199,29 @@ service = "validator-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
+
+# --- Actions timeline (run separately via `vidctl scenario run`, only
+# against an already-`apply`'d + active scenario -- `apply` never executes
+# these) --------------------------------------------------------------
+#
+# `timestamp` is a "+<duration>" offset from when `scenario run` starts
+# (NOT chained off the previous action), e.g. "+10s", "+5m", "+1h30m".
+# `id` lets a later action reference an earlier one's result via
+# "$id.key" (see bot.delete_room's bot_id below). `host` on both actions
+# below is "001" -- the host the [[workers]] bot instance above runs on.
+
+# 10s in: have the bot spin up and create a fresh room, streaming both
+# video and audio into it.
+[[actions]]
+id = "room1"
+type = "bot.create_room"
+timestamp = "+10s"
+host = "001"
+media_mode = "both"
+
+# 5m in: tear down the room the bot created at t+10s.
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+5m"
+host = "001"
+bot_id = "$room1.botId"
