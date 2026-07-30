@@ -8,6 +8,7 @@ from unittest.mock import patch
 from cli import bot_client, contract, context, image_bake, infra, observer, registry, scenario
 from cli import object as object_cmd
 from cli.registry import RegistryState
+from cli.vidctl import build_parser
 
 FAKE_WALLET = {"secret_key": "k", "node_id": None, "x25519_secret": "x", "cap_id": None}
 
@@ -88,6 +89,13 @@ class ScenarioTestCase(unittest.TestCase):
             # actually-running droplet.
             patch.object(infra, "SSH_KEY_ROOT", self.root / "runtime" / "ssh_key"),
             patch.object(image_bake, "ensure_image", return_value=(True, "")),
+            # Best-effort contract-state push to whichever observer host runs
+            # pushgateway (see apply()'s _push_contract_state()) -- stubbed
+            # for every test in this file by default, same rationale as the
+            # observer-deploy stub above: no registered host means it's never
+            # actually called, and tests that DO register one shouldn't pay
+            # for a real wallet-pool/on-chain read against this fake env.
+            patch.object(observer, "export_contract_state", return_value=0),
             patch("cli.wallet.checkout_wallet", return_value=(dict(FAKE_WALLET), False)),
             patch("cli.wallet.release_wallet", return_value=None),
             patch.object(contract, "publish", return_value=0),
@@ -349,7 +357,24 @@ class ApplyTests(ScenarioTestCase):
         # SCENARIO_TOML has two digitalocean workers with no explicit
         # region -- ensure_image should be called once per unique
         # (provider, region) pair, not once per worker.
-        ensure_image.assert_called_once_with("digitalocean", None)
+        ensure_image.assert_called_once_with("digitalocean", None, force=False)
+
+    def test_apply_parser_rebake_flag_defaults_false(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["scenario", "apply", "s.toml", "--yes"])
+        self.assertFalse(args.rebake)
+
+    def test_apply_parser_rebake_flag_parses(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["scenario", "apply", "s.toml", "--yes", "--rebake"])
+        self.assertTrue(args.rebake)
+
+    def test_apply_rebake_forces_ensure_image(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(image_bake, "ensure_image", return_value=(True, "")) as ensure_image:
+            code = scenario.apply(str(path), True, rebake=True)
+        self.assertEqual(code, 0)
+        ensure_image.assert_called_once_with("digitalocean", None, force=True)
 
     def test_apply_fails_when_image_bake_fails(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)
@@ -376,7 +401,7 @@ class ApplyTests(ScenarioTestCase):
         ):
             code = scenario.apply(str(path), True)
         self.assertEqual(code, 0)
-        ensure_image.assert_any_call("digitalocean", "sfo3")
+        ensure_image.assert_any_call("digitalocean", "sfo3", force=False)
         # Both workers are colocated on node-1@digitalocean, so apply()
         # batches them through control_many_hosts() instead of calling control() once per service.
         call_args, _call_kwargs = control_many_hosts_spy.call_args
@@ -420,6 +445,40 @@ class ApplyTests(ScenarioTestCase):
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         with patch.object(observer, "deploy", side_effect=RuntimeError("unreachable")):
             code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        self.assertEqual(scenario.read_lock()["status"], "active")
+
+    def test_apply_pushes_contract_state_to_pushgateway_host(self) -> None:
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key")
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(observer, "deploy", return_value=0):
+            with patch.object(observer, "export_contract_state", return_value=0) as export_state:
+                code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        export_state.assert_called_once_with("devnet", "bourbon")
+
+    def test_apply_skips_contract_state_push_when_no_pushgateway_host(self) -> None:
+        observer.add_host("vermouth", "1.2.3.4", "deploy", "/tmp/key", services=["tempo", "loki"])
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(observer, "deploy", return_value=0):
+            with patch.object(observer, "export_contract_state") as export_state:
+                code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        export_state.assert_not_called()
+
+    def test_apply_skips_contract_state_push_when_none_registered(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(observer, "export_contract_state") as export_state:
+            code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        export_state.assert_not_called()
+
+    def test_apply_survives_contract_state_push_failure(self) -> None:
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key")
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(observer, "deploy", return_value=0):
+            with patch.object(observer, "export_contract_state", side_effect=RuntimeError("unreachable")):
+                code = scenario.apply(str(path), True)
         self.assertEqual(code, 0)
         self.assertEqual(scenario.read_lock()["status"], "active")
 

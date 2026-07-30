@@ -66,6 +66,37 @@ def _refresh_observer_stack() -> None:
             print(f"Warning: observer refresh failed for {name!r} (exit {code}).", file=sys.stderr)
 
 
+def _push_contract_state(env: str) -> None:
+    """Called once the reconciled worker set + observer stack are both live
+    (see apply()) -- pushes a fresh wallet-pool/on-chain-registration/
+    contract-metadata snapshot to whichever registered observer host actually
+    runs pushgateway (see inventory.py's ALL_SERVICE_NAMES/host['services']
+    split), so the Contract & Chain dashboard doesn't sit on stale or
+    entirely-missing data until someone remembers to run
+    `vidctl observer export-contract-state` by hand. Best-effort for the same
+    reason as _refresh_observer_stack() above: this is a dashboard freshness
+    nicety, not a functional requirement of the scenario itself."""
+    from .. import observer
+    from ..observer.inventory import ALL_SERVICE_NAMES
+
+    try:
+        hosts = observer.read_hosts()
+    except Exception as exc:
+        print(f"Warning: could not read observer hosts, skipping contract-state export: {exc}", file=sys.stderr)
+        return
+    target = next((h for h in hosts if "pushgateway" in (h.get("services") or ALL_SERVICE_NAMES)), None)
+    if target is None:
+        return
+    name = str(target.get("name", ""))
+    try:
+        code = observer.export_contract_state(env, name)
+    except Exception as exc:
+        print(f"Warning: contract-state export failed for {name!r}: {exc}", file=sys.stderr)
+        return
+    if code != 0:
+        print(f"Warning: contract-state export failed for {name!r} (exit {code}).", file=sys.stderr)
+
+
 def _clean_observer_stack() -> None:
     """Called once the fleet is fully torn down (see destroy()) -- wipes
     Prometheus/Tempo's stored history via `vidctl observer clean` per
@@ -89,7 +120,7 @@ def _clean_observer_stack() -> None:
             print(f"Warning: observer data cleanup failed for {name!r} (exit {code}).", file=sys.stderr)
 
 
-def apply(path_str: str, yes: bool) -> int:
+def apply(path_str: str, yes: bool, rebake: bool = False) -> int:
     # Deferred self-import: contract_env_path is patched by tests as a flat
     # cli.scenario attribute -- looking it up through the package at call
     # time is what makes that patch take effect here. Aliased since `scenario`
@@ -246,14 +277,18 @@ def apply(path_str: str, yes: bool) -> int:
     # picks it up automatically for every infra.control("start", ...) call
     # below, same as if it had been baked ahead of time. Only providers
     # image_bake.SUPPORTED_PROVIDERS supports do anything here; others are a
-    # no-op and keep today's stock-image behavior.
+    # no-op and keep today's stock-image behavior. `--rebake` (force=rebake
+    # below) bakes a fresh image even for a (provider, region) that already
+    # has one -- for after a `vidctl registry publish`, so the new golden
+    # image's pre-pulled app images (see bake.py's _prefetch_app_images())
+    # aren't stale relative to what's about to actually be deployed.
     needed_regions: dict[tuple[str, str | None], None] = {}
     for key in to_start:
         row = wanted[key]
         needed_regions[(row["provider"], row.get("region"))] = None
     with _timed(timings, "image bake"):
         for provider, region in needed_regions:
-            ok, error_message = image_bake.ensure_image(provider, region)
+            ok, error_message = image_bake.ensure_image(provider, region, force=rebake)
             if not ok:
                 # Best-effort only -- a golden image is a boot-time optimization
                 # (skips installing Docker at first boot), not a functional
@@ -313,6 +348,7 @@ def apply(path_str: str, yes: bool) -> int:
     write_lock(scenario_path_display, scenario_hash, env, "active")
     with _timed(timings, "observer refresh"):
         _refresh_observer_stack()
+        _push_contract_state(env)
     print(f"Scenario '{scenario['name']}' applied: {len(to_kill)} removed, {len(to_start)} reconciled.")
     _print_timings(timings)
     return 0

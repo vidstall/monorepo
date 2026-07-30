@@ -9,6 +9,7 @@ from .bake import (
     new_bake_worker,
     resolve_bake_region,
 )
+from .bake import _prefetch_app_images
 from .provider_cli import (
     SUPPORTED_PROVIDERS,
     provider_cli_env,
@@ -51,4 +52,5 @@ __all__ = [
     "command_env",
     "RUNTIME_IMAGES_TOML",
     "_stop_and_create_image",
+    "_prefetch_app_images",
 ]

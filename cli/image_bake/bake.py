@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import base64
 import shutil
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 from .. import infra
@@ -86,6 +88,98 @@ rm -f /root/.bash_history
 # call below: its result is deliberately NOT treated as fatal.
 AZURE_DEPROVISION_SCRIPT = "waagent -deprovision+user -force"
 
+# Generous timeout for docker login + N image pulls over the bake VM's own
+# network link -- one-time cost paid once per bake, not per fleet VM
+# afterwards, so erring toward "wait longer" over "time out and skip a real
+# prefetch" is the right tradeoff here.
+IMAGE_PREFETCH_TIMEOUT_SECONDS = 900
+
+
+def _build_image_prefetch_script(
+    images: dict[str, str], tags: dict[str, str], registry_host_value: str, username: str, password: str
+) -> tuple[str, dict[str, str]]:
+    """Builds the remote script that logs into the registry and `docker
+    pull`s every service's currently-deployed image:tag -- base64-round-
+    trips the username/password so the script text (sent verbatim over SSH
+    stdin, see ssh_run()) never needs shell-quoting around whatever
+    characters a registry credential happens to contain. Pulling by
+    `image:tag` (not by digest) matters: it's what leaves the golden image
+    with a LOCAL image tagged exactly `xaisen_images[service]:xaisen_tags
+    [service]`, the same repo:tag deploy_one_service.yml's docker_container
+    task references and xaisen_needs_pull's docker_image_info check
+    inspects -- pulling by digest alone would cache the layers but skip
+    tagging them, so the later digest-match check would still see no local
+    image under that repo:tag and pull again anyway.
+
+    Returns the script plus the {service: tag} map it actually attempts
+    (only services with BOTH an image ref and a resolved deployed tag --
+    skips any DOCKER_SERVICES entry never actually deployed yet, same as
+    docker_deploy_extra_vars()'s xaisen_tags would leave it unset for)."""
+    to_pull = {service: tags[service] for service in sorted(images) if tags.get(service)}
+    user_b64 = base64.b64encode(username.encode()).decode()
+    pass_b64 = base64.b64encode(password.encode()).decode()
+    lines = [
+        "set -eu",
+        f'echo "{pass_b64}" | base64 -d | docker login {registry_host_value} '
+        f'-u "$(echo {user_b64} | base64 -d)" --password-stdin',
+    ]
+    for service, tag in to_pull.items():
+        lines.append(f"docker pull {images[service]}:{tag}")
+    lines.append(f"docker logout {registry_host_value} || true")
+    return "\n".join(lines) + "\n", to_pull
+
+
+def _prefetch_app_images(address: str, key_path: Path, ssh_user: str) -> dict[str, str]:
+    """Best-effort pre-pull of every currently-deployed app image (relay,
+    signaling, cp-daemon, ...) onto the bake VM before it's snapshotted --
+    lets a scenario apply that provisions brand-new VMs from this golden
+    image skip their first `docker pull` entirely (the existing digest-skip
+    optimization in deploy_one_service.yml only helps a VM that's pulled an
+    image BEFORE; a fresh VM's docker cache is otherwise empty regardless of
+    golden-image status). Docker itself is already baked in by the caller
+    before this runs; a failure/skip here never undoes that -- it's purely
+    an additional warm-start optimization layered on top, matching
+    ensure_image()'s own "best-effort, not a functional requirement"
+    philosophy for the same reason (apply.py still installs/pulls fresh via
+    Ansible if this never ran, or ran against a since-rotated tag).
+
+    Returns {service: tag} for whatever was actually pulled -- empty if no
+    registry is configured/logged into yet, credentials are missing, or the
+    SSH round-trip itself fails."""
+    from .. import registry
+
+    try:
+        state = registry.read_runtime_registry()
+    except ValueError as exc:
+        print(f"Skipping app-image prefetch: {exc}")
+        return {}
+    try:
+        config = registry.provider_config(state.provider, require_credentials=True)
+    except ValueError as exc:
+        print(f"Skipping app-image prefetch: {exc}")
+        return {}
+
+    # require_credentials=True above already guarantees these are non-None
+    # (raises ValueError otherwise) -- `or ""` only satisfies the type
+    # checker, never actually used.
+    script, to_pull = _build_image_prefetch_script(
+        state.images, state.deployed, state.host, config.username or "", config.password or ""
+    )
+    if not to_pull:
+        print("Skipping app-image prefetch: no service has a deployed tag yet.")
+        return {}
+
+    # Deferred self-import: ssh_run is patched by tests as a flat
+    # cli.image_bake attribute -- looking it up through the package at call
+    # time is what makes that patch take effect here.
+    from .. import image_bake
+
+    code, out, err = image_bake.ssh_run(address, key_path, script, user=ssh_user, timeout=IMAGE_PREFETCH_TIMEOUT_SECONDS)
+    if code != 0:
+        print(f"App-image prefetch failed (exit {code}), continuing without it: {err or out}", file=sys.stderr)
+        return {}
+    return to_pull
+
 
 def new_bake_worker(env_name: str, provider: str, region: str) -> dict[str, Any]:
     host = f"bake-{provider}-{region}-{int(time.time())}".replace(".", "-").replace(":", "-")
@@ -122,12 +216,18 @@ def resolve_bake_region(provider: str, region: str | None) -> str:
     return DEFAULT_BAKE_REGIONS.get(provider, "")
 
 
-def ensure_image(provider: str, region: str | None) -> tuple[bool, str]:
+def ensure_image(provider: str, region: str | None, force: bool = False) -> tuple[bool, str]:
     """Bake an image for (provider, region) if one doesn't already exist.
 
     Returns (ok, error_message). A no-op (ok=True, "") if an image is
     already baked, or if the provider doesn't support baking at all (falls
     through to that provider's stock-image behavior, unchanged).
+
+    force=True skips the "already baked" no-op and bakes a fresh image
+    unconditionally -- for `vidctl scenario apply --rebake`, so an operator
+    who just republished new app images (see bake.py's
+    _prefetch_app_images()) can get them pre-pulled into a fresh golden
+    image without first deleting the old runtime/images.toml entry by hand.
     """
     # Deferred self-import: bake is patched by tests as a flat cli.image_bake
     # attribute -- looking it up through the package at call time is what
@@ -139,9 +239,12 @@ def ensure_image(provider: str, region: str | None) -> tuple[bool, str]:
     resolved_region = resolve_bake_region(provider, region)
     if not resolved_region:
         return False, f"Could not determine a region to bake {provider} into."
-    if lookup_image(provider, resolved_region):
+    if not force and lookup_image(provider, resolved_region):
         return True, ""
-    print(f"No golden image baked yet for {provider}:{resolved_region} -- baking one now...")
+    if force:
+        print(f"Rebaking {provider}:{resolved_region} (--rebake)...")
+    else:
+        print(f"No golden image baked yet for {provider}:{resolved_region} -- baking one now...")
     code = image_bake.bake(provider, resolved_region, True)
     if code != 0:
         return False, f"Baking {provider}:{resolved_region} failed (exit {code})."
@@ -245,6 +348,11 @@ def bake(provider: str, region: str, yes: bool) -> int:
         if line.startswith("Docker version"):
             docker_version = line.split("Docker version", 1)[-1].split(",")[0].strip()
 
+    print(f"Pre-pulling application images onto {address} ...")
+    baked_tags = image_bake._prefetch_app_images(address, key_path, ssh_user)
+    if baked_tags:
+        print(f"Pre-pulled {len(baked_tags)} application image(s): {', '.join(sorted(baked_tags))}")
+
     if provider == "azure":
         # A dropped connection here (exit 255, "Connection reset by peer" /
         # "kex_exchange_identification") is the EXPECTED outcome, not a
@@ -272,7 +380,9 @@ def bake(provider: str, region: str, yes: bool) -> int:
             remove_row=False,
         )
 
-    write_runtime_image(provider, resolved_region, image_id, base_image="ubuntu-22.04", docker_version=docker_version)
+    write_runtime_image(
+        provider, resolved_region, image_id, base_image="ubuntu-22.04", docker_version=docker_version, baked_tags=baked_tags
+    )
     print(f"Baked {provider}:{resolved_region} -> {image_id}")
 
     current = infra.read_topology()

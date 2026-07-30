@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import base64
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cli import image_bake, infra
+from cli import image_bake, infra, registry
+from cli.image_bake.bake import _build_image_prefetch_script, _prefetch_app_images
 from cli.vidctl import build_parser
 
 
@@ -284,6 +286,102 @@ class BakeOrchestrationTests(unittest.TestCase):
         bake_rows = [i for i in topology["workers"] if i.get("service") == image_bake.BAKE_SERVICE]
         self.assertEqual(len(bake_rows), 1)
         self.assertEqual(image_bake.read_runtime_images(), {})
+
+    def test_app_image_prefetch_result_is_recorded_as_baked_tags(self) -> None:
+        with patch.object(image_bake, "_prefetch_app_images", return_value={"bot": "afef8b4", "relay": "afef8b4"}) as prefetch_fn:
+            code = image_bake.bake("digitalocean", "nyc3", True)
+        self.assertEqual(code, 0)
+        prefetch_fn.assert_called_once()
+        images = image_bake.read_runtime_images()
+        key = image_bake.image_key("digitalocean", "nyc3")
+        self.assertEqual(images[key].baked_tags, {"bot": "afef8b4", "relay": "afef8b4"})
+
+    def test_app_image_prefetch_failure_does_not_abort_the_bake(self) -> None:
+        # Prefetching app images is a best-effort optimization layered on
+        # top of an already-successful Docker bootstrap -- a failure there
+        # must never fail the whole bake.
+        with patch.object(image_bake, "_prefetch_app_images", return_value={}) as prefetch_fn:
+            code = image_bake.bake("digitalocean", "nyc3", True)
+        self.assertEqual(code, 0)
+        prefetch_fn.assert_called_once()
+        images = image_bake.read_runtime_images()
+        key = image_bake.image_key("digitalocean", "nyc3")
+        self.assertEqual(images[key].baked_tags, {})
+
+
+class BuildImagePrefetchScriptTests(unittest.TestCase):
+    def test_skips_services_with_no_deployed_tag(self) -> None:
+        images = {"bot": "registry.example.com/xaisen/bot", "relay": "registry.example.com/xaisen/relay"}
+        tags = {"bot": "abc123"}  # relay never deployed yet
+        script, to_pull = _build_image_prefetch_script(images, tags, "registry.example.com", "user", "pass")
+        self.assertEqual(to_pull, {"bot": "abc123"})
+        self.assertIn("docker pull registry.example.com/xaisen/bot:abc123", script)
+        self.assertNotIn("relay", script)
+
+    def test_credentials_are_base64_round_tripped_not_shell_quoted(self) -> None:
+        # A password containing shell-special characters must never appear
+        # literally in the script text -- it's base64-encoded and decoded
+        # remotely instead of being interpolated into a quoted shell string.
+        images = {"bot": "registry.example.com/xaisen/bot"}
+        tags = {"bot": "abc123"}
+        password = "p@ss'w\"ord$(whoami)"
+        script, _ = _build_image_prefetch_script(images, tags, "registry.example.com", "user", password)
+        self.assertNotIn(password, script)
+        self.assertIn("base64 -d", script)
+        decoded = base64.b64decode(script.splitlines()[1].split('"')[1]).decode()
+        self.assertEqual(decoded, password)
+
+
+class PrefetchAppImagesTests(unittest.TestCase):
+    def test_skips_when_no_registry_configured(self) -> None:
+        with patch.object(registry, "read_runtime_registry", side_effect=ValueError("not logged in")):
+            result = _prefetch_app_images("203.0.113.10", Path("/tmp/key"), "root")
+        self.assertEqual(result, {})
+
+    def test_skips_when_credentials_missing(self) -> None:
+        fake_state = registry.RegistryState(
+            provider="digitalocean", host="registry.digitalocean.com", prefix="registry.digitalocean.com/xaisen",
+            images={"bot": "registry.digitalocean.com/xaisen/bot"}, deployed={"bot": "abc123"}, digests={},
+        )
+        with (
+            patch.object(registry, "read_runtime_registry", return_value=fake_state),
+            patch.object(registry, "provider_config", side_effect=ValueError("missing credentials")),
+        ):
+            result = _prefetch_app_images("203.0.113.10", Path("/tmp/key"), "root")
+        self.assertEqual(result, {})
+
+    def test_successful_prefetch_calls_ssh_run_and_returns_pulled_tags(self) -> None:
+        fake_state = registry.RegistryState(
+            provider="digitalocean", host="registry.digitalocean.com", prefix="registry.digitalocean.com/xaisen",
+            images={"bot": "registry.digitalocean.com/xaisen/bot", "relay": "registry.digitalocean.com/xaisen/relay"},
+            deployed={"bot": "abc123", "relay": "abc123"}, digests={},
+        )
+        fake_config = registry.RegistryConfig(provider="digitalocean", prefix="registry.digitalocean.com/xaisen", username="u", password="p")
+        with (
+            patch.object(registry, "read_runtime_registry", return_value=fake_state),
+            patch.object(registry, "provider_config", return_value=fake_config),
+            patch.object(image_bake, "ssh_run", return_value=(0, "", "")) as ssh_run_fn,
+        ):
+            result = _prefetch_app_images("203.0.113.10", Path("/tmp/key"), "root")
+        self.assertEqual(result, {"bot": "abc123", "relay": "abc123"})
+        ssh_run_fn.assert_called_once()
+        args, kwargs = ssh_run_fn.call_args
+        self.assertEqual(args[0], "203.0.113.10")
+        self.assertIn("docker pull registry.digitalocean.com/xaisen/bot:abc123", args[2])
+
+    def test_ssh_failure_returns_empty_without_raising(self) -> None:
+        fake_state = registry.RegistryState(
+            provider="digitalocean", host="registry.digitalocean.com", prefix="registry.digitalocean.com/xaisen",
+            images={"bot": "registry.digitalocean.com/xaisen/bot"}, deployed={"bot": "abc123"}, digests={},
+        )
+        fake_config = registry.RegistryConfig(provider="digitalocean", prefix="registry.digitalocean.com/xaisen", username="u", password="p")
+        with (
+            patch.object(registry, "read_runtime_registry", return_value=fake_state),
+            patch.object(registry, "provider_config", return_value=fake_config),
+            patch.object(image_bake, "ssh_run", return_value=(1, "", "connection refused")),
+        ):
+            result = _prefetch_app_images("203.0.113.10", Path("/tmp/key"), "root")
+        self.assertEqual(result, {})
 
 
 if __name__ == "__main__":

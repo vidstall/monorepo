@@ -22,7 +22,16 @@ def add_scenario_parser(subparsers: argparse._SubParsersAction[argparse.Argument
         action="store_true",
         help="Confirm the scenario apply (contract publish, image publish, worker reconcile).",
     )
-    apply_parser.set_defaults(handler=lambda args: scenario.apply(args.path, args.yes))
+    apply_parser.add_argument(
+        "--rebake",
+        action="store_true",
+        help=(
+            "Force a fresh golden image bake for every (provider, region) this scenario needs, even if one "
+            "already exists -- use after `vidctl registry publish` so the rebaked image's pre-pulled app "
+            "images aren't stale relative to what's about to be deployed."
+        ),
+    )
+    apply_parser.set_defaults(handler=lambda args: scenario.apply(args.path, args.yes, args.rebake))
 
     run_parser = actions.add_parser(
         "run",
