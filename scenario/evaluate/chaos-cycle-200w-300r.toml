@@ -1,0 +1,2152 @@
+# Fault tolerance: a bot creates a room, an Akamai relay/cp-daemon worker
+# leaves (paused) at +30s, rejoins via pool-reuse at +2m, room is torn down
+# at +5m. Extra validator-daemon headroom is added so live validators stay
+# above 2/3-of-registered quorum even after the leave.
+# worker.leave/worker.join currently only work for --provider alibaba/akamai,
+# hence the Akamai target.
+
+name = "chaos-cycle-200w-300r"
+env = "devnet"
+
+[registry]
+provider = "digitalocean"
+tag = "chaos-cycle-200w-300r"
+
+[[workers]]
+host = "001"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "relay"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "relay"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "relay"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "relay"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "004"
+service = "signaling"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "relay"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "eastus"
+
+[[workers]]
+host = "005"
+service = "signaling"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "eastus"
+
+[[workers]]
+host = "005"
+service = "relay"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "eastus"
+
+[[workers]]
+host = "005"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "eastus"
+
+[[workers]]
+host = "005"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "eastus"
+
+[[workers]]
+host = "006"
+service = "signaling"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westus2"
+
+[[workers]]
+host = "006"
+service = "relay"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westus2"
+
+[[workers]]
+host = "006"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westus2"
+
+[[workers]]
+host = "006"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westus2"
+
+[[workers]]
+host = "007"
+service = "signaling"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westus2"
+
+[[workers]]
+host = "007"
+service = "relay"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westus2"
+
+[[workers]]
+host = "007"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westus2"
+
+[[workers]]
+host = "007"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westus2"
+
+[[workers]]
+host = "008"
+service = "signaling"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "centralus"
+
+[[workers]]
+host = "008"
+service = "relay"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "centralus"
+
+[[workers]]
+host = "008"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "centralus"
+
+[[workers]]
+host = "008"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "centralus"
+
+[[workers]]
+host = "009"
+service = "signaling"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "centralus"
+
+[[workers]]
+host = "009"
+service = "relay"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "centralus"
+
+[[workers]]
+host = "009"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "centralus"
+
+[[workers]]
+host = "009"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "centralus"
+
+[[workers]]
+host = "010"
+service = "signaling"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westeurope"
+
+[[workers]]
+host = "010"
+service = "relay"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westeurope"
+
+[[workers]]
+host = "010"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westeurope"
+
+[[workers]]
+host = "010"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westeurope"
+
+[[workers]]
+host = "011"
+service = "signaling"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westeurope"
+
+[[workers]]
+host = "011"
+service = "relay"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westeurope"
+
+[[workers]]
+host = "011"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westeurope"
+
+[[workers]]
+host = "011"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "westeurope"
+
+[[workers]]
+host = "012"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "012"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "012"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "012"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "012"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "013"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "013"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "013"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "013"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "013"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "014"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "014"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "014"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "014"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "014"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "015"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "015"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "015"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "015"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "015"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "016"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "016"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "016"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "016"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "016"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "017"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "017"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "017"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "017"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "017"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "018"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "018"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "018"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "018"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "018"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "019"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "019"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "019"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "019"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "019"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "020"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "020"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "020"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "020"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "020"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "021"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "021"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "021"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "021"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "021"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "022"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "022"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "022"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "022"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "022"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "023"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "023"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "023"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "023"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "023"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "024"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "024"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "024"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "024"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "024"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "025"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "025"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "025"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "025"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "025"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "026"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "026"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "026"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "026"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "026"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "027"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "027"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "027"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "027"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "027"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "028"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "028"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "028"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "028"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "028"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "029"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "029"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "029"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "029"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "029"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "030"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "030"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "030"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "030"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "030"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "031"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "031"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "031"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "031"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "031"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "032"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "032"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "032"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "032"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "032"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "033"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "033"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "033"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "033"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "033"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "034"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "034"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "034"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "034"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "034"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "035"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "035"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "035"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "035"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "035"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "036"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "036"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "036"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "036"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "036"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "037"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "037"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "037"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "037"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "037"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "038"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "038"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "038"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "038"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "038"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "039"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "039"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "039"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "039"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "039"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "040"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "040"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "040"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "040"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "041"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "042"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "043"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "044"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "045"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "046"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "047"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "048"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "049"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "050"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "051"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "052"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "053"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "054"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "055"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "056"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "057"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "058"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "059"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "060"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "061"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "062"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "063"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "064"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "065"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "066"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "067"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "068"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "069"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "070"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "071"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "072"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "073"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "074"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "075"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "076"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "077"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "078"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "079"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "080"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "081"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "082"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "083"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "084"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "085"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "086"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "087"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "088"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "089"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "090"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "091"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "092"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "093"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "094"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "095"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "096"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "097"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "098"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "099"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "100"
+service = "bot"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "101"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "101"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 2
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "101"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 3
+size = "g6-standard-4"
+region = "us-east"
+
+[[workers]]
+host = "101"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 4
+size = "g6-standard-4"
+region = "us-east"
+
+[[actions]]
+type = "bot.create_room"
+id = "room1"
+timestamp = "+10s"
+host = "041"
+media_mode = "both"
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+30s"
+host = "012"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.join"
+timestamp = "+2m"
+service = "relay"
+provider = "akamai"
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+5m"
+host = "041"
+bot_id = "$room1.botId"

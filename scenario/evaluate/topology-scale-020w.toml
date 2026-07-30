@@ -1,0 +1,178 @@
+# Topology/infra scale axis: 20 total signaling/relay/cp-daemon/
+# validator-daemon workers, minimal load (1 bot host, nominally 1 room).
+# Isolates registry/quorum-bootstrap/deploy scaling from media load.
+
+name = "topology-scale-020w"
+env = "devnet"
+
+[registry]
+provider = "digitalocean"
+tag = "topology-scale-020w"
+
+[[workers]]
+host = "001"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "relay"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "relay"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 2
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "signaling"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "relay"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "cp-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "003"
+service = "validator-daemon"
+provider = "digitalocean"
+worker_index = 1
+size = "s-4vcpu-8gb"
+region = "nyc3"
+
+[[workers]]
+host = "004"
+service = "bot"
+provider = "azure"
+worker_index = 1
+size = "Standard_D2als_v7"
+region = "eastus"

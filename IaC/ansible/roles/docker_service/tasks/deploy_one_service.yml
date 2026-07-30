@@ -22,7 +22,15 @@
     state: directory
     owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    mode: "0750"
+    # 'other' gets EXECUTE only (traverse), not read -- lets the non-root
+    # `dvconf` container user (relay/signaling/cp-daemon/validator-daemon's
+    # event-cursor dir lives one level down, see "Ensure event-cursor
+    # directory exists" below) `cd` into this dir to reach its own
+    # world-writable subdirectory, without being able to `ls` this
+    # directory's contents or read anything in it at its own (stricter)
+    # mode -- the wallet JSON (0600) and service.env (0640) both already
+    # deny 'other' regardless, so this adds no exposure to them.
+    mode: "0751"
 
 - name: Check for a per-service secrets file locally
   ansible.builtin.stat:
@@ -102,6 +110,29 @@
     state: directory
     mode: "0777"
   when: xaisen_service_item.service in ['prometheus', 'tempo', 'grafana', 'loki']
+
+# ChainEventListener (packages/chain-event-listener) persists each subscribed
+# module's poll cursor at <DATA_DIR>/.cursors/<module>.json, defaulting
+# DATA_DIR to the container's own CWD ('.') when unset -- which is the
+# ephemeral writable layer, NOT this bind-mounted runtime dir. Left unset,
+# every container recreate (any redeploy that changes the image digest) wipes
+# the cursor, forcing a full event-history replay from genesis on next boot
+# -- for node_health's NodeDegraded arm specifically, that can re-deliver a
+# node's own historical level-2 event and immediately re-trigger
+# SelfShutdownWatcher's self-shutdown (it intentionally does not ignore
+# meta.replayed there, since a replayed self-slash SHOULD still shut the node
+# down). DATA_DIR (below, in the env combine()) points these 4 daemons at
+# this dedicated, persisted subdirectory instead so the cursor survives
+# redeploys. Same 0777-not-0750 reasoning as the monitoring data dir above --
+# each of these apps' Dockerfiles runs as its own non-root `dvconf` user, not
+# root, and cursor contents (a poll position) aren't sensitive like the
+# wallet secret file living one level up in this same worker directory.
+- name: Ensure event-cursor directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/cursor-data"
+    state: directory
+    mode: "0777"
+  when: xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon']
 
 - name: Write Prometheus scrape config
   ansible.builtin.template:
@@ -568,6 +599,7 @@
         | combine({'ANNOUNCED_IP': ansible_host} if xaisen_service_item.service == 'relay' else {})
         | combine({'RTC_MIN_PORT': xaisen_relay_rtc_min, 'RTC_MAX_PORT': xaisen_relay_rtc_max, 'PIPE_PORT_RANGE': xaisen_relay_pipe_min ~ '-' ~ xaisen_relay_pipe_max} if xaisen_service_item.service == 'relay' else {})
         | combine({'REGISTRATION_MODE': 'voting'} if xaisen_service_item.service in ['relay', 'signaling', 'validator-daemon'] else {})
+        | combine({'DATA_DIR': xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/cursor-data'} if xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
         | combine({'METRICS_AUTH_TOKEN': xaisen_metrics_auth_token} if (xaisen_metrics_auth_token | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon', 'bot'] else {})
         | combine({'OTEL_EXPORTER_OTLP_ENDPOINT': xaisen_otel_exporter_endpoint, 'OTEL_SERVICE_NAME': xaisen_service_item.service} if (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
         | combine({'OTEL_EXPORTER_OTLP_HEADERS': xaisen_otel_exporter_headers} if (xaisen_otel_exporter_headers | default('')) and (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
