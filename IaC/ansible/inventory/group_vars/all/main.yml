@@ -1,2 +1,13 @@
 ---
 xaisen_services_root: /opt/xaisen
+
+# Monitoring-redesign gap #7 (scoped down): coturn is NOT part of the
+# Pulumi/docker "xaisen" fleet these other prometheus.yml.j2 jobs scrape --
+# it only runs on a separate, manually-provisioned VM
+# (services/worker/scripts/infra/bootstrap-vm.sh). This is a plain static
+# list of "host:9641" scrape targets (coturn's native Prometheus listener,
+# see bootstrap-vm.sh's configure_coturn_metrics), overridable per
+# environment (e.g. group_vars/observer.yml) once such a VM exists. Empty
+# by default -> the coturn scrape job below renders with an empty target
+# list (byte-identical no-op).
+xaisen_coturn_targets: []

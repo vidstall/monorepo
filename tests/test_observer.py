@@ -172,6 +172,7 @@ class ObserverDeployTests(unittest.TestCase):
         self.patches = [
             patch.object(context, "RUNTIME_OBSERVER_TOML", self.root / "runtime" / "observer.toml"),
             patch.object(context, "GENERATED_OBSERVER_INVENTORY", self.root / "ansible" / "observer.generated.yml"),
+            patch.object(context, "SERVICE_SECRETS_DIR", self.root / "secrets" / "services"),
             patch.object(infra, "metrics_auth_token", return_value="tok"),
         ]
         for p in self.patches:
@@ -225,6 +226,39 @@ class ObserverDeployTests(unittest.TestCase):
         self.assertIn("Tempo trace ingest for 'vermouth'", printed)
         self.assertIn("Loki log ingest for 'vermouth'", printed)
         self.assertNotIn("Grafana for 'vermouth'", printed)
+
+    def test_deploy_writes_otel_env_for_a_tempo_host(self) -> None:
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key", services=["tempo"])
+        with patch.object(infra, "ansible_playbook", return_value=0):
+            observer.deploy()
+        otel_env = context.SERVICE_SECRETS_DIR / "otel.env"
+        self.assertTrue(otel_env.exists())
+        content = otel_env.read_text(encoding="utf-8")
+        self.assertIn("OTEL_EXPORTER_OTLP_ENDPOINT=https://tempo.1-2-3-4.sslip.io/v1/traces", content)
+        # Same token tempo_auth_token() persisted to observer-tempo.env -- both
+        # reads/writes go through the SAME (test-patched) SERVICE_SECRETS_DIR.
+        tempo_secret = (context.SERVICE_SECRETS_DIR / "observer-tempo.env").read_text(encoding="utf-8")
+        token = tempo_secret.strip().split("=", 1)[1]
+        self.assertIn(f"OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20{token}", content)
+
+    def test_deploy_writes_loki_env_for_a_loki_host(self) -> None:
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key", services=["loki"])
+        with patch.object(infra, "ansible_playbook", return_value=0):
+            observer.deploy()
+        loki_env = context.SERVICE_SECRETS_DIR / "loki.env"
+        self.assertTrue(loki_env.exists())
+        content = loki_env.read_text(encoding="utf-8")
+        self.assertIn("LOKI_PUSH_URL=https://loki.1-2-3-4.sslip.io/loki/api/v1/push", content)
+        loki_secret = (context.SERVICE_SECRETS_DIR / "observer-loki.env").read_text(encoding="utf-8")
+        token = loki_secret.strip().split("=", 1)[1]
+        self.assertIn(f"LOKI_AUTH_TOKEN={token}", content)
+
+    def test_deploy_does_not_write_otel_or_loki_env_for_a_host_without_those_services(self) -> None:
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key", services=["prometheus", "grafana", "pushgateway"])
+        with patch.object(infra, "ansible_playbook", return_value=0):
+            observer.deploy()
+        self.assertFalse((context.SERVICE_SECRETS_DIR / "otel.env").exists())
+        self.assertFalse((context.SERVICE_SECRETS_DIR / "loki.env").exists())
 
 
 class ObserverLifecycleTests(unittest.TestCase):

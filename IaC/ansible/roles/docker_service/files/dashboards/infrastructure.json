@@ -144,6 +144,33 @@
         { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_filefd_allocated{instance=~\"$host\"}", "legendFormat": "fds {{instance}}", "refId": "A" },
         { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_sockstat_TCP_alloc{instance=~\"$host\"}", "legendFormat": "tcp sockets {{instance}}", "refId": "B" }
       ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "coturn scrape up",
+      "description": "Monitoring-redesign gap #7 (scoped down): coturn is NOT part of the $host-templated xaisen fleet above -- it runs on a separately, manually provisioned VM (see bootstrap-vm.sh's configure_coturn_metrics + xaisen_coturn_targets). No $host filter (that variable is sourced from node_uname_info, which this VM never reports).",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 38 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "up{job=\"coturn\"}", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name" }
     }
   ]
 }

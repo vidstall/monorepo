@@ -42,6 +42,59 @@ def _grafana_url(host: dict[str, Any]) -> str:
     return f"https://grafana.{dashed}.sslip.io/d/overview/overview"
 
 
+def _write_env_file(path: Any, values: dict[str, str]) -> None:
+    """Overwrite a secrets/services/*.env file with exactly `values` --
+    matches read_env_file()'s plain KEY=VALUE-per-line shape (cli/context.py)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(f"{key}={value}" for key, value in values.items()) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_otel_env(entry: dict[str, Any]) -> None:
+    """Auto-wire secrets/services/otel.env from this deploy's own
+    Tempo ingest URL + token -- closes the manual copy-paste step
+    cli/infra/secrets.py::otel_exporter_vars() previously required. Written
+    here (cli/observer), read there (cli/infra) -- no cross-import, same
+    decoupling both docstrings already describe, just no longer manual.
+    Deferred self-import (`from .. import context`, not a module-scope
+    `from ..context import SERVICE_SECRETS_DIR`) -- same convention
+    cli/observer/secrets.py already uses so tests can patch
+    context.SERVICE_SECRETS_DIR and have it take effect here."""
+    from .. import context
+
+    token = tempo_auth_token()
+    # %20 (not a literal space) matches this repo's own already-seeded
+    # secrets/services/otel.env convention -- the OTel SDK's baggage-style
+    # header parser decodeURIComponent()s each value either way, so both
+    # forms work, but staying byte-consistent with the existing file avoids
+    # a needless diff on hosts that already have one hand-seeded.
+    _write_env_file(
+        context.SERVICE_SECRETS_DIR / "otel.env",
+        {
+            "OTEL_EXPORTER_OTLP_ENDPOINT": _tempo_ingest_url(entry),
+            "OTEL_EXPORTER_OTLP_HEADERS": f"Authorization=Bearer%20{token}",
+        },
+    )
+
+
+def _write_loki_env(entry: dict[str, Any]) -> None:
+    """Auto-wire secrets/services/loki.env from this deploy's own Loki
+    ingest URL + token -- closes the manual copy-paste step
+    cli/infra/secrets.py::loki_shipping_vars() previously required. Same
+    deferred-self-import patchability convention as _write_otel_env()."""
+    from .. import context
+
+    _write_env_file(
+        context.SERVICE_SECRETS_DIR / "loki.env",
+        {
+            "LOKI_PUSH_URL": _loki_ingest_url(entry),
+            "LOKI_AUTH_TOKEN": loki_auth_token(),
+        },
+    )
+
+
 def deploy(host: str | None = None) -> int:
     """Deploy prometheus onto one (or every) registered static observer
     host. Deliberately does NOT call pulumi_up, checkout a wallet, or touch
@@ -91,16 +144,16 @@ def deploy(host: str | None = None) -> int:
             # for services that aren't actually running on that host.
             services = entry.get("services") or ALL_SERVICE_NAMES
             if "tempo" in services:
+                _write_otel_env(entry)
                 print(
                     f"Tempo trace ingest for {entry['name']!r}: {_tempo_ingest_url(entry)} "
-                    f"(Authorization: Bearer <token from secrets/services/observer-tempo.env>)"
+                    f"-- wrote secrets/services/otel.env (cli/infra's otel_exporter_vars() picks it up automatically)."
                 )
             if "loki" in services:
+                _write_loki_env(entry)
                 print(
                     f"Loki log ingest for {entry['name']!r}: {_loki_ingest_url(entry)} "
-                    f"(Basic auth, username 'xaisen', password from secrets/services/observer-loki.env -- "
-                    f"copy this URL/token into secrets/services/loki.env as LOKI_PUSH_URL/LOKI_AUTH_TOKEN "
-                    f"to enable fleet-wide log shipping via cli/infra)"
+                    f"-- wrote secrets/services/loki.env (cli/infra's loki_shipping_vars() picks it up automatically)."
                 )
             if "grafana" in services:
                 print(

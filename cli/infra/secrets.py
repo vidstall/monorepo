@@ -52,16 +52,15 @@ def _read_or_generate_secret(path: Path, key: str) -> str:
 
 def otel_exporter_vars() -> dict[str, str]:
     """Read (never generate) OTEL_EXPORTER_OTLP_ENDPOINT/HEADERS from
-    secrets/services/otel.env -- a plain, hand-seeded file, not a
-    read-or-generate-and-persist secret like the others in this module.
-    There's nothing for `vidctl infra` to generate here: the actual
-    endpoint/token belong to `vidctl observer`'s tempo deployment (see
-    cli/observer/secrets.py's tempo_auth_token(), and the ingest URL
-    `vidctl observer deploy` prints on success) -- the operator copies
-    those into this file once, by hand, keeping `cli/infra` and
-    `cli/observer` decoupled (no direct import between the two packages).
-    Returns {} if the file or either key is missing, so every call site
-    stays a graceful no-op until the operator actually seeds it."""
+    secrets/services/otel.env. There's nothing for `vidctl infra` to
+    generate here: the actual endpoint/token belong to `vidctl observer`'s
+    tempo deployment (see cli/observer/secrets.py's tempo_auth_token()) --
+    `vidctl observer deploy` now writes this file itself on success
+    (cli/observer/deploy.py's _write_otel_env()), keeping `cli/infra` and
+    `cli/observer` decoupled (no direct import between the two packages;
+    observer writes to the shared secrets path, infra only ever reads it).
+    Returns {} if the file or either key is missing (e.g. `observer deploy`
+    hasn't run yet), so every call site stays a graceful no-op."""
     from .. import infra
 
     values = read_env_file(infra.SERVICE_SECRETS_DIR / "otel.env")
@@ -77,16 +76,16 @@ def otel_exporter_vars() -> dict[str, str]:
 
 def loki_shipping_vars() -> dict[str, str]:
     """Read (never generate) LOKI_PUSH_URL/LOKI_AUTH_TOKEN from
-    secrets/services/loki.env -- a plain, hand-seeded file, same shape as
-    otel_exporter_vars() and for the same reason: the actual ingest URL/
-    token belong to `vidctl observer`'s loki deployment (see
-    cli/observer/secrets.py's loki_auth_token(), and the ingest URL
-    `vidctl observer deploy` prints on success) -- the operator copies
-    those into this file once, by hand, keeping `cli/infra` and
-    `cli/observer` decoupled (no direct import between the two packages).
-    Returns {} if the file or the URL is missing, so every call site stays
-    a graceful no-op until the operator actually seeds it -- fleet
-    containers simply don't get a `loki` log_driver until then."""
+    secrets/services/loki.env, same shape as otel_exporter_vars() and for
+    the same reason: the actual ingest URL/token belong to `vidctl
+    observer`'s loki deployment (see cli/observer/secrets.py's
+    loki_auth_token()) -- `vidctl observer deploy` now writes this file
+    itself on success (cli/observer/deploy.py's _write_loki_env()), keeping
+    `cli/infra` and `cli/observer` decoupled (no direct import between the
+    two packages). Returns {} if the file or the URL is missing (e.g.
+    `observer deploy` hasn't run yet), so every call site stays a graceful
+    no-op -- fleet containers simply don't get a `loki` log_driver until
+    then."""
     from .. import infra
 
     values = read_env_file(infra.SERVICE_SECRETS_DIR / "loki.env")

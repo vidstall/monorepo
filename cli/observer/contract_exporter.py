@@ -61,6 +61,15 @@ def collect_contract_state(env: str) -> list[tuple[str, dict[str, str], float]]:
     for entry in wallets:
         key = _wallet_pool_role_and_status(entry)
         pool_counts[key] = pool_counts.get(key, 0) + 1
+        # Monitoring-redesign gap #3: per-wallet gas balance. `last_balance_mist` is
+        # already populated on every pool entry by chain_ops.py's checkout/faucet
+        # flow -- this is only as fresh as the last checkout/faucet check, never
+        # live-polled (an accepted tradeoff, not a bug).
+        samples.append((
+            "dvconf_wallet_balance_mist",
+            {"alias": str(entry.get("alias", "")), "address": str(entry.get("address", ""))},
+            float(entry.get("last_balance_mist") or 0),
+        ))
     for (role, status), count in pool_counts.items():
         samples.append(("dvconf_wallet_pool_count", {"role": role, "status": status}, float(count)))
 

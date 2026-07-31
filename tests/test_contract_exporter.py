@@ -40,6 +40,27 @@ class CollectContractStateTests(unittest.TestCase):
         # No sample should carry the old conflated "bucket" label.
         self.assertTrue(all("bucket" not in labels for _, labels, _ in samples))
 
+    def test_wallet_balance_mist_emitted_per_wallet(self) -> None:
+        # Monitoring-redesign gap #3: one dvconf_wallet_balance_mist gauge sample
+        # per pool entry, labeled by alias/address, reading the already-populated
+        # last_balance_mist field (no new chain call).
+        entries = [
+            {"alias": "w1", "address": "0xaaa", "last_balance_mist": 500_000_000, "assigned_host": "", "registered_role": "", "retired": False},
+            {"alias": "w2", "address": "0xbbb", "last_balance_mist": 0, "assigned_host": "", "registered_role": "", "retired": False},
+        ]
+        with patch.object(wallet, "pool_status", return_value={"devnet": entries}), patch.object(
+            contract, "load_deployment", return_value={}
+        ):
+            samples = collect_contract_state("devnet")
+
+        balances = {
+            (labels["alias"], labels["address"]): value
+            for name, labels, value in samples
+            if name == "dvconf_wallet_balance_mist"
+        }
+        self.assertEqual(balances[("w1", "0xaaa")], 500_000_000.0)
+        self.assertEqual(balances[("w2", "0xbbb")], 0.0)
+
     def test_contract_package_info_emitted_when_published(self) -> None:
         with patch.object(wallet, "pool_status", return_value={"devnet": []}), patch.object(
             contract,
