@@ -13,7 +13,7 @@
         "name": "room",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "Prometheus" },
-        "query": { "query": "label_values(dvconf_room_participants, roomId)", "refId": "roomVariable" },
+        "query": { "query": "label_values(dvconf_rtc_packet_loss_ratio, roomId)", "refId": "roomVariable" },
         "refresh": 2,
         "includeAll": true,
         "multi": true,

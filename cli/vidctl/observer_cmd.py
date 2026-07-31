@@ -9,7 +9,7 @@ from .. import observer
 # every subcommand's --host to it means day-to-day use never has to spell
 # it out (`vidctl observer deploy` just works), while --host stays available
 # for anyone who registers additional static hosts later.
-DEFAULT_HOST = "bourbon"
+DEFAULT_HOST = "baileys"
 
 
 def _parse_services(raw: str | None) -> list[str] | None:

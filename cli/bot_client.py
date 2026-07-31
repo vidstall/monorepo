@@ -7,6 +7,11 @@ import urllib.request
 from . import infra
 
 REQUEST_TIMEOUT_SECONDS = 6
+# join_room/create_room block server-side on register + create-room/escrow
+# on-chain txs + relay-assignment polling (up to 30s alone for create --
+# see CREATE_ROOM_POLL_OPTS in apps/bot/src/chain.ts) before responding, so
+# they need much more headroom than the fast list/delete endpoints.
+ROOM_ACTION_TIMEOUT_SECONDS = 45
 MEDIA_MODES = ("listen", "camera", "mic", "both")
 
 
@@ -17,7 +22,13 @@ def _base_url(host: str) -> str | None:
     return f"http://{address}:{infra.SERVICE_PORTS['bot']}"
 
 
-def _request(host: str, method: str, path: str, body: dict | None = None) -> object | None:
+def _request(
+    host: str,
+    method: str,
+    path: str,
+    body: dict | None = None,
+    timeout: float = REQUEST_TIMEOUT_SECONDS,
+) -> object | None:
     """Shared GET/POST helper for apps/bot's control API. Returns the parsed
     JSON response, or None on any failure (unreachable host, bad token,
     non-2xx, malformed JSON) -- printed so it lands in the GUI's Activity
@@ -39,7 +50,7 @@ def _request(host: str, method: str, path: str, body: dict | None = None) -> obj
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
@@ -81,6 +92,7 @@ def join_room(host: str, room_id: str, media_mode: str) -> dict | None:
         "POST",
         "/bots",
         {"roomMode": "join", "roomId": room_id, "mediaMode": media_mode},
+        timeout=ROOM_ACTION_TIMEOUT_SECONDS,
     )
     return result if isinstance(result, dict) else None
 
@@ -94,7 +106,7 @@ def create_room(host: str, media_mode: str, mp4_path: str | None = None) -> dict
     body: dict[str, str] = {"roomMode": "create", "mediaMode": media_mode}
     if mp4_path:
         body["mp4Path"] = mp4_path
-    result = _request(host, "POST", "/bots", body)
+    result = _request(host, "POST", "/bots", body, timeout=ROOM_ACTION_TIMEOUT_SECONDS)
     return result if isinstance(result, dict) else None
 
 
