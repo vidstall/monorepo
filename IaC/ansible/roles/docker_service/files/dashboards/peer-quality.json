@@ -1,0 +1,127 @@
+{
+  "uid": "peer-quality",
+  "title": "Peer Quality",
+  "tags": ["xaisen"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "room",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "Prometheus" },
+        "query": { "query": "label_values(dvconf_relay_peer_latency_ms, roomId)", "refId": "roomVariable" },
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Latency + jitter (client-reported)",
+      "description": "dvconf_relay_peer_latency_ms / dvconf_relay_peer_jitter_ms{roomId,peerId} -- apps/relay/src/metrics-server.ts, from client POST /stats/report.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_latency_ms{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "latency {{roomId}}/{{peerId}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_jitter_ms{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "jitter {{roomId}}/{{peerId}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Packet loss + reordering (client-reported)",
+      "description": "dvconf_relay_peer_packet_loss / dvconf_relay_peer_packet_reordering_rate{roomId,peerId} -- apps/relay/src/metrics-server.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_packet_loss{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "loss {{roomId}}/{{peerId}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "reordering {{roomId}}/{{peerId}}", "refId": "B" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Bitrate up/down (client-reported)",
+      "description": "dvconf_relay_peer_bitrate_up_kbps / dvconf_relay_peer_bitrate_down_kbps{roomId,peerId} -- apps/relay/src/metrics-server.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "sum(dvconf_relay_peer_bitrate_up_kbps{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "up {{roomId}}/{{peerId}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "sum(dvconf_relay_peer_bitrate_down_kbps{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "down {{roomId}}/{{peerId}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Kbits" } }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Resolution + framerate (client-reported)",
+      "description": "dvconf_relay_peer_resolution_width/_height / dvconf_relay_peer_framerate{roomId,peerId} -- apps/relay/src/metrics-server.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_resolution_width{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "width {{roomId}}/{{peerId}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_resolution_height{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "height {{roomId}}/{{peerId}}", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_framerate{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "fps {{roomId}}/{{peerId}}", "refId": "C" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Encode/decode latency (client-reported)",
+      "description": "dvconf_relay_peer_encode_latency_ms / dvconf_relay_peer_decode_latency_ms{roomId,peerId} -- apps/relay/src/metrics-server.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_encode_latency_ms{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "encode {{roomId}}/{{peerId}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_decode_latency_ms{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "decode {{roomId}}/{{peerId}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Freeze + pause counts (client-reported)",
+      "description": "dvconf_relay_peer_freeze_count / dvconf_relay_peer_pause_count{roomId,peerId} -- cumulative counters, apps/relay/src/metrics-server.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_freeze_count{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "freeze {{roomId}}/{{peerId}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_pause_count{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "pause {{roomId}}/{{peerId}}", "refId": "B" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Connection setup + reconnect time (client-reported)",
+      "description": "dvconf_relay_peer_connection_setup_ms / dvconf_relay_peer_reconnect_ms{roomId,peerId} -- apps/relay/src/metrics-server.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_connection_setup_ms{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "setup {{roomId}}/{{peerId}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_reconnect_ms{roomId=~\"$room\"}) by (roomId, peerId)", "legendFormat": "reconnect {{roomId}}/{{peerId}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "ICE success rate (client-reported)",
+      "description": "avg(dvconf_relay_peer_ice_success){roomId,peerId} -- 1 = success, 0 = failure, apps/relay/src/metrics-server.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_relay_peer_ice_success{roomId=~\"$room\"})", "legendFormat": "ICE success ratio", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    }
+  ]
+}

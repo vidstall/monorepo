@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -8,6 +11,7 @@ from unittest.mock import patch
 from cli import bot_client, contract, context, image_bake, infra, observer, registry, scenario
 from cli import object as object_cmd
 from cli.registry import RegistryState
+from cli.scenario import system_log, system_status
 from cli.vidctl import build_parser
 
 FAKE_WALLET = {"secret_key": "k", "node_id": None, "x25519_secret": "x", "cap_id": None}
@@ -96,6 +100,14 @@ class ScenarioTestCase(unittest.TestCase):
             # actually called, and tests that DO register one shouldn't pay
             # for a real wallet-pool/on-chain read against this fake env.
             patch.object(observer, "export_contract_state", return_value=0),
+            # Isolated from the real repo's logs/ dir so `scenario.run()`
+            # tests never write files outside this test's tempdir; the
+            # snapshot itself is stubbed too since capture_system_snapshot()
+            # would otherwise make real SSH/HTTP/on-chain calls against this
+            # fake env on every action -- tests exercising the real snapshot
+            # behavior patch this back per-test.
+            patch.object(system_log, "LOGS_ROOT", self.root / "logs"),
+            patch.object(system_log, "capture_system_snapshot", return_value={"stub": True}),
             patch("cli.wallet.checkout_wallet", return_value=(dict(FAKE_WALLET), False)),
             patch("cli.wallet.release_wallet", return_value=None),
             patch.object(contract, "publish", return_value=0),
@@ -840,6 +852,243 @@ class RunTests(ScenarioTestCase):
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         self.assertEqual(scenario.apply(str(path), True), 0)
         self.assertEqual(scenario.run(str(path), True), 0)
+
+    def test_run_writes_system_log_with_expected_phases(self) -> None:
+        path = self.write_scenario(
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
+        )
+        self.assertEqual(scenario.apply(str(path), True), 0)
+
+        with (
+            patch("cli.scenario.actions.time.sleep", return_value=None),
+            patch.object(bot_client, "create_room", return_value={"botId": "b1"}),
+        ):
+            code = scenario.run(str(path), True)
+        self.assertEqual(code, 0)
+
+        log_files = list((self.root / "logs" / "s").glob("*.json"))
+        self.assertEqual(len(log_files), 1)
+        doc = json.loads(log_files[0].read_text(encoding="utf-8"))
+        self.assertIsNotNone(doc["run_started_at"])
+        self.assertIsNotNone(doc["run_finished_at"])
+        phases = [event["phase"] for event in doc["events"]]
+        self.assertEqual(phases[0], "run_start")
+        self.assertIn("before_action", phases)
+        self.assertIn("after_action", phases)
+        self.assertEqual(phases[-1], "run_end")
+        after_action = next(event for event in doc["events"] if event["phase"] == "after_action")
+        self.assertEqual(after_action["result"], {"botId": "b1"})
+        self.assertGreaterEqual(after_action["duration_seconds"], 0)
+
+    def test_system_log_atomic_write_leaves_no_tmp_file(self) -> None:
+        path = self.write_scenario(
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
+        )
+        self.assertEqual(scenario.apply(str(path), True), 0)
+
+        with (
+            patch("cli.scenario.actions.time.sleep", return_value=None),
+            patch.object(bot_client, "create_room", return_value={"botId": "b1"}),
+        ):
+            scenario.run(str(path), True)
+
+        tmp_files = list((self.root / "logs" / "s").glob("*.tmp"))
+        self.assertEqual(tmp_files, [])
+
+    def test_run_records_run_end_even_when_action_fails(self) -> None:
+        path = self.write_scenario(
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
+        )
+        self.assertEqual(scenario.apply(str(path), True), 0)
+
+        with (
+            patch("cli.scenario.actions.time.sleep", return_value=None),
+            patch.object(bot_client, "create_room", return_value=None),
+        ):
+            code = scenario.run(str(path), True)
+        self.assertNotEqual(code, 0)
+
+        log_files = list((self.root / "logs" / "s").glob("*.json"))
+        self.assertEqual(len(log_files), 1)
+        doc = json.loads(log_files[0].read_text(encoding="utf-8"))
+        self.assertIsNotNone(doc["run_finished_at"])
+        phases = [event["phase"] for event in doc["events"]]
+        self.assertEqual(phases[-1], "run_end")
+
+
+class SystemStatusTests(ScenarioTestCase):
+    """Unit-tests cli.scenario.system_status.capture_system_snapshot()
+    directly -- each subsystem it reads from is made to fail in isolation,
+    confirming the snapshot always returns normally with {"error": ...} in
+    the failed section instead of raising out of the function."""
+
+    def test_capture_system_snapshot_survives_subsystem_failures(self) -> None:
+        topology = infra.ensure_topology("devnet")
+        topology["workers"].append(
+            {
+                "host": "002",
+                "service": "bot",
+                "provider": "akamai",
+                "env": "devnet",
+                "worker_index": 1,
+                "desired_state": "started",
+            }
+        )
+        infra.write_topology(topology)
+
+        with (
+            patch.object(infra, "registry_status", side_effect=Exception("ssh boom")),
+            patch.object(bot_client, "list_sessions", side_effect=Exception("http boom")),
+            patch(
+                "cli.observer.contract_exporter.collect_contract_state",
+                side_effect=Exception("chain boom"),
+            ),
+        ):
+            snapshot = system_status.capture_system_snapshot("devnet")
+
+        self.assertEqual(snapshot["contract_state"], {"error": "chain boom"})
+        bot_worker = next(w for w in snapshot["workers"] if w["service"] == "bot")
+        self.assertEqual(bot_worker["registry_status"], {"error": "ssh boom"})
+        self.assertEqual(bot_worker["bot_sessions"], {"error": "http boom"})
+        self.assertEqual(
+            bot_worker["hardware_network"], {"error": "host unreachable (no address or missing SSH key)"}
+        )
+
+    def test_hardware_network_probe_parses_ssh_output(self) -> None:
+        key_path = self.root / "runtime" / "ssh_key" / "999" / "id_ed25519"
+        _write(key_path, "fake-key")
+
+        canned_stdout = (
+            "---CPU---\n4\n"
+            "---MEMORY---\n"
+            "              total        used        free      shared  buff/cache   available\n"
+            "Mem:           7975        1203        5210          12         1562        6500\n"
+            "Swap:             0           0           0\n"
+            "---DISK---\n"
+            "Filesystem      Size  Used Avail Use% Mounted on\n"
+            "/dev/vda1        50G  8.1G   40G  17% /\n"
+            "---NETWORK-ADDR---\n"
+            "lo               UNKNOWN        127.0.0.1/8 ::1/128\n"
+            "eth0             UP             10.0.0.5/24\n"
+            "---NETWORK-COUNTERS---\n"
+            "Inter-|   Receive                                                |  Transmit\n"
+            " face |bytes    packets errs drop fifo frame compressed multicast|"
+            "bytes    packets errs drop fifo colls carrier compressed\n"
+            "    lo:  1234       10    0    0    0     0          0         0     1234       10"
+            "    0    0    0     0       0          0\n"
+            "  eth0: 123456      900    0    0    0     0          0         0    98765      700"
+            "    0    0    0     0       0          0\n"
+            "---KERNEL---\n"
+            "Linux worker-002 6.1.0-generic #1 SMP x86_64 GNU/Linux\n"
+        )
+        fake_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=canned_stdout, stderr="")
+        with patch("cli.scenario.system_status.subprocess.run", return_value=fake_result):
+            probe = system_status._hardware_network_probe("root", key_path, "1.2.3.4")
+
+        self.assertEqual(probe["cpu"]["logical_cores"], 4)
+        self.assertEqual(probe["memory"]["total_mb"], 7975)
+        self.assertEqual(probe["memory"]["available_mb"], 6500)
+        self.assertEqual(probe["disk_root"]["use_percent"], "17%")
+        self.assertEqual(len(probe["network_addrs"]), 2)
+        self.assertEqual(len(probe["network_counters"]), 2)
+        eth0_counters = next(c for c in probe["network_counters"] if c["interface"] == "eth0")
+        self.assertEqual(eth0_counters["rx_bytes"], 123456)
+        self.assertEqual(eth0_counters["tx_bytes"], 98765)
+        self.assertIn("Linux worker-002", probe["kernel"])
+
+    def test_workers_snapshot_includes_all_envs_and_states(self) -> None:
+        topology = infra.ensure_topology("devnet")
+        topology["workers"].append(
+            {
+                "host": "010",
+                "service": "relay",
+                "provider": "akamai",
+                "env": "testnet",
+                "worker_index": 1,
+                "desired_state": "started",
+            }
+        )
+        topology["workers"].append(
+            {
+                "host": "011",
+                "service": "relay",
+                "provider": "akamai",
+                "env": "devnet",
+                "worker_index": 1,
+                "desired_state": "deleted",
+            }
+        )
+        infra.write_topology(topology)
+
+        with patch(
+            "cli.observer.contract_exporter.collect_contract_state",
+            return_value=[],
+        ):
+            snapshot = system_status.capture_system_snapshot("devnet")
+
+        hosts = {w.get("host") for w in snapshot["workers"]}
+        self.assertIn("010", hosts)  # a different env than "devnet"
+        self.assertIn("011", hosts)  # desired_state == "deleted"
+
+    def test_observer_hosts_included_in_snapshot(self) -> None:
+        observer.add_host("bourbon", "203.0.113.9", "root", "/nonexistent/key")
+
+        with (
+            patch("cli.observer.contract_exporter.collect_contract_state", return_value=[]),
+            patch.object(observer, "query", return_value=None),
+        ):
+            snapshot = system_status.capture_system_snapshot("devnet")
+
+        self.assertEqual(len(snapshot["observer_hosts"]), 1)
+        host_entry = snapshot["observer_hosts"][0]
+        self.assertEqual(host_entry["name"], "bourbon")
+        self.assertEqual(host_entry["address"], "203.0.113.9")
+        self.assertIn("hardware_network", host_entry)
+
+    def test_relay_quality_snapshot_parses_prometheus_result(self) -> None:
+        fake_result = [
+            {
+                "metric": {"__name__": "dvconf_relay_peer_latency_ms", "roomId": "r1", "peerId": "p1"},
+                "value": [1234.0, "42.5"],
+            }
+        ]
+        with (
+            patch.object(observer, "query", return_value=fake_result),
+            patch("cli.observer.contract_exporter.collect_contract_state", return_value=[]),
+        ):
+            snapshot = system_status.capture_system_snapshot("devnet")
+
+        self.assertEqual(len(snapshot["relay_quality"]), 1)
+        sample = snapshot["relay_quality"][0]
+        self.assertEqual(sample["metric"], "dvconf_relay_peer_latency_ms")
+        self.assertEqual(sample["labels"], {"roomId": "r1", "peerId": "p1"})
+        self.assertEqual(sample["value"], 42.5)
+
+    def test_relay_quality_snapshot_survives_no_prometheus_host(self) -> None:
+        with (
+            patch.object(observer, "query", return_value=None),
+            patch("cli.observer.contract_exporter.collect_contract_state", return_value=[]),
+        ):
+            snapshot = system_status.capture_system_snapshot("devnet")
+
+        self.assertIn("error", snapshot["relay_quality"])
+
+
+class SystemLogTests(ScenarioTestCase):
+    """Unit-tests cli.scenario.system_log.DuringActionSampler in isolation,
+    without going through a full scenario run."""
+
+    def test_during_action_sampler_runs_and_stops(self) -> None:
+        log = system_log.SystemLog("/tmp/fake.toml", "devnet", "sampler-test")
+        with patch.object(system_log, "SAMPLE_INTERVAL_SECONDS", 0.01):
+            sampler = system_log.DuringActionSampler(log, "devnet", 0, "room1", "bot.create_room")
+            sampler.start()
+            time.sleep(0.05)
+            sampler.stop()
+
+        during_events = [event for event in log._doc["events"] if event["phase"] == "during_action"]
+        self.assertGreater(len(during_events), 0)
+        self.assertEqual(during_events[0]["action_id"], "room1")
 
 
 if __name__ == "__main__":

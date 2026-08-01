@@ -6,6 +6,7 @@ from pathlib import Path
 from .actions import run_actions
 from .lock import read_lock
 from .spec import load_scenario
+from .system_log import SystemLog, record_snapshot_event
 
 
 def run(path_str: str, yes: bool) -> int:
@@ -31,4 +32,12 @@ def run(path_str: str, yes: bool) -> int:
         )
         return 1
 
-    return run_actions(scenario, scenario["env"])
+    env = scenario["env"]
+    system_log = SystemLog(scenario_path_display, env, path.stem)
+    print(f"Logging system status for this run to: {system_log.path}")
+    record_snapshot_event(system_log, env, "run_start")
+    try:
+        return run_actions(scenario, env, system_log=system_log)
+    finally:
+        record_snapshot_event(system_log, env, "run_end")
+        system_log.finish()

@@ -31,7 +31,18 @@ def add_scenario_parser(subparsers: argparse._SubParsersAction[argparse.Argument
             "images aren't stale relative to what's about to be deployed."
         ),
     )
-    apply_parser.set_defaults(handler=lambda args: scenario.apply(args.path, args.yes, args.rebake))
+    apply_parser.add_argument(
+        "--force-contract",
+        action="store_true",
+        help=(
+            "Force a fresh contract publish instead of an upgrade, even if a prior deployment is on record -- "
+            "use when the recorded package/upgrade-cap is stale or out of sync with what's actually on-chain "
+            "(e.g. PackageIDDoesNotMatch). Overrides [contract].force in the scenario file."
+        ),
+    )
+    apply_parser.set_defaults(
+        handler=lambda args: scenario.apply(args.path, args.yes, args.rebake, args.force_contract)
+    )
 
     run_parser = actions.add_parser(
         "run",

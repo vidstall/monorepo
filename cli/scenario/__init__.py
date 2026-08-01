@@ -5,6 +5,8 @@ from .lock import clear_lock, guard_manual_infra, read_lock, write_lock
 from .run import run
 from .spec import SCENARIO_DIR, FrontendKey, WorkerKey, load_scenario, scenario_hash_of
 from .status import _active_workers_for_env, _topology_worker_key, diff_workers, status
+from .system_log import SystemLog
+from .system_status import capture_system_snapshot
 
 __all__ = [
     "SCENARIO_DIR",
@@ -24,6 +26,8 @@ __all__ = [
     "destroy",
     "run",
     "run_actions",
+    "SystemLog",
+    "capture_system_snapshot",
     "RUNTIME_SCENARIO_LOCK",
     "contract_env_path",
 ]

@@ -120,7 +120,7 @@ def _clean_observer_stack() -> None:
             print(f"Warning: observer data cleanup failed for {name!r} (exit {code}).", file=sys.stderr)
 
 
-def apply(path_str: str, yes: bool, rebake: bool = False) -> int:
+def apply(path_str: str, yes: bool, rebake: bool = False, force_contract: bool = False) -> int:
     # Deferred self-import: contract_env_path is patched by tests as a flat
     # cli.scenario attribute -- looking it up through the package at call
     # time is what makes that patch take effect here. Aliased since `scenario`
@@ -174,7 +174,7 @@ def apply(path_str: str, yes: bool, rebake: bool = False) -> int:
             True,
             contract_opts["gas_budget"],
             contract_opts["create_registry_if_missing"],
-            contract_opts["force"],
+            contract_opts["force"] or force_contract,
         )
     if code != 0:
         write_lock(scenario_path_display, scenario_hash, env, "failed")

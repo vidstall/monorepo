@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from .. import bot_client, infra
+from .system_log import DuringActionSampler, SystemLog, record_snapshot_event
 
 
 def find_pooled_worker(
@@ -112,7 +113,7 @@ def _worker_leave(action: dict[str, Any]) -> dict[str, Any] | None:
     return {"host": host, "worker_index": worker_index}
 
 
-def run_actions(scenario: dict[str, Any], env: str) -> int:
+def run_actions(scenario: dict[str, Any], env: str, system_log: SystemLog | None = None) -> int:
     actions = scenario.get("actions", [])
     if not actions:
         print("Scenario has no [[actions]]; nothing to run.")
@@ -128,26 +129,60 @@ def run_actions(scenario: dict[str, Any], env: str) -> int:
             print(f"Scenario run failed resolving references for action #{index + 1}.", file=sys.stderr)
             return 1
 
+        record_snapshot_event(
+            system_log,
+            env,
+            "before_action",
+            action_index=index,
+            action_id=resolved.get("id"),
+            action_type=resolved.get("type"),
+            action=resolved,
+        )
+
         wait_seconds = t0 + resolved["offset_seconds"] - time.monotonic()
         if wait_seconds > 0:
             time.sleep(wait_seconds)
 
         action_type = resolved["type"]
-        if action_type == "bot.create_room":
-            result = _bot_create_room(resolved)
-        elif action_type == "bot.join_room":
-            result = _bot_join_room(resolved)
-        elif action_type == "bot.delete_room":
-            result = _bot_delete_room(resolved)
-        elif action_type == "worker.join":
-            result = _worker_join(resolved, env, reserved)
-        elif action_type == "worker.leave":
-            result = _worker_leave(resolved)
-        else:  # pragma: no cover - load_scenario() already rejects unknown types
-            print(f"Scenario run failed at action #{index + 1}: unknown type {action_type!r}.", file=sys.stderr)
-            return 1
+        action_started = time.monotonic()
+        sampler = (
+            DuringActionSampler(system_log, env, index, resolved.get("id"), action_type)
+            if system_log is not None
+            else None
+        )
+        if sampler is not None:
+            sampler.start()
+        try:
+            if action_type == "bot.create_room":
+                result = _bot_create_room(resolved)
+            elif action_type == "bot.join_room":
+                result = _bot_join_room(resolved)
+            elif action_type == "bot.delete_room":
+                result = _bot_delete_room(resolved)
+            elif action_type == "worker.join":
+                result = _worker_join(resolved, env, reserved)
+            elif action_type == "worker.leave":
+                result = _worker_leave(resolved)
+            else:  # pragma: no cover - load_scenario() already rejects unknown types
+                print(f"Scenario run failed at action #{index + 1}: unknown type {action_type!r}.", file=sys.stderr)
+                return 1
+        finally:
+            if sampler is not None:
+                sampler.stop()
+        duration_seconds = time.monotonic() - action_started
 
         if result is None:
+            record_snapshot_event(
+                system_log,
+                env,
+                "after_action",
+                action_index=index,
+                action_id=resolved.get("id"),
+                action_type=action_type,
+                action=resolved,
+                duration_seconds=duration_seconds,
+                error="action returned None",
+            )
             print(
                 f"Scenario run failed at action #{index + 1} (type={action_type}, id={resolved.get('id')}).",
                 file=sys.stderr,
@@ -156,6 +191,17 @@ def run_actions(scenario: dict[str, Any], env: str) -> int:
 
         if resolved.get("id"):
             results[resolved["id"]] = result
+        record_snapshot_event(
+            system_log,
+            env,
+            "after_action",
+            action_index=index,
+            action_id=resolved.get("id"),
+            action_type=action_type,
+            action=resolved,
+            duration_seconds=duration_seconds,
+            result=result,
+        )
         print(f"Action #{index + 1} (type={action_type}) succeeded: {result}")
 
     print(f"Scenario actions complete: {len(actions)} ran.")
