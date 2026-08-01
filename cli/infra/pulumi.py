@@ -58,6 +58,113 @@ def pulumi_up(
     return infra.run(args, cwd=PULUMI_DIR, env=env)
 
 
+def pulumi_refresh(
+    stack: str,
+    targets: list[str] | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> int:
+    from .. import infra
+
+    env = infra.command_env()
+    env["PULUMI_STACK"] = stack
+    if extra_env:
+        env.update(extra_env)
+    args = ["pulumi", "refresh", "--yes", "--stack", stack]
+    for target in targets or []:
+        args.extend(["--target", target])
+    return infra.run(args, cwd=PULUMI_DIR, env=env)
+
+
+def pulumi_refresh_diagnostics(
+    stack: str, targets: list[str] | None = None
+) -> list[dict[str, str]]:
+    """Like pulumi_refresh(), but captures stdout and extracts per-resource
+    error diagnostics instead of just returning an exit code -- needed so a
+    caller can inspect *why* a refresh failed (which resource, what
+    message) even though the command itself exits non-zero.
+
+    `pulumi refresh --json` emits two different shapes depending on outcome
+    (confirmed empirically against both a clean and a genuinely-failing
+    refresh):
+    - On a FAILING refresh (the case this function exists for): stdout is
+      ONE parseable JSON document, `{"steps": [...], "diagnostics": [...],
+      ...}`, where `diagnostics` is a flat list of `{urn, message,
+      severity}` (a preview/stack-level diagnostic, e.g. "preview failed",
+      has no `urn` and is skipped here since there's nothing to match a
+      phantom object against).
+    - On a SUCCEEDING refresh: stdout is that same pretty-printed document
+      immediately followed by the raw NDJSON engine event stream (one JSON
+      object per line) -- `json.loads()` over the whole of stdout then
+      raises "Extra data". Diagnostics there show up as individual
+      `diagnosticEvent` lines instead.
+
+    Tries the single-document parse first (the case that matters), falling
+    back to the per-line NDJSON scan on "Extra data"/parse failure. Either
+    way, only entries with severity "error" are kept; an empty list is the
+    "nothing to report" outcome in both paths, not a distinguishable error."""
+    from .. import infra
+
+    env = infra.command_env()
+    env["PULUMI_STACK"] = stack
+    args = ["pulumi", "refresh", "--yes", "--json", "--stack", stack]
+    for target in targets or []:
+        args.extend(["--target", target])
+    result = subprocess.run(
+        args, cwd=PULUMI_DIR, env=env, text=True, capture_output=True, check=False
+    )
+
+    try:
+        document = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        document = None
+
+    if isinstance(document, dict):
+        return [
+            {"urn": str(diag.get("urn", "")), "message": str(diag.get("message", ""))}
+            for diag in document.get("diagnostics", [])
+            if isinstance(diag, dict)
+            and diag.get("severity") == "error"
+            and diag.get("urn")
+        ]
+
+    diagnostics: list[dict[str, str]] = []
+    for line in result.stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        diagnostic_event = (
+            event.get("diagnosticEvent") if isinstance(event, dict) else None
+        )
+        if (
+            isinstance(diagnostic_event, dict)
+            and diagnostic_event.get("severity") == "error"
+        ):
+            diagnostics.append(
+                {
+                    "urn": str(diagnostic_event.get("urn", "")),
+                    "message": str(diagnostic_event.get("message", "")),
+                }
+            )
+    return diagnostics
+
+
+def pulumi_state_delete(stack: str, urn: str) -> int:
+    """Drop a single resource from Pulumi state without touching real
+    infrastructure -- for resources already confirmed gone remotely (a
+    provider refresh error saying so), so the next real refresh/up no
+    longer chokes on state that disagrees with reality."""
+    from .. import infra
+
+    env = infra.command_env()
+    env["PULUMI_STACK"] = stack
+    return infra.run(
+        ["pulumi", "state", "delete", urn, "--yes", "--stack", stack],
+        cwd=PULUMI_DIR,
+        env=env,
+    )
+
+
 def stack_has_urns(stack: str, urns: list[str]) -> bool:
     from .. import infra
 
@@ -68,7 +175,10 @@ def stack_has_urns(stack: str, urns: list[str]) -> bool:
             env=infra.command_env(),
             text=True,
         )
-        existing = {res.get("urn") for res in json.loads(raw).get("deployment", {}).get("resources", [])}
+        existing = {
+            res.get("urn")
+            for res in json.loads(raw).get("deployment", {}).get("resources", [])
+        }
     except (subprocess.CalledProcessError, json.JSONDecodeError):
         return False
     return all(urn in existing for urn in urns)
@@ -96,8 +206,13 @@ def alibaba_vm_target_urns(
     # service port (e.g. relay's WS_PORT, signaling's SIGNALING_PORT) is
     # opened below until that's designed.
     if has_service_port:
-        resources.append(("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{host}-vm-sg-port"))
-    return [f"{prefix}{resource_type}::{resource_name}" for resource_type, resource_name in resources]
+        resources.append(
+            ("alicloud:ecs/securityGroupRule:SecurityGroupRule", f"{host}-vm-sg-port")
+        )
+    return [
+        f"{prefix}{resource_type}::{resource_name}"
+        for resource_type, resource_name in resources
+    ]
 
 
 def persist_vm_resolution(
@@ -225,7 +340,9 @@ def set_vm_defaults(
                 worker["region"] = pinned["region"]
                 worker["size"] = pinned["size"]
     else:
-        default_size = VM_INSTANCE_SIZE_OVERRIDES.get((provider, service), VM_INSTANCE_SIZES.get(provider, ""))
+        default_size = VM_INSTANCE_SIZE_OVERRIDES.get(
+            (provider, service), VM_INSTANCE_SIZES.get(provider, "")
+        )
         worker.setdefault("size", default_size)
 
     if not worker.get("image"):

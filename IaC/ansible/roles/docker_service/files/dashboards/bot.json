@@ -53,6 +53,30 @@
         { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "process_resident_memory_bytes{job=\"xaisen-bot\"}", "legendFormat": "rss {{instance}}", "refId": "B" }
       ],
       "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Frame drops + audio underruns by track",
+      "description": "dvconf_bot_frame_drops_total{track} (queue overflow, oldest chunk discarded) and dvconf_bot_audio_underruns_total (silence fed because ffmpeg fell behind) -- apps/bot/src/media/ffmpeg-source.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_bot_frame_drops_total[5m])", "legendFormat": "drops {{track}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_bot_audio_underruns_total[5m])", "legendFormat": "audio underruns", "refId": "B" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "ffmpeg respawns + stderr chatter by track",
+      "description": "dvconf_bot_ffmpeg_respawns_total{track} / dvconf_bot_ffmpeg_stderr_lines_total{track} -- apps/bot/src/media/ffmpeg-source.ts.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_bot_ffmpeg_respawns_total[5m])", "legendFormat": "respawns {{track}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_bot_ffmpeg_stderr_lines_total[5m])", "legendFormat": "stderr {{track}}", "refId": "B" }
+      ]
     }
   ]
 }

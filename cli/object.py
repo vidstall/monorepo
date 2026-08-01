@@ -28,7 +28,9 @@ def publish(name: str, object_type: str, provider: str) -> int:
 
     missing_provider_keys = missing_object_storage_provider_keys(provider)
     if missing_provider_keys:
-        message = object_storage_provider_error(object_type, provider, missing_provider_keys)
+        message = object_storage_provider_error(
+            object_type, provider, missing_provider_keys
+        )
         print(message, file=sys.stderr)
         record(object_type, "publish", env_name, name, provider, 1, message)
         return 1
@@ -56,7 +58,175 @@ def publish(name: str, object_type: str, provider: str) -> int:
         obj["last_error"] = f"publish failed with exit code {code}"
     infra.write_topology(topology)
 
-    record(object_type, "publish", env_name, name, provider, code, str(obj.get("last_error", "")))
+    record(
+        object_type,
+        "publish",
+        env_name,
+        name,
+        provider,
+        code,
+        str(obj.get("last_error", "")),
+    )
+    return code
+
+
+def refresh(name: str, object_type: str, provider: str) -> int:
+    """Reconcile Pulumi state with the real bucket contents, then re-apply.
+
+    `publish` skips objects whose recorded content_md5 already matches state,
+    even if a prior partial `pulumi up` failure means they were never
+    actually uploaded (state says "created", the bucket disagrees). `pulumi
+    refresh` drops that stale state so the follow-up `pulumi up` sees them as
+    genuinely missing and re-uploads them.
+    """
+    error = validate(object_type, provider)
+    if error:
+        print(error, file=sys.stderr)
+        return 2
+
+    topology = infra.read_topology()
+    env_name = infra.validate_network(str(topology.get("active_env", "devnet")))
+
+    missing_provider_keys = missing_object_storage_provider_keys(provider)
+    if missing_provider_keys:
+        message = object_storage_provider_error(
+            object_type, provider, missing_provider_keys
+        )
+        print(message, file=sys.stderr)
+        record(object_type, "refresh", env_name, name, provider, 1, message)
+        return 1
+
+    obj = find_object(topology, env_name, name, object_type, provider)
+    if obj is None:
+        message = (
+            f"No {object_type}/{provider} object named {name!r} in {env_name} topology."
+        )
+        print(message, file=sys.stderr)
+        record(object_type, "refresh", env_name, name, provider, 2, message)
+        return 2
+
+    obj["last_operation"] = "refresh"
+    obj["last_updated"] = infra.timestamp()
+    set_object_storage_defaults(obj, env_name)
+    infra.write_topology(topology)
+
+    code = build_static_artifacts(object_type)
+    if code == 0:
+        code = infra.pulumi_refresh(env_name)
+    if code == 0:
+        code = infra.pulumi_up(env_name, parallel=4)
+
+    if code == 0:
+        obj["last_status"] = "running"
+        obj["last_error"] = ""
+    else:
+        obj["last_error"] = f"refresh failed with exit code {code}"
+    infra.write_topology(topology)
+
+    record(
+        object_type,
+        "refresh",
+        env_name,
+        name,
+        provider,
+        code,
+        str(obj.get("last_error", "")),
+    )
+    return code
+
+
+# Terraform-bridged providers for object storage (e.g. terraform-provider-
+# alicloud's OSS bucket-object resource) can throw a hard error during
+# `pulumi refresh` when the real object is gone, instead of gracefully
+# dropping it from state the way `refresh` is supposed to -- these are the
+# recognized "the resource is genuinely gone remotely" message signatures
+# that `clean()` treats as safe to auto-remove from state. Deliberately
+# narrow: an unrelated refresh failure (auth, rate limit, network) must
+# never be silently state-deleted, only this specific, recognized class.
+_PHANTOM_ERROR_SIGNATURES = (
+    "is not exist in the specified bucket",  # terraform-provider-alicloud OSS
+    "does not exist",
+    "NoSuchKey",
+    "NotFound",
+)
+
+
+def find_phantom_object_urns(diagnostics: list[dict[str, str]], name: str) -> list[str]:
+    """Filter refresh diagnostics down to URNs that both (a) belong to this
+    object -- every Pulumi resource for one object is named f"{name}-..."
+    (see IaC/pulumi/app/frontend/alibaba.py's create_site()) -- and (b)
+    carry a recognized "genuinely missing remotely" message, so an
+    unrelated error for a same-named resource, or any resource belonging to
+    a different object, is never touched."""
+    phantoms: list[str] = []
+    prefix = f"{name}-"
+    for diag in diagnostics:
+        urn = diag.get("urn", "")
+        message = diag.get("message", "")
+        resource_name = urn.rsplit("::", 1)[-1]
+        if not resource_name.startswith(prefix):
+            continue
+        if any(signature in message for signature in _PHANTOM_ERROR_SIGNATURES):
+            phantoms.append(urn)
+    return phantoms
+
+
+def clean(name: str, object_type: str, provider: str, dry_run: bool) -> int:
+    """Detect and remove Pulumi state entries that no longer correspond to
+    anything real (see find_phantom_object_urns's docstring for why this is
+    needed instead of just `refresh`), then finish with the normal
+    refresh+up flow -- so the object ends up actually reconciled and
+    published, not just diagnosed. Never touches Pulumi/Ansible directly
+    from the operator's point of view: this IS the vidctl-native
+    replacement for a manual `pulumi state delete`."""
+    error = validate(object_type, provider)
+    if error:
+        print(error, file=sys.stderr)
+        return 2
+
+    topology = infra.read_topology()
+    env_name = infra.validate_network(str(topology.get("active_env", "devnet")))
+
+    obj = find_object(topology, env_name, name, object_type, provider)
+    if obj is None:
+        message = (
+            f"No {object_type}/{provider} object named {name!r} in {env_name} topology."
+        )
+        print(message, file=sys.stderr)
+        record(object_type, "clean", env_name, name, provider, 2, message)
+        return 2
+
+    diagnostics = infra.pulumi_refresh_diagnostics(env_name)
+    phantom_urns = find_phantom_object_urns(diagnostics, name)
+
+    if not phantom_urns:
+        print(f"No phantom resources detected for {name}/{object_type}/{provider}.")
+    for urn in phantom_urns:
+        if dry_run:
+            print(f"[dry-run] Would remove phantom state: {urn}")
+            continue
+        print(f"Removing phantom state: {urn}")
+        code = infra.pulumi_state_delete(env_name, urn)
+        if code != 0:
+            message = f"Failed to remove phantom state {urn!r} (exit {code})."
+            print(message, file=sys.stderr)
+            record(object_type, "clean", env_name, name, provider, code, message)
+            return code
+
+    if dry_run:
+        record(object_type, "clean", env_name, name, provider, 0, "")
+        return 0
+
+    code = refresh(name, object_type, provider)
+    record(
+        object_type,
+        "clean",
+        env_name,
+        name,
+        provider,
+        code,
+        "" if code == 0 else f"refresh failed with exit code {code}",
+    )
     return code
 
 
@@ -103,7 +273,15 @@ def delete(name: str, object_type: str, provider: str, yes: bool) -> int:
         obj["last_error"] = f"delete failed with exit code {code}"
     infra.write_topology(topology)
 
-    record(object_type, "delete", env_name, name, provider, code, "" if code == 0 else str(obj.get("last_error", "")))
+    record(
+        object_type,
+        "delete",
+        env_name,
+        name,
+        provider,
+        code,
+        "" if code == 0 else str(obj.get("last_error", "")),
+    )
     return code
 
 
@@ -133,7 +311,9 @@ def find_object(
     return None
 
 
-def new_object(env_name: str, name: str, object_type: str, provider: str) -> dict[str, Any]:
+def new_object(
+    env_name: str, name: str, object_type: str, provider: str
+) -> dict[str, Any]:
     return {
         "name": name,
         "object": object_type,
@@ -144,12 +324,19 @@ def new_object(env_name: str, name: str, object_type: str, provider: str) -> dic
 
 
 def set_object_storage_defaults(obj: dict[str, Any], env_name: str) -> None:
-    bucket = str(obj.get("bucket") or storage_bucket_name(env_name, str(obj.get("name", "frontend")), str(obj.get("provider", ""))))
+    bucket = str(
+        obj.get("bucket")
+        or storage_bucket_name(
+            env_name, str(obj.get("name", "frontend")), str(obj.get("provider", ""))
+        )
+    )
     obj["bucket"] = bucket
     obj.setdefault("resource_id", bucket)
     obj.setdefault("artifact_dir", "services/client/client/dist")
     if obj.get("provider") == "alibaba":
-        obj.setdefault("region", command_env().get("ALIBABA_FRONTEND_REGION", "ap-southeast-1"))
+        obj.setdefault(
+            "region", command_env().get("ALIBABA_FRONTEND_REGION", "ap-southeast-1")
+        )
 
 
 def storage_bucket_name(env_name: str, name: str, provider: str) -> str:
@@ -177,18 +364,29 @@ def missing_object_storage_provider_keys(provider: str) -> list[str]:
         ),
         "aws": ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"),
         "digitalocean": ("DIGITALOCEAN_TOKEN",),
-        "alibaba": ("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABA_CLOUD_ACCESS_KEY_SECRET", "ALIBABA_CLOUD_REGION"),
+        "alibaba": (
+            "ALIBABA_CLOUD_ACCESS_KEY_ID",
+            "ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+            "ALIBABA_CLOUD_REGION",
+        ),
         "gcp": (),
         # Same ambient azure-native provider auth compute VM provisioning
         # already uses (IaC/pulumi/app/compute/azure.py) -- no separate
         # object-storage credential exists for Azure.
-        "azure": ("ARM_CLIENT_ID", "ARM_CLIENT_SECRET", "ARM_SUBSCRIPTION_ID", "ARM_TENANT_ID"),
+        "azure": (
+            "ARM_CLIENT_ID",
+            "ARM_CLIENT_SECRET",
+            "ARM_SUBSCRIPTION_ID",
+            "ARM_TENANT_ID",
+        ),
         "tencent": (),
     }.get(provider, ())
     return [key for key in required if not env.get(key)]
 
 
-def object_storage_provider_error(object_type: str, provider: str, missing_keys: list[str]) -> str:
+def object_storage_provider_error(
+    object_type: str, provider: str, missing_keys: list[str]
+) -> str:
     secret_file = f"secrets/cloud/{provider}.env"
     if provider == "digitalocean":
         secret_file = "secrets/cloud/digital-ocean.env"
@@ -199,7 +397,15 @@ def object_storage_provider_error(object_type: str, provider: str, missing_keys:
     )
 
 
-def record(object_type: str, action: str, env_name: str, name: str, provider: str, code: int, error: str) -> None:
+def record(
+    object_type: str,
+    action: str,
+    env_name: str,
+    name: str,
+    provider: str,
+    code: int,
+    error: str,
+) -> None:
     infra.record_history(
         f"object {action}",
         env=env_name,

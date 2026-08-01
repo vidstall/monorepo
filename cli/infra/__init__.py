@@ -19,7 +19,13 @@ from ._constants import (
     VM_INSTANCE_SIZE_OVERRIDES,
     VM_INSTANCE_SIZES,
 )
-from .ansible import ansible_inventory, ansible_playbook, configure, docker_deploy_extra_vars, ping
+from .ansible import (
+    ansible_inventory,
+    ansible_playbook,
+    configure,
+    docker_deploy_extra_vars,
+    ping,
+)
 from .commands import apply, deploy, init, preview
 from .control import control
 from .control_batch import control_many
@@ -30,13 +36,21 @@ from .pulumi import (
     alibaba_vm_target_urns,
     ensure_ssh_keypair,
     persist_vm_resolution,
+    pulumi_refresh,
+    pulumi_refresh_diagnostics,
     pulumi_stack,
+    pulumi_state_delete,
     pulumi_up,
     select_or_create_stack,
     set_vm_defaults,
     stack_has_urns,
 )
-from .secrets import bot_control_token, loki_shipping_vars, metrics_auth_token, otel_exporter_vars
+from .secrets import (
+    bot_control_token,
+    loki_shipping_vars,
+    metrics_auth_token,
+    otel_exporter_vars,
+)
 from .topology import (
     active_stack,
     default_topology,
@@ -97,7 +111,10 @@ __all__ = [
     "alibaba_vm_target_urns",
     "ensure_ssh_keypair",
     "persist_vm_resolution",
+    "pulumi_refresh",
+    "pulumi_refresh_diagnostics",
     "pulumi_stack",
+    "pulumi_state_delete",
     "pulumi_up",
     "select_or_create_stack",
     "set_vm_defaults",
