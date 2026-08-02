@@ -1,29 +1,75 @@
 {
   "uid": "overview",
   "title": "Overview",
-  "tags": ["xaisen"],
+  "tags": [
+    "xaisen"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "links": [
-    { "title": "Contract & Chain", "type": "link", "url": "/d/contract-chain/contract-chain", "icon": "external link", "targetBlank": false },
-    { "title": "Infrastructure", "type": "link", "url": "/d/infrastructure/infrastructure", "icon": "external link", "targetBlank": false },
-    { "title": "Workers", "type": "link", "url": "/d/workers/workers", "icon": "external link", "targetBlank": false },
-    { "title": "Rooms", "type": "link", "url": "/d/rooms/rooms", "icon": "external link", "targetBlank": false },
-    { "title": "Bot", "type": "link", "url": "/d/bot/bot", "icon": "external link", "targetBlank": false }
+    {
+      "title": "Contract & Chain",
+      "type": "link",
+      "url": "/d/contract-chain/contract-chain",
+      "icon": "external link",
+      "targetBlank": false
+    },
+    {
+      "title": "Infrastructure",
+      "type": "link",
+      "url": "/d/infrastructure/infrastructure",
+      "icon": "external link",
+      "targetBlank": false
+    },
+    {
+      "title": "Workers",
+      "type": "link",
+      "url": "/d/workers/workers",
+      "icon": "external link",
+      "targetBlank": false
+    },
+    {
+      "title": "Rooms",
+      "type": "link",
+      "url": "/d/rooms/rooms",
+      "icon": "external link",
+      "targetBlank": false
+    },
+    {
+      "title": "User",
+      "type": "link",
+      "url": "/d/peer-quality/peer-quality",
+      "icon": "external link",
+      "targetBlank": false
+    }
   ],
   "panels": [
     {
       "id": 2,
       "type": "stat",
       "title": "Targets up",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
           "expr": "up{job=~\"xaisen.*\"}",
           "instant": true,
           "legendFormat": "{{job}}",
@@ -33,30 +79,80 @@
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
-            { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         }
       },
-      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name" }
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
     },
     {
       "id": 3,
       "type": "timeseries",
       "title": "Active sessions / rooms",
       "description": "dvconf_active_sessions (relay/signaling/bot concurrency gauge) and dvconf_rooms_active (signaling) -- packages/shared/src/metrics-prom.ts, apps/signaling/src/index.ts.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_active_sessions", "legendFormat": "sessions ({{job}})", "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_rooms_active", "legendFormat": "rooms active", "refId": "B" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "dvconf_active_sessions",
+          "legendFormat": "sessions ({{job}})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "dvconf_rooms_active",
+          "legendFormat": "rooms active",
+          "refId": "B"
+        }
       ]
     },
     {
@@ -64,11 +160,35 @@
       "type": "timeseries",
       "title": "Chain consensus activity",
       "description": "dvconf_role_votes_cast_total (cp-daemon vote submissions) and dvconf_role_assignments_total (completed apply_voted_role calls) -- role_voting.move / registration.move.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_role_votes_cast_total[5m])", "legendFormat": "votes cast/s", "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_role_assignments_total[5m])", "legendFormat": "assignments/s ({{service}})", "refId": "B" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "rate(dvconf_role_votes_cast_total[5m])",
+          "legendFormat": "votes cast/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "rate(dvconf_role_assignments_total[5m])",
+          "legendFormat": "assignments/s ({{service}})",
+          "refId": "B"
+        }
       ]
     },
     {
@@ -76,11 +196,22 @@
       "type": "logs",
       "title": "Recent errors (fleet-wide)",
       "description": "Every container's stdout/stderr, fleet-wide, via Docker's loki logging driver (see deploy_one_service.yml's log_driver/log_options) -- filtered to error-looking lines. service/worker/host labels come from that same log_options' loki-external-labels.",
-      "datasource": { "type": "loki", "uid": "Loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 14 },
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "Loki" },
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
           "expr": "{service=~\".+\"} |~ \"(?i)error|fail|exception\"",
           "refId": "A"
         }

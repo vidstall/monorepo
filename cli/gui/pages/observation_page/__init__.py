@@ -86,10 +86,11 @@ DASHBOARDS = [
         ft.Icons.MEETING_ROOM,
     ),
     (
-        "bot",
-        "Bot",
-        "Join-phase breakdown, session counts/errors",
-        ft.Icons.SMART_TOY,
+        "peer-quality",
+        "User",
+        "Client-reported connection quality (latency, packet loss, bitrate) plus the fake "
+        "test-bot's own internals -- the bot is just a fake user, so its dashboard was folded in here",
+        ft.Icons.PERSON,
     ),
 ]
 DEFAULT_DASHBOARD_UID = "overview"
@@ -112,13 +113,19 @@ def _ensure_hosts() -> tuple[dict, dict]:
 
 
 def _grafana_embed_url(address: str, dashboard_uid: str) -> str:
-    # ?kiosk hides Grafana's own nav chrome -- correct for the in-app
-    # WebView embed only, where this app's own chrome replaces it. theme=light
-    # forces Grafana's OWN UI into light mode -- Grafana defaults to dark
-    # regardless of this app's page.theme_mode (a separate app entirely,
-    # embedded via webview), and this page is deliberately light (see
-    # theme.py) -- without this the embed clashes.
-    return f"https://grafana.{address.replace('.', '-')}.sslip.io/d/{dashboard_uid}/{dashboard_uid}?kiosk&theme=light"
+    # kiosk=tv hides Grafana's own outer chrome (left nav sidebar, org/profile
+    # bar) -- correct for the in-app WebView embed, where this app's own
+    # chrome replaces it -- while keeping the dashboard's own sub-header
+    # (breadcrumbs, time-range picker, and template-variable dropdowns like
+    # Rooms'/User's "room" selector) visible. Bare `?kiosk` (full kiosk) hides
+    # that sub-header too, which silently dropped the room picker from every
+    # embedded dashboard that has one -- caught when the room filter was
+    # visible in a real browser tab but missing from the embedded webview.
+    # theme=light forces Grafana's OWN UI into light mode -- Grafana defaults
+    # to dark regardless of this app's page.theme_mode (a separate app
+    # entirely, embedded via webview), and this page is deliberately light
+    # (see theme.py) -- without this the embed clashes.
+    return f"https://grafana.{address.replace('.', '-')}.sslip.io/d/{dashboard_uid}/{dashboard_uid}?kiosk=tv&theme=light"
 
 
 def _grafana_url(address: str, dashboard_uid: str) -> str:

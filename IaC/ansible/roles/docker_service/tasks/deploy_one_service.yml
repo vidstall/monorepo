@@ -198,6 +198,8 @@
 # directory sync (below) only adds/updates files, it never deletes a
 # destination file whose source was removed, so the stale rendered files
 # from any host deployed before this change need an explicit cleanup pass.
+# bot.json was folded into peer-quality.json (now titled "User") since the
+# bot is just a fake user, same reasoning applies to its leftover file.
 - name: Remove stale pre-redesign dashboard JSON files
   ansible.builtin.file:
     path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards/{{ item }}"
@@ -205,6 +207,7 @@
   loop:
     - xaisen-fleet.json
     - xaisen-academic-eval.json
+    - bot.json
   when: xaisen_service_item.service == 'grafana'
 
 # Static JSON (no real Jinja templating happens in any of them), so a plain
