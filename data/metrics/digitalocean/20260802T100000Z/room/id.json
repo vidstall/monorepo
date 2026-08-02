@@ -1,0 +1,191 @@
+{
+  "identity": {
+    "room_id": "room-456",
+    "creator": "0x4a1f2b8c6d3e9a07b5c1d8e2f4a6b9c0d3e5f7a1b2c4d6e8f0a1b3c5d7e9f102",
+    "created_at": "2026-08-02T09:55:00.000Z",
+    "closed_at": null,
+    "status": "active",
+    "relay_mode": "sfu",
+    "assigned_relay": "relay-001",
+    "assigned_signaling": "signaling-001",
+    "standby_relay_id": null,
+    "expected_participants": 10,
+    "verified_score": 0.97,
+    "consensus_reached": true,
+    "escrow": {
+      "creator": "0x4a1f2b8c6d3e9a07b5c1d8e2f4a6b9c0d3e5f7a1b2c4d6e8f0a1b3c5d7e9f102",
+      "escrow_balance_sui": 12.5,
+      "proofs_submitted": 3,
+      "distributed": false
+    }
+  },
+  "metrics": [
+    {
+      "timestamp": "2026-08-02T10:00:00.000Z",
+      "interval_seconds": 10,
+      "participants": {
+        "total": 3,
+        "peers": [
+          {
+            "peer_id": "user-001",
+            "has_audio_producer": true,
+            "has_video_producer": true,
+            "has_screen_share_producer": false,
+            "e2ee_session_key_established": true
+          },
+          {
+            "peer_id": "user-12345",
+            "has_audio_producer": true,
+            "has_video_producer": true,
+            "has_screen_share_producer": false,
+            "e2ee_session_key_established": true
+          },
+          {
+            "peer_id": "user-67890",
+            "has_audio_producer": true,
+            "has_video_producer": false,
+            "has_screen_share_producer": false,
+            "e2ee_session_key_established": true
+          }
+        ]
+      },
+      "audio_top_k": [
+        "user-001",
+        "user-12345"
+      ],
+      "peer_quality": {
+        "avg_latency_ms": 46.0,
+        "avg_packet_loss": 0.005,
+        "avg_jitter_ms": 12.0,
+        "avg_bitrate_up_kbps": 610,
+        "avg_bitrate_down_kbps": 4700,
+        "freeze_count_total": 2,
+        "pause_count_total": 0,
+        "avg_connection_setup_ms": 370,
+        "ice_success_rate": 1.0
+      },
+      "rtc_quality_server_observed": {
+        "avg_jitter_ms": 9.6,
+        "avg_packet_loss_ratio": 0.004,
+        "avg_bitrate_kbps": 2580,
+        "avg_rtt_ms": 37.5
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:10.000Z",
+      "interval_seconds": 10,
+      "participants": {
+        "total": 4,
+        "peers": [
+          {
+            "peer_id": "user-001",
+            "has_audio_producer": true,
+            "has_video_producer": true,
+            "has_screen_share_producer": true,
+            "e2ee_session_key_established": true
+          },
+          {
+            "peer_id": "user-12345",
+            "has_audio_producer": true,
+            "has_video_producer": true,
+            "has_screen_share_producer": false,
+            "e2ee_session_key_established": true
+          },
+          {
+            "peer_id": "user-67890",
+            "has_audio_producer": true,
+            "has_video_producer": false,
+            "has_screen_share_producer": false,
+            "e2ee_session_key_established": true
+          },
+          {
+            "peer_id": "user-11111",
+            "has_audio_producer": false,
+            "has_video_producer": true,
+            "has_screen_share_producer": false,
+            "e2ee_session_key_established": true
+          }
+        ]
+      },
+      "audio_top_k": [
+        "user-001",
+        "user-12345"
+      ],
+      "peer_quality": {
+        "avg_latency_ms": 49.5,
+        "avg_packet_loss": 0.007,
+        "avg_jitter_ms": 13.2,
+        "avg_bitrate_up_kbps": 630,
+        "avg_bitrate_down_kbps": 4850,
+        "freeze_count_total": 5,
+        "pause_count_total": 0,
+        "avg_connection_setup_ms": 385,
+        "ice_success_rate": 1.0
+      },
+      "rtc_quality_server_observed": {
+        "avg_jitter_ms": 10.4,
+        "avg_packet_loss_ratio": 0.006,
+        "avg_bitrate_kbps": 2650,
+        "avg_rtt_ms": 40.0
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:20.000Z",
+      "interval_seconds": 10,
+      "participants": {
+        "total": 4,
+        "peers": [
+          {
+            "peer_id": "user-001",
+            "has_audio_producer": true,
+            "has_video_producer": true,
+            "has_screen_share_producer": true,
+            "e2ee_session_key_established": true
+          },
+          {
+            "peer_id": "user-12345",
+            "has_audio_producer": true,
+            "has_video_producer": true,
+            "has_screen_share_producer": false,
+            "e2ee_session_key_established": true
+          },
+          {
+            "peer_id": "user-67890",
+            "has_audio_producer": true,
+            "has_video_producer": false,
+            "has_screen_share_producer": false,
+            "e2ee_session_key_established": true
+          },
+          {
+            "peer_id": "user-11111",
+            "has_audio_producer": false,
+            "has_video_producer": true,
+            "has_screen_share_producer": false,
+            "e2ee_session_key_established": true
+          }
+        ]
+      },
+      "audio_top_k": [
+        "user-001",
+        "user-67890"
+      ],
+      "peer_quality": {
+        "avg_latency_ms": 52.0,
+        "avg_packet_loss": 0.009,
+        "avg_jitter_ms": 14.5,
+        "avg_bitrate_up_kbps": 615,
+        "avg_bitrate_down_kbps": 4720,
+        "freeze_count_total": 8,
+        "pause_count_total": 1,
+        "avg_connection_setup_ms": 390,
+        "ice_success_rate": 0.95
+      },
+      "rtc_quality_server_observed": {
+        "avg_jitter_ms": 11.0,
+        "avg_packet_loss_ratio": 0.008,
+        "avg_bitrate_kbps": 2600,
+        "avg_rtt_ms": 43.5
+      }
+    }
+  ]
+}

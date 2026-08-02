@@ -1,0 +1,719 @@
+{
+  "identity": {
+    "room_id": "room-456",
+    "peer_id": "user-12345"
+  },
+  "note": "`sample` mirrors the real payload this app's client POSTs to the relay's /stats/report today (services/client/client/src/pages/RoomPage.tsx, services/worker/apps/relay/src/metrics-server.ts PeerQualitySample) -- flat, audio+video combined, packetLoss/jitterMs effectively video-only due to a real quirk in useConnectionStats.ts. `audio`, `video`, and `av_sync` are a TARGET schema: grounded in real W3C webrtc-stats spec fields (RTCInboundRtpStreamStats per-kind stats, estimatedPlayoutTimestamp) that the browser actually exposes via getStats(), but not yet extracted or transmitted by this codebase.",
+  "metrics": [
+    {
+      "timestamp": "2026-08-02T10:00:00.000Z",
+      "interval_seconds": 2,
+      "sample": {
+        "latencyMs": 45.0,
+        "packetLoss": 0.005,
+        "jitterMs": 12.5,
+        "bitrateUpKbps": 1500,
+        "bitrateDownKbps": 1450,
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "packetReorderingRate": 0.001,
+        "encodeLatencyMs": 12.0,
+        "decodeLatencyMs": 10.0,
+        "freezeCount": 2,
+        "pauseCount": 0,
+        "connectionSetupMs": 350,
+        "iceSuccess": true,
+        "reconnectMs": 0
+      },
+      "audio": {
+        "packetsLost": 0.2,
+        "jitterMs": 7.5,
+        "bitrateUpKbps": 90,
+        "bitrateDownKbps": 87,
+        "audioLevel": 0.15,
+        "concealedSamples": 40,
+        "concealmentEvents": 2,
+        "jitterBufferDelayMs": 0.118
+      },
+      "video": {
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "bitrateUpKbps": 1410,
+        "bitrateDownKbps": 1363,
+        "packetsLost": 0.45,
+        "jitterMs": 12.5,
+        "framesEncoded": 1260,
+        "framesDecoded": 1210,
+        "framesDropped": 3,
+        "keyFramesDecoded": 19,
+        "freezeCount": 2,
+        "freezeDurationMs": 800,
+        "pauseCount": 0,
+        "qualityLimitationReason": "none",
+        "encodeLatencyMs": 12.0,
+        "decodeLatencyMs": 10.0,
+        "jitterBufferDelayMs": 0.56
+      },
+      "av_sync": {
+        "audioEstimatedPlayoutTimestampMs": 0.0,
+        "videoEstimatedPlayoutTimestampMs": 9.6,
+        "offsetMs": 9.6,
+        "driftRateMsPerMin": 48.0,
+        "category": "in_sync"
+      },
+      "client_local": {
+        "bytesSent": 1225000,
+        "bytesReceived": 1174500
+      },
+      "quality_score": {
+        "note": "post-hoc simplified ITU-T G.107 E-model estimate derived from latencyMs and packetLoss; not computed by the application itself",
+        "one_way_delay_ms": 22.5,
+        "id_delay_impairment": 0.54,
+        "ie_eff_loss_impairment": 9.9,
+        "r_factor": 82.76,
+        "mos_estimate": 4.12
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:02.000Z",
+      "interval_seconds": 2,
+      "sample": {
+        "latencyMs": 48.3,
+        "packetLoss": 0.0085,
+        "jitterMs": 13.4,
+        "bitrateUpKbps": 1547,
+        "bitrateDownKbps": 1497,
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "packetReorderingRate": 0.0017,
+        "encodeLatencyMs": 12.7,
+        "decodeLatencyMs": 10.7,
+        "freezeCount": 2,
+        "pauseCount": 0,
+        "connectionSetupMs": 350,
+        "iceSuccess": true,
+        "reconnectMs": 0
+      },
+      "audio": {
+        "packetsLost": 0.34,
+        "jitterMs": 8.0,
+        "bitrateUpKbps": 93,
+        "bitrateDownKbps": 90,
+        "audioLevel": 0.295,
+        "concealedSamples": 40,
+        "concealmentEvents": 2,
+        "jitterBufferDelayMs": 0.133
+      },
+      "video": {
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "bitrateUpKbps": 1454,
+        "bitrateDownKbps": 1407,
+        "packetsLost": 0.77,
+        "jitterMs": 13.4,
+        "framesEncoded": 1320,
+        "framesDecoded": 1270,
+        "framesDropped": 3,
+        "keyFramesDecoded": 19,
+        "freezeCount": 2,
+        "freezeDurationMs": 800,
+        "pauseCount": 0,
+        "qualityLimitationReason": "none",
+        "encodeLatencyMs": 12.7,
+        "decodeLatencyMs": 10.7,
+        "jitterBufferDelayMs": 0.59
+      },
+      "av_sync": {
+        "audioEstimatedPlayoutTimestampMs": 2000.0,
+        "videoEstimatedPlayoutTimestampMs": 2011.9,
+        "offsetMs": 11.9,
+        "driftRateMsPerMin": 48.0,
+        "category": "in_sync"
+      },
+      "client_local": {
+        "bytesSent": 1611750,
+        "bytesReceived": 1548750
+      },
+      "quality_score": {
+        "note": "post-hoc simplified ITU-T G.107 E-model estimate derived from latencyMs and packetLoss; not computed by the application itself",
+        "one_way_delay_ms": 24.15,
+        "id_delay_impairment": 0.58,
+        "ie_eff_loss_impairment": 15.68,
+        "r_factor": 76.94,
+        "mos_estimate": 3.9
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:04.000Z",
+      "interval_seconds": 2,
+      "sample": {
+        "latencyMs": 49.9,
+        "packetLoss": 0.0094,
+        "jitterMs": 13.7,
+        "bitrateUpKbps": 1558,
+        "bitrateDownKbps": 1508,
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "packetReorderingRate": 0.0019,
+        "encodeLatencyMs": 12.9,
+        "decodeLatencyMs": 10.9,
+        "freezeCount": 2,
+        "pauseCount": 0,
+        "connectionSetupMs": 350,
+        "iceSuccess": true,
+        "reconnectMs": 0
+      },
+      "audio": {
+        "packetsLost": 0.38,
+        "jitterMs": 8.2,
+        "bitrateUpKbps": 93,
+        "bitrateDownKbps": 90,
+        "audioLevel": 0.227,
+        "concealedSamples": 40,
+        "concealmentEvents": 2,
+        "jitterBufferDelayMs": 0.147
+      },
+      "video": {
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "bitrateUpKbps": 1465,
+        "bitrateDownKbps": 1418,
+        "packetsLost": 0.85,
+        "jitterMs": 13.7,
+        "framesEncoded": 1380,
+        "framesDecoded": 1330,
+        "framesDropped": 3,
+        "keyFramesDecoded": 19,
+        "freezeCount": 2,
+        "freezeDurationMs": 800,
+        "pauseCount": 0,
+        "qualityLimitationReason": "none",
+        "encodeLatencyMs": 12.9,
+        "decodeLatencyMs": 10.9,
+        "jitterBufferDelayMs": 0.63
+      },
+      "av_sync": {
+        "audioEstimatedPlayoutTimestampMs": 4000.0,
+        "videoEstimatedPlayoutTimestampMs": 4014.4,
+        "offsetMs": 14.4,
+        "driftRateMsPerMin": 48.0,
+        "category": "in_sync"
+      },
+      "client_local": {
+        "bytesSent": 2001250,
+        "bytesReceived": 1925750
+      },
+      "quality_score": {
+        "note": "post-hoc simplified ITU-T G.107 E-model estimate derived from latencyMs and packetLoss; not computed by the application itself",
+        "one_way_delay_ms": 24.95,
+        "id_delay_impairment": 0.6,
+        "ie_eff_loss_impairment": 17.04,
+        "r_factor": 75.56,
+        "mos_estimate": 3.85
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:06.000Z",
+      "interval_seconds": 2,
+      "sample": {
+        "latencyMs": 46.3,
+        "packetLoss": 0.0069,
+        "jitterMs": 13.0,
+        "bitrateUpKbps": 1526,
+        "bitrateDownKbps": 1476,
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 28,
+        "packetReorderingRate": 0.0014,
+        "encodeLatencyMs": 12.4,
+        "decodeLatencyMs": 10.4,
+        "freezeCount": 3,
+        "pauseCount": 0,
+        "connectionSetupMs": 350,
+        "iceSuccess": true,
+        "reconnectMs": 0
+      },
+      "audio": {
+        "packetsLost": 0.28,
+        "jitterMs": 7.8,
+        "bitrateUpKbps": 92,
+        "bitrateDownKbps": 89,
+        "audioLevel": 0.253,
+        "concealedSamples": 40,
+        "concealmentEvents": 2,
+        "jitterBufferDelayMs": 0.154
+      },
+      "video": {
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 28,
+        "bitrateUpKbps": 1434,
+        "bitrateDownKbps": 1387,
+        "packetsLost": 0.62,
+        "jitterMs": 13.0,
+        "framesEncoded": 1436,
+        "framesDecoded": 1385,
+        "framesDropped": 4,
+        "keyFramesDecoded": 20,
+        "freezeCount": 3,
+        "freezeDurationMs": 1200,
+        "pauseCount": 0,
+        "qualityLimitationReason": "none",
+        "encodeLatencyMs": 12.4,
+        "decodeLatencyMs": 10.4,
+        "jitterBufferDelayMs": 0.63
+      },
+      "av_sync": {
+        "audioEstimatedPlayoutTimestampMs": 6000.0,
+        "videoEstimatedPlayoutTimestampMs": 6016.4,
+        "offsetMs": 16.4,
+        "driftRateMsPerMin": 48.0,
+        "category": "in_sync"
+      },
+      "client_local": {
+        "bytesSent": 2382750,
+        "bytesReceived": 2294750
+      },
+      "quality_score": {
+        "note": "post-hoc simplified ITU-T G.107 E-model estimate derived from latencyMs and packetLoss; not computed by the application itself",
+        "one_way_delay_ms": 23.15,
+        "id_delay_impairment": 0.56,
+        "ie_eff_loss_impairment": 13.14,
+        "r_factor": 79.51,
+        "mos_estimate": 4.01
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:08.000Z",
+      "interval_seconds": 2,
+      "sample": {
+        "latencyMs": 44.7,
+        "packetLoss": 0.003,
+        "jitterMs": 12.0,
+        "bitrateUpKbps": 1473,
+        "bitrateDownKbps": 1423,
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "packetReorderingRate": 0.0006,
+        "encodeLatencyMs": 11.6,
+        "decodeLatencyMs": 9.6,
+        "freezeCount": 3,
+        "pauseCount": 0,
+        "connectionSetupMs": 350,
+        "iceSuccess": true,
+        "reconnectMs": 0
+      },
+      "audio": {
+        "packetsLost": 0.12,
+        "jitterMs": 7.2,
+        "bitrateUpKbps": 88,
+        "bitrateDownKbps": 85,
+        "audioLevel": 0.283,
+        "concealedSamples": 52,
+        "concealmentEvents": 3,
+        "jitterBufferDelayMs": 0.157
+      },
+      "video": {
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "bitrateUpKbps": 1385,
+        "bitrateDownKbps": 1338,
+        "packetsLost": 0.27,
+        "jitterMs": 12.0,
+        "framesEncoded": 1496,
+        "framesDecoded": 1445,
+        "framesDropped": 4,
+        "keyFramesDecoded": 20,
+        "freezeCount": 3,
+        "freezeDurationMs": 1200,
+        "pauseCount": 0,
+        "qualityLimitationReason": "bandwidth",
+        "encodeLatencyMs": 11.6,
+        "decodeLatencyMs": 9.6,
+        "jitterBufferDelayMs": 0.62
+      },
+      "av_sync": {
+        "audioEstimatedPlayoutTimestampMs": 8000.0,
+        "videoEstimatedPlayoutTimestampMs": 8017.6,
+        "offsetMs": 17.6,
+        "driftRateMsPerMin": 48.0,
+        "category": "in_sync"
+      },
+      "client_local": {
+        "bytesSent": 2751000,
+        "bytesReceived": 2650500
+      },
+      "quality_score": {
+        "note": "post-hoc simplified ITU-T G.107 E-model estimate derived from latencyMs and packetLoss; not computed by the application itself",
+        "one_way_delay_ms": 22.35,
+        "id_delay_impairment": 0.54,
+        "ie_eff_loss_impairment": 6.2,
+        "r_factor": 86.47,
+        "mos_estimate": 4.24
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:10.000Z",
+      "interval_seconds": 2,
+      "sample": {
+        "latencyMs": 44.1,
+        "packetLoss": 0.001,
+        "jitterMs": 11.3,
+        "bitrateUpKbps": 1441,
+        "bitrateDownKbps": 1391,
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "packetReorderingRate": 0.0001,
+        "encodeLatencyMs": 11.1,
+        "decodeLatencyMs": 9.1,
+        "freezeCount": 3,
+        "pauseCount": 1,
+        "connectionSetupMs": 350,
+        "iceSuccess": true,
+        "reconnectMs": 0
+      },
+      "audio": {
+        "packetsLost": 0.04,
+        "jitterMs": 6.8,
+        "bitrateUpKbps": 86,
+        "bitrateDownKbps": 83,
+        "audioLevel": 0.182,
+        "concealedSamples": 52,
+        "concealmentEvents": 3,
+        "jitterBufferDelayMs": 0.159
+      },
+      "video": {
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "bitrateUpKbps": 1355,
+        "bitrateDownKbps": 1308,
+        "packetsLost": 0.09,
+        "jitterMs": 11.3,
+        "framesEncoded": 1556,
+        "framesDecoded": 1505,
+        "framesDropped": 4,
+        "keyFramesDecoded": 20,
+        "freezeCount": 3,
+        "freezeDurationMs": 1200,
+        "pauseCount": 1,
+        "qualityLimitationReason": "bandwidth",
+        "encodeLatencyMs": 11.1,
+        "decodeLatencyMs": 9.1,
+        "jitterBufferDelayMs": 0.61
+      },
+      "av_sync": {
+        "audioEstimatedPlayoutTimestampMs": 10000.0,
+        "videoEstimatedPlayoutTimestampMs": 10018.3,
+        "offsetMs": 18.3,
+        "driftRateMsPerMin": 48.0,
+        "category": "in_sync"
+      },
+      "client_local": {
+        "bytesSent": 3111250,
+        "bytesReceived": 2998250
+      },
+      "quality_score": {
+        "note": "post-hoc simplified ITU-T G.107 E-model estimate derived from latencyMs and packetLoss; not computed by the application itself",
+        "one_way_delay_ms": 22.05,
+        "id_delay_impairment": 0.53,
+        "ie_eff_loss_impairment": 2.16,
+        "r_factor": 90.51,
+        "mos_estimate": 4.35
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:12.000Z",
+      "interval_seconds": 2,
+      "sample": {
+        "latencyMs": 42.7,
+        "packetLoss": 0.0015,
+        "jitterMs": 11.6,
+        "bitrateUpKbps": 1454,
+        "bitrateDownKbps": 1404,
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "packetReorderingRate": 0.0003,
+        "encodeLatencyMs": 11.3,
+        "decodeLatencyMs": 9.3,
+        "freezeCount": 3,
+        "pauseCount": 1,
+        "connectionSetupMs": 350,
+        "iceSuccess": true,
+        "reconnectMs": 0
+      },
+      "audio": {
+        "packetsLost": 0.06,
+        "jitterMs": 7.0,
+        "bitrateUpKbps": 87,
+        "bitrateDownKbps": 84,
+        "audioLevel": 0.3,
+        "concealedSamples": 52,
+        "concealmentEvents": 3,
+        "jitterBufferDelayMs": 0.16
+      },
+      "video": {
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "bitrateUpKbps": 1367,
+        "bitrateDownKbps": 1320,
+        "packetsLost": 0.14,
+        "jitterMs": 11.6,
+        "framesEncoded": 1616,
+        "framesDecoded": 1565,
+        "framesDropped": 4,
+        "keyFramesDecoded": 21,
+        "freezeCount": 3,
+        "freezeDurationMs": 1200,
+        "pauseCount": 1,
+        "qualityLimitationReason": "bandwidth",
+        "encodeLatencyMs": 11.3,
+        "decodeLatencyMs": 9.3,
+        "jitterBufferDelayMs": 0.61
+      },
+      "av_sync": {
+        "audioEstimatedPlayoutTimestampMs": 12000.0,
+        "videoEstimatedPlayoutTimestampMs": 12005.8,
+        "offsetMs": 5.8,
+        "driftRateMsPerMin": 48.0,
+        "category": "in_sync"
+      },
+      "client_local": {
+        "bytesSent": 3474750,
+        "bytesReceived": 3349250
+      },
+      "quality_score": {
+        "note": "post-hoc simplified ITU-T G.107 E-model estimate derived from latencyMs and packetLoss; not computed by the application itself",
+        "one_way_delay_ms": 21.35,
+        "id_delay_impairment": 0.51,
+        "ie_eff_loss_impairment": 3.2,
+        "r_factor": 89.49,
+        "mos_estimate": 4.33
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:14.000Z",
+      "interval_seconds": 2,
+      "sample": {
+        "latencyMs": 46.1,
+        "packetLoss": 0.0051,
+        "jitterMs": 12.5,
+        "bitrateUpKbps": 1501,
+        "bitrateDownKbps": 1451,
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 28,
+        "packetReorderingRate": 0.001,
+        "encodeLatencyMs": 12.0,
+        "decodeLatencyMs": 10.0,
+        "freezeCount": 4,
+        "pauseCount": 1,
+        "connectionSetupMs": 350,
+        "iceSuccess": true,
+        "reconnectMs": 0
+      },
+      "audio": {
+        "packetsLost": 0.2,
+        "jitterMs": 7.5,
+        "bitrateUpKbps": 90,
+        "bitrateDownKbps": 87,
+        "audioLevel": 0.198,
+        "concealedSamples": 52,
+        "concealmentEvents": 3,
+        "jitterBufferDelayMs": 0.162
+      },
+      "video": {
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 28,
+        "bitrateUpKbps": 1411,
+        "bitrateDownKbps": 1364,
+        "packetsLost": 0.46,
+        "jitterMs": 12.5,
+        "framesEncoded": 1672,
+        "framesDecoded": 1620,
+        "framesDropped": 5,
+        "keyFramesDecoded": 21,
+        "freezeCount": 4,
+        "freezeDurationMs": 1600,
+        "pauseCount": 1,
+        "qualityLimitationReason": "none",
+        "encodeLatencyMs": 12.0,
+        "decodeLatencyMs": 10.0,
+        "jitterBufferDelayMs": 0.6
+      },
+      "av_sync": {
+        "audioEstimatedPlayoutTimestampMs": 14000.0,
+        "videoEstimatedPlayoutTimestampMs": 14007.4,
+        "offsetMs": 7.4,
+        "driftRateMsPerMin": 48.0,
+        "category": "in_sync"
+      },
+      "client_local": {
+        "bytesSent": 3850000,
+        "bytesReceived": 3712000
+      },
+      "quality_score": {
+        "note": "post-hoc simplified ITU-T G.107 E-model estimate derived from latencyMs and packetLoss; not computed by the application itself",
+        "one_way_delay_ms": 23.05,
+        "id_delay_impairment": 0.55,
+        "ie_eff_loss_impairment": 10.07,
+        "r_factor": 82.57,
+        "mos_estimate": 4.12
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:16.000Z",
+      "interval_seconds": 2,
+      "sample": {
+        "latencyMs": 49.4,
+        "packetLoss": 0.0086,
+        "jitterMs": 13.5,
+        "bitrateUpKbps": 1548,
+        "bitrateDownKbps": 1498,
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "packetReorderingRate": 0.0017,
+        "encodeLatencyMs": 12.7,
+        "decodeLatencyMs": 10.7,
+        "freezeCount": 4,
+        "pauseCount": 1,
+        "connectionSetupMs": 350,
+        "iceSuccess": true,
+        "reconnectMs": 0
+      },
+      "audio": {
+        "packetsLost": 0.34,
+        "jitterMs": 8.1,
+        "bitrateUpKbps": 93,
+        "bitrateDownKbps": 90,
+        "audioLevel": 0.274,
+        "concealedSamples": 52,
+        "concealmentEvents": 3,
+        "jitterBufferDelayMs": 0.169
+      },
+      "video": {
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "bitrateUpKbps": 1455,
+        "bitrateDownKbps": 1408,
+        "packetsLost": 0.77,
+        "jitterMs": 13.5,
+        "framesEncoded": 1732,
+        "framesDecoded": 1680,
+        "framesDropped": 5,
+        "keyFramesDecoded": 21,
+        "freezeCount": 4,
+        "freezeDurationMs": 1600,
+        "pauseCount": 1,
+        "qualityLimitationReason": "none",
+        "encodeLatencyMs": 12.7,
+        "decodeLatencyMs": 10.7,
+        "jitterBufferDelayMs": 0.62
+      },
+      "av_sync": {
+        "audioEstimatedPlayoutTimestampMs": 16000.0,
+        "videoEstimatedPlayoutTimestampMs": 16009.7,
+        "offsetMs": 9.7,
+        "driftRateMsPerMin": 48.0,
+        "category": "in_sync"
+      },
+      "client_local": {
+        "bytesSent": 4237000,
+        "bytesReceived": 4086500
+      },
+      "quality_score": {
+        "note": "post-hoc simplified ITU-T G.107 E-model estimate derived from latencyMs and packetLoss; not computed by the application itself",
+        "one_way_delay_ms": 24.7,
+        "id_delay_impairment": 0.59,
+        "ie_eff_loss_impairment": 15.83,
+        "r_factor": 76.77,
+        "mos_estimate": 3.9
+      }
+    },
+    {
+      "timestamp": "2026-08-02T10:00:18.000Z",
+      "interval_seconds": 2,
+      "sample": {
+        "latencyMs": 47.9,
+        "packetLoss": 0.0094,
+        "jitterMs": 13.7,
+        "bitrateUpKbps": 1558,
+        "bitrateDownKbps": 1508,
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "packetReorderingRate": 0.0019,
+        "encodeLatencyMs": 12.9,
+        "decodeLatencyMs": 10.9,
+        "freezeCount": 4,
+        "pauseCount": 1,
+        "connectionSetupMs": 350,
+        "iceSuccess": true,
+        "reconnectMs": 0
+      },
+      "audio": {
+        "packetsLost": 0.38,
+        "jitterMs": 8.2,
+        "bitrateUpKbps": 93,
+        "bitrateDownKbps": 90,
+        "audioLevel": 0.264,
+        "concealedSamples": 52,
+        "concealmentEvents": 3,
+        "jitterBufferDelayMs": 0.176
+      },
+      "video": {
+        "resolutionWidth": 1280,
+        "resolutionHeight": 720,
+        "framerate": 30,
+        "bitrateUpKbps": 1465,
+        "bitrateDownKbps": 1418,
+        "packetsLost": 0.85,
+        "jitterMs": 13.7,
+        "framesEncoded": 1792,
+        "framesDecoded": 1740,
+        "framesDropped": 5,
+        "keyFramesDecoded": 22,
+        "freezeCount": 4,
+        "freezeDurationMs": 1600,
+        "pauseCount": 1,
+        "qualityLimitationReason": "none",
+        "encodeLatencyMs": 12.9,
+        "decodeLatencyMs": 10.9,
+        "jitterBufferDelayMs": 0.64
+      },
+      "av_sync": {
+        "audioEstimatedPlayoutTimestampMs": 18000.0,
+        "videoEstimatedPlayoutTimestampMs": 18012.2,
+        "offsetMs": 12.2,
+        "driftRateMsPerMin": 48.0,
+        "category": "in_sync"
+      },
+      "client_local": {
+        "bytesSent": 4626500,
+        "bytesReceived": 4463500
+      },
+      "quality_score": {
+        "note": "post-hoc simplified ITU-T G.107 E-model estimate derived from latencyMs and packetLoss; not computed by the application itself",
+        "one_way_delay_ms": 23.95,
+        "id_delay_impairment": 0.57,
+        "ie_eff_loss_impairment": 17.04,
+        "r_factor": 75.58,
+        "mos_estimate": 3.85
+      }
+    }
+  ]
+}

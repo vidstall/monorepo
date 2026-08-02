@@ -1,0 +1,528 @@
+{
+  "identity": {
+    "process_key": "cp-daemon-001",
+    "host": "004",
+    "service": "cp-daemon",
+    "provider": "digitalocean",
+    "env": "devnet",
+    "backend": "vm",
+    "worker_index": 1,
+    "instance_id": "i-4234567890abcdef0",
+    "region": "sgp1",
+    "zone": "sgp1-01",
+    "public_ip": "159.89.123.48",
+    "private_ip": "10.128.0.15",
+    "fqdn": "cp-daemon-001.sgp1.digitalocean.com",
+    "port": 5000,
+    "size": "s-2vcpu-4gb",
+    "orchestrator": "docker",
+    "container_name": "cp-daemon",
+    "container_id": "docker://def0123456789123",
+    "image": "cp-daemon:1.2.3",
+    "image_pull_policy": "IfNotPresent",
+    "restart_policy": "Always",
+    "termination_grace_period_seconds": 30,
+    "labels": {
+      "app": "cp-daemon",
+      "tier": "control-plane",
+      "version": "1.2.3",
+      "environment": "devnet",
+      "managed-by": "ansible"
+    },
+    "resources_requests": {
+      "cpu_cores": 1.0,
+      "memory_bytes": 2147483648,
+      "ephemeral_storage_bytes": 5368709120
+    },
+    "resources_limits": {
+      "cpu_cores": 2.0,
+      "memory_bytes": 4294967296,
+      "ephemeral_storage_bytes": 10737418240
+    },
+    "ulimits": {
+      "stack_size_bytes": 8388608,
+      "core_file_size_bytes": 0,
+      "open_files": 65536,
+      "max_user_processes": 100000
+    },
+    "contract_env": "runtime/contract/devnet.env",
+    "ssh_key_dir": "runtime/ssh_key/004",
+    "registry_status": "unknown (no operator log lines found)",
+    "chain": {
+      "network": "devnet",
+      "package_id": "0x2f1a...contract",
+      "rpc_url": "https://fullnode.devnet.sui.io:443"
+    },
+    "cp_config": {
+      "cp_cap_id": "0x7b21...cap",
+      "scan_epochs": 2,
+      "revote_interval_ms": 60000,
+      "room_health_scan_ms": 15000,
+      "room_expiry_scan_ms": 30000
+    }
+  },
+  "logging": [
+    {
+      "timestamp": "2026-08-02T10:30:00.000Z",
+      "interval_seconds": 10,
+      "pid": 42345,
+      "state": "running",
+      "uptime_seconds": 86400,
+      "restart_count": 0,
+      "threads_count": 10,
+      "threads_running": 3,
+      "cpu": {
+        "percent": 14.2,
+        "user_time_sec": 900,
+        "system_time_sec": 300,
+        "usage_last_interval": 5.5,
+        "context_switches_per_sec": 1200,
+        "voluntary_context_switches": 1200,
+        "nonvoluntary_context_switches": 30,
+        "cpu_throttled_percent": 0.0,
+        "cpu_throttled_time_ns": 0
+      },
+      "memory": {
+        "rss_bytes": 419430400,
+        "rss_percent": 9.77,
+        "vms_bytes": 671088640,
+        "shared_bytes": 83886080,
+        "text_bytes": 52428800,
+        "data_bytes": 83886080,
+        "lib_bytes": 10485760,
+        "swap_bytes": 0,
+        "pss_bytes": 377487360,
+        "uss_bytes": 343932928,
+        "page_faults_major": 0,
+        "page_faults_minor": 3000,
+        "peak_rss_bytes": 461373440,
+        "peak_vms_bytes": 704643072,
+        "memory_pressure": {
+          "some_avg10": 0.1,
+          "some_avg60": 0.1,
+          "some_avg300": 0.1,
+          "full_avg10": 0.0,
+          "full_avg60": 0.0,
+          "full_avg300": 0.0
+        }
+      },
+      "io": {
+        "read_bytes_per_sec": 131072,
+        "write_bytes_per_sec": 262144,
+        "read_ops_per_sec": 8,
+        "write_ops_per_sec": 15,
+        "read_wait_time_ms": 0.8,
+        "write_wait_time_ms": 1.2,
+        "total_read_bytes": 2621440000,
+        "total_write_bytes": 5242880000,
+        "total_read_ops": 120000,
+        "total_write_ops": 240000,
+        "io_priority": "normal",
+        "io_scheduler": "mq-deadline"
+      },
+      "network": {
+        "rx_bytes_per_sec": 51200,
+        "tx_bytes_per_sec": 76800,
+        "rx_packets_per_sec": 60,
+        "tx_packets_per_sec": 55,
+        "rx_dropped_per_sec": 0,
+        "tx_dropped_per_sec": 0,
+        "rx_errors_per_sec": 0,
+        "tx_errors_per_sec": 0,
+        "bandwidth_usage_percent": 2.0,
+        "listening_ports": [
+          {
+            "port": 5000,
+            "protocol": "tcp",
+            "status": "LISTEN",
+            "backlog": 128,
+            "current_backlog": 1
+          }
+        ],
+        "tcp": {
+          "retransmission_percent": 0.1,
+          "rto_ms": 200,
+          "rtt_ms": 40,
+          "established": 6,
+          "time_wait": 2,
+          "close_wait": 0,
+          "listen_overflows": 0,
+          "listen_drops": 0
+        },
+        "udp": {
+          "packets_per_sec": 5,
+          "in_errors": 0,
+          "out_errors": 0,
+          "buffer_errors": 0
+        },
+        "fd_count": 48
+      },
+      "limits": {
+        "fd_count": 48,
+        "fd_limit": 65536,
+        "fd_usage_percent": 0.07,
+        "memory_limit_bytes": 4294967296,
+        "memory_usage_percent_of_limit": 9.77,
+        "cpu_limit_percent": 40.0,
+        "cpu_usage_percent_of_limit": 35.5,
+        "max_fd_usage": 96,
+        "max_memory_usage_bytes": 461373440,
+        "process_count_limit": 1000,
+        "process_count_current": 8
+      },
+      "health": {
+        "status": "healthy",
+        "last_heartbeat_sec": 1723456789,
+        "heartbeat_interval_sec": 5,
+        "heartbeat_missed_count": 0,
+        "error_count_last_minute": 0,
+        "error_rate_percent": 0.0,
+        "warning_count_last_minute": 0,
+        "uncaught_exception_count": 0,
+        "last_uncaught_exception_timestamp": null,
+        "event_loop_lag_ms": 1.2,
+        "event_loop_lag_p99_ms": 4.0,
+        "gc_pause_ms": 6,
+        "gc_pause_p99_ms": 18,
+        "gc_count": 210,
+        "heap_total_bytes": 210000000,
+        "heap_objects_count": 85000,
+        "heap_used_bytes": 140000000,
+        "queue_length": 0,
+        "queue_max_length": 0,
+        "queue_drop_count": 0,
+        "worker_pool_utilization_percent": 0,
+        "active_tasks": 0,
+        "pending_tasks": 0,
+        "failed_tasks": 0
+      },
+      "application": {
+        "role_votes_cast_total": 4,
+        "role_vote_latency_avg_seconds": 0.85,
+        "chain_tx": {
+          "avg_duration_seconds_by_method": { "vote_role": 0.42, "issue_turn_cap": 0.55, "heartbeat": 0.30 },
+          "retries_total_by_method": { "vote_role": 0, "issue_turn_cap": 1, "heartbeat": 0 }
+        },
+        "chain_poll": {
+          "avg_duration_seconds_by_module": { "relay_events": 0.12, "room_events": 0.10, "validator_events": 0.11 },
+          "events_processed_total_by_module": { "relay_events": 18, "room_events": 25, "validator_events": 9 }
+        },
+        "role_assignments_total": 2,
+        "role_assignment_wait_avg_seconds": 1.1
+      },
+      "collection_duration_ms": 12,
+      "errors": null,
+      "warnings": [],
+      "data_source": "process_exporter",
+      "metrics_count": 46
+    },
+    {
+      "timestamp": "2026-08-02T10:30:10.000Z",
+      "interval_seconds": 10,
+      "pid": 42345,
+      "state": "running",
+      "uptime_seconds": 86410,
+      "restart_count": 0,
+      "threads_count": 10,
+      "threads_running": 3,
+      "cpu": {
+        "percent": 16.8,
+        "user_time_sec": 902,
+        "system_time_sec": 302,
+        "usage_last_interval": 6.8,
+        "context_switches_per_sec": 1350,
+        "voluntary_context_switches": 1350,
+        "nonvoluntary_context_switches": 32,
+        "cpu_throttled_percent": 0.0,
+        "cpu_throttled_time_ns": 0
+      },
+      "memory": {
+        "rss_bytes": 421000000,
+        "rss_percent": 9.80,
+        "vms_bytes": 672000000,
+        "shared_bytes": 84000000,
+        "text_bytes": 52428800,
+        "data_bytes": 84500000,
+        "lib_bytes": 10485760,
+        "swap_bytes": 0,
+        "pss_bytes": 379000000,
+        "uss_bytes": 345000000,
+        "page_faults_major": 0,
+        "page_faults_minor": 3050,
+        "peak_rss_bytes": 461373440,
+        "peak_vms_bytes": 704643072,
+        "memory_pressure": {
+          "some_avg10": 0.1,
+          "some_avg60": 0.1,
+          "some_avg300": 0.1,
+          "full_avg10": 0.0,
+          "full_avg60": 0.0,
+          "full_avg300": 0.0
+        }
+      },
+      "io": {
+        "read_bytes_per_sec": 135000,
+        "write_bytes_per_sec": 270000,
+        "read_ops_per_sec": 8,
+        "write_ops_per_sec": 16,
+        "read_wait_time_ms": 0.9,
+        "write_wait_time_ms": 1.3,
+        "total_read_bytes": 2622740000,
+        "total_write_bytes": 5245580000,
+        "total_read_ops": 120080,
+        "total_write_ops": 240160,
+        "io_priority": "normal",
+        "io_scheduler": "mq-deadline"
+      },
+      "network": {
+        "rx_bytes_per_sec": 53000,
+        "tx_bytes_per_sec": 79000,
+        "rx_packets_per_sec": 62,
+        "tx_packets_per_sec": 57,
+        "rx_dropped_per_sec": 0,
+        "tx_dropped_per_sec": 0,
+        "rx_errors_per_sec": 0,
+        "tx_errors_per_sec": 0,
+        "bandwidth_usage_percent": 2.1,
+        "listening_ports": [
+          {
+            "port": 5000,
+            "protocol": "tcp",
+            "status": "LISTEN",
+            "backlog": 128,
+            "current_backlog": 1
+          }
+        ],
+        "tcp": {
+          "retransmission_percent": 0.1,
+          "rto_ms": 200,
+          "rtt_ms": 41,
+          "established": 6,
+          "time_wait": 2,
+          "close_wait": 0,
+          "listen_overflows": 0,
+          "listen_drops": 0
+        },
+        "udp": {
+          "packets_per_sec": 5,
+          "in_errors": 0,
+          "out_errors": 0,
+          "buffer_errors": 0
+        },
+        "fd_count": 49
+      },
+      "limits": {
+        "fd_count": 49,
+        "fd_limit": 65536,
+        "fd_usage_percent": 0.07,
+        "memory_limit_bytes": 4294967296,
+        "memory_usage_percent_of_limit": 9.80,
+        "cpu_limit_percent": 40.0,
+        "cpu_usage_percent_of_limit": 42.0,
+        "max_fd_usage": 96,
+        "max_memory_usage_bytes": 461373440,
+        "process_count_limit": 1000,
+        "process_count_current": 8
+      },
+      "health": {
+        "status": "healthy",
+        "last_heartbeat_sec": 1723456799,
+        "heartbeat_interval_sec": 5,
+        "heartbeat_missed_count": 0,
+        "error_count_last_minute": 0,
+        "error_rate_percent": 0.0,
+        "warning_count_last_minute": 0,
+        "uncaught_exception_count": 0,
+        "last_uncaught_exception_timestamp": null,
+        "event_loop_lag_ms": 1.4,
+        "event_loop_lag_p99_ms": 4.5,
+        "gc_pause_ms": 7,
+        "gc_pause_p99_ms": 20,
+        "gc_count": 214,
+        "heap_total_bytes": 212000000,
+        "heap_objects_count": 86000,
+        "heap_used_bytes": 142000000,
+        "queue_length": 0,
+        "queue_max_length": 0,
+        "queue_drop_count": 0,
+        "worker_pool_utilization_percent": 0,
+        "active_tasks": 0,
+        "pending_tasks": 0,
+        "failed_tasks": 0
+      },
+      "application": {
+        "role_votes_cast_total": 5,
+        "role_vote_latency_avg_seconds": 0.90,
+        "chain_tx": {
+          "avg_duration_seconds_by_method": { "vote_role": 0.44, "issue_turn_cap": 0.58, "heartbeat": 0.31 },
+          "retries_total_by_method": { "vote_role": 0, "issue_turn_cap": 1, "heartbeat": 0 }
+        },
+        "chain_poll": {
+          "avg_duration_seconds_by_module": { "relay_events": 0.13, "room_events": 0.11, "validator_events": 0.11 },
+          "events_processed_total_by_module": { "relay_events": 20, "room_events": 27, "validator_events": 10 }
+        },
+        "role_assignments_total": 2,
+        "role_assignment_wait_avg_seconds": 1.05
+      },
+      "collection_duration_ms": 13,
+      "errors": null,
+      "warnings": [],
+      "data_source": "process_exporter",
+      "metrics_count": 46
+    },
+    {
+      "timestamp": "2026-08-02T10:30:20.000Z",
+      "interval_seconds": 10,
+      "pid": 42345,
+      "state": "running",
+      "uptime_seconds": 86420,
+      "restart_count": 0,
+      "threads_count": 10,
+      "threads_running": 2,
+      "cpu": {
+        "percent": 12.5,
+        "user_time_sec": 904,
+        "system_time_sec": 303,
+        "usage_last_interval": 4.9,
+        "context_switches_per_sec": 1180,
+        "voluntary_context_switches": 1180,
+        "nonvoluntary_context_switches": 28,
+        "cpu_throttled_percent": 0.0,
+        "cpu_throttled_time_ns": 0
+      },
+      "memory": {
+        "rss_bytes": 418000000,
+        "rss_percent": 9.73,
+        "vms_bytes": 670500000,
+        "shared_bytes": 83700000,
+        "text_bytes": 52428800,
+        "data_bytes": 83900000,
+        "lib_bytes": 10485760,
+        "swap_bytes": 0,
+        "pss_bytes": 376000000,
+        "uss_bytes": 342500000,
+        "page_faults_major": 0,
+        "page_faults_minor": 3080,
+        "peak_rss_bytes": 461373440,
+        "peak_vms_bytes": 704643072,
+        "memory_pressure": {
+          "some_avg10": 0.1,
+          "some_avg60": 0.1,
+          "some_avg300": 0.1,
+          "full_avg10": 0.0,
+          "full_avg60": 0.0,
+          "full_avg300": 0.0
+        }
+      },
+      "io": {
+        "read_bytes_per_sec": 128000,
+        "write_bytes_per_sec": 256000,
+        "read_ops_per_sec": 7,
+        "write_ops_per_sec": 14,
+        "read_wait_time_ms": 0.8,
+        "write_wait_time_ms": 1.1,
+        "total_read_bytes": 2624060000,
+        "total_write_bytes": 5248260000,
+        "total_read_ops": 120150,
+        "total_write_ops": 240300,
+        "io_priority": "normal",
+        "io_scheduler": "mq-deadline"
+      },
+      "network": {
+        "rx_bytes_per_sec": 49500,
+        "tx_bytes_per_sec": 74000,
+        "rx_packets_per_sec": 58,
+        "tx_packets_per_sec": 53,
+        "rx_dropped_per_sec": 0,
+        "tx_dropped_per_sec": 0,
+        "rx_errors_per_sec": 0,
+        "tx_errors_per_sec": 0,
+        "bandwidth_usage_percent": 1.9,
+        "listening_ports": [
+          {
+            "port": 5000,
+            "protocol": "tcp",
+            "status": "LISTEN",
+            "backlog": 128,
+            "current_backlog": 1
+          }
+        ],
+        "tcp": {
+          "retransmission_percent": 0.1,
+          "rto_ms": 199,
+          "rtt_ms": 39,
+          "established": 6,
+          "time_wait": 1,
+          "close_wait": 0,
+          "listen_overflows": 0,
+          "listen_drops": 0
+        },
+        "udp": {
+          "packets_per_sec": 5,
+          "in_errors": 0,
+          "out_errors": 0,
+          "buffer_errors": 0
+        },
+        "fd_count": 48
+      },
+      "limits": {
+        "fd_count": 48,
+        "fd_limit": 65536,
+        "fd_usage_percent": 0.07,
+        "memory_limit_bytes": 4294967296,
+        "memory_usage_percent_of_limit": 9.73,
+        "cpu_limit_percent": 40.0,
+        "cpu_usage_percent_of_limit": 31.25,
+        "max_fd_usage": 96,
+        "max_memory_usage_bytes": 461373440,
+        "process_count_limit": 1000,
+        "process_count_current": 8
+      },
+      "health": {
+        "status": "healthy",
+        "last_heartbeat_sec": 1723456809,
+        "heartbeat_interval_sec": 5,
+        "heartbeat_missed_count": 0,
+        "error_count_last_minute": 0,
+        "error_rate_percent": 0.0,
+        "warning_count_last_minute": 0,
+        "uncaught_exception_count": 0,
+        "last_uncaught_exception_timestamp": null,
+        "event_loop_lag_ms": 1.1,
+        "event_loop_lag_p99_ms": 3.8,
+        "gc_pause_ms": 6,
+        "gc_pause_p99_ms": 17,
+        "gc_count": 217,
+        "heap_total_bytes": 208000000,
+        "heap_objects_count": 84500,
+        "heap_used_bytes": 138000000,
+        "queue_length": 0,
+        "queue_max_length": 0,
+        "queue_drop_count": 0,
+        "worker_pool_utilization_percent": 0,
+        "active_tasks": 0,
+        "pending_tasks": 0,
+        "failed_tasks": 0
+      },
+      "application": {
+        "role_votes_cast_total": 4,
+        "role_vote_latency_avg_seconds": 0.80,
+        "chain_tx": {
+          "avg_duration_seconds_by_method": { "vote_role": 0.41, "issue_turn_cap": 0.53, "heartbeat": 0.29 },
+          "retries_total_by_method": { "vote_role": 0, "issue_turn_cap": 0, "heartbeat": 0 }
+        },
+        "chain_poll": {
+          "avg_duration_seconds_by_module": { "relay_events": 0.11, "room_events": 0.10, "validator_events": 0.10 },
+          "events_processed_total_by_module": { "relay_events": 16, "room_events": 22, "validator_events": 8 }
+        },
+        "role_assignments_total": 1,
+        "role_assignment_wait_avg_seconds": 0.95
+      },
+      "collection_duration_ms": 11,
+      "errors": null,
+      "warnings": [],
+      "data_source": "process_exporter",
+      "metrics_count": 46
+    }
+  ]
+}
