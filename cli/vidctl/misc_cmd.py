@@ -24,6 +24,24 @@ def add_gui_parser(
         default=None,
         help="Port to use with --web (default: pick any free port).",
     )
+    gui_parser.add_argument(
+        "--watch",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "While the GUI is running, periodically push a fresh contract-state "
+            "snapshot to the registered pushgateway host (same as `vidctl observer "
+            "export-contract-state --watch`), so the Contract & Chain dashboard's "
+            "freshness panel doesn't go stale. On by default; pass --no-watch to "
+            "disable."
+        ),
+    )
+    gui_parser.add_argument(
+        "--interval",
+        type=int,
+        default=60,
+        help="Seconds between contract-state pushes with --watch (default: 60).",
+    )
 
     def run_gui(args: argparse.Namespace) -> int:
         from ..gui.app import run as run_gui_app

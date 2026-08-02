@@ -94,12 +94,34 @@ def collect_contract_state(env: str) -> list[tuple[str, dict[str, str], float]]:
         else:
             for role, field_name in _MINER_STORE_ROLE_FIELDS.items():
                 vec_set = fields.get(field_name) or {}
-                contents = ((vec_set.get("fields") or {}).get("contents")) if isinstance(vec_set, dict) else None
+                contents = vec_set.get("contents") if isinstance(vec_set, dict) else None
                 if contents is None:
                     continue
                 samples.append(("dvconf_onchain_registered_count", {"role": role}, float(len(contents))))
     elif published:
         print(f"Warning: no MINER_STORE_ID on file for [{env}]; skipping registration counts.", file=sys.stderr)
+
+    # UserRegistry is a SEPARATE object from MinerStore -- it tracks actual
+    # app users who called user_registry::register_user() (see
+    # services/client's useNetworkStats.ts, which reads this same
+    # total_users field via devInspect), not the "user" bucket of
+    # MinerStore's role VecSets above (that one only ever fills from
+    # miner_store::register(), which no client-side code path calls -- it
+    # stays 0 regardless of how many real users connect). Exposed as its own
+    # metric name rather than folded into dvconf_onchain_registered_count's
+    # role label, since conflating the two was exactly the confusion this
+    # was added to fix.
+    user_registry_id = deployment.get("USER_REGISTRY_ID", "")
+    if user_registry_id:
+        fields = contract_cli.fetch_object(user_registry_id)
+        if fields is None:
+            print(f"Warning: could not fetch UserRegistry {user_registry_id} for [{env}]; skipping registered-user count.", file=sys.stderr)
+        else:
+            total_users = fields.get("total_users")
+            if total_users is not None:
+                samples.append(("dvconf_registered_users_total", {}, float(total_users)))
+    elif published:
+        print(f"Warning: no USER_REGISTRY_ID on file for [{env}]; skipping registered-user count.", file=sys.stderr)
 
     return samples
 

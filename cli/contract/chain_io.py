@@ -38,12 +38,14 @@ def fetch_object(object_id: str) -> dict | None:
     object <id> --json`. Unlike everything else in this file (which only
     ever parses `objectChanges` at publish time), this is a read against
     present chain state -- used by the GUI to show a shared object's
-    current contents, not just its ID."""
+    current contents, not just its ID. `content` holds the Move struct's
+    fields directly (e.g. `content["total_users"]`, `content["cp_miners"]
+    ["contents"]`) -- no intermediate "fields" wrapper, unlike objectChanges
+    payloads elsewhere in this file."""
     code, payload, output = run_sui_json(["sui", "client", "object", object_id, "--json"])
     if code != 0 or payload is None:
         return None
-    content = payload.get("content") or {}
-    return content.get("fields")
+    return payload.get("content")
 
 
 def run_sui_devinspect(args: list[str]) -> tuple[int, dict | None, str]:

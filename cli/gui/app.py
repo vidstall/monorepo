@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
+import threading
 
 import flet as ft
 
-from .. import infra
+from .. import infra, observer
 from .pages.contract_page import build_contract_page
 from .pages.infra_page import build_infra_page
 from .pages.observation_page import build_observation_page
@@ -133,7 +135,39 @@ def main(page: ft.Page) -> None:
     )
 
 
+def _start_contract_state_watch(interval: int) -> None:
+    """Background twin of `vidctl observer export-contract-state --watch`,
+    started from `--watch` on `vidctl gui` so the Contract & Chain dashboard
+    stays fresh for the length of the GUI session without a second terminal.
+    Picks the same target host `cli/scenario/apply.py`'s
+    `_push_contract_state()` does (the registered observer host running
+    pushgateway) and the same active env `default_env()` feeds the Contract
+    page. Daemon thread: it dies with the process, no explicit shutdown
+    needed when the GUI window closes."""
+    try:
+        hosts = observer.read_hosts()
+    except (OSError, ValueError) as exc:
+        print(f"Warning: could not read observer hosts, --watch will not push contract state: {exc}", file=sys.stderr)
+        return
+    host_entry = next((h for h in hosts if "pushgateway" in (h.get("services") or observer.ALL_SERVICE_NAMES)), None)
+    if host_entry is None:
+        print("Warning: no registered observer host runs pushgateway; --watch will not push contract state.", file=sys.stderr)
+        return
+
+    env = default_env()
+    host_name = str(host_entry.get("name", ""))
+    thread = threading.Thread(
+        target=observer.export_contract_state,
+        args=(env, host_name),
+        kwargs={"watch": True, "interval": interval},
+        daemon=True,
+    )
+    thread.start()
+
+
 def run(args: argparse.Namespace) -> int:
+    if getattr(args, "watch", False):
+        _start_contract_state_watch(getattr(args, "interval", 60) or 60)
     view = ft.AppView.WEB_BROWSER if getattr(args, "web", False) else ft.AppView.FLET_APP
     port = getattr(args, "port", None) or 0
     ft.run(main, view=view, port=port)
