@@ -1,0 +1,789 @@
+{
+  "identity": {
+    "process_key": "cp-daemon-2",
+    "host": "001",
+    "service": "cp-daemon",
+    "provider": "digitalocean",
+    "env": "devnet",
+    "backend": "vm",
+    "worker_index": 2,
+    "region": null,
+    "zone": null
+  },
+  "logging": [
+    {
+      "timestamp": "2026-08-02T07:10:54.095748+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-validator-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-validator-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-validator-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-validator-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:11:02.529732+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-validator-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-validator-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-validator-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-validator-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:11:10.923540+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-validator-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-validator-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-validator-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-validator-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:12:20.159202+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-validator-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-validator-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:12:26.755278+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-validator-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-validator-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:12:32.051150+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-validator-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-validator-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:13:41.414802+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:13:46.640072+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:13:52.930670+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:15:02.063238+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:15:10.305708+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:15:15.708220+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:16:26.557617+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:16:34.337002+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:16:41.664356+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:17:53.068709+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:17:59.119755+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:18:04.435727+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:19:13.206736+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:19:20.084603+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:19:25.803154+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "role_votes_cast_total": 16.0,
+        "role_vote_latency_avg_seconds": null,
+        "chain_tx_avg_duration_seconds_by_method": {},
+        "chain_tx_retries_total_by_method": {
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-1.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-001-cp-daemon-2.209-97-144-215.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 7.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-2.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-003-cp-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 6.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=provision-turn-secret,service=cp-daemon": 1.0,
+          "instance=digitalocean-002-cp-daemon-1.134-209-171-232.sslip.io:443,job=xaisen-cp-daemon,method=cast-role-vote,service=cp-daemon": 5.0
+        },
+        "chain_poll_avg_duration_seconds_by_module": {},
+        "chain_poll_events_processed_total_by_module": {},
+        "role_assignments_total": {
+          "instance=digitalocean-003-validator-daemon-1.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-001-signaling-2.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-validator-daemon-2.165-22-39-153.sslip.io:443,job=xaisen-validator-daemon,service=validator-daemon": 1.0,
+          "instance=digitalocean-002-signaling-2.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-002-signaling-1.134-209-171-232.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-1.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-003-signaling-2.165-22-39-153.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0,
+          "instance=digitalocean-001-signaling-1.209-97-144-215.sslip.io:443,job=xaisen-signaling,service=signaling": 1.0
+        },
+        "role_assignment_wait_avg_seconds": {}
+      }
+    }
+  ]
+}

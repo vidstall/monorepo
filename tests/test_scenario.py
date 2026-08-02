@@ -106,7 +106,7 @@ class ScenarioTestCase(unittest.TestCase):
             # would otherwise make real SSH/HTTP/on-chain calls against this
             # fake env on every action -- tests exercising the real snapshot
             # behavior patch this back per-test.
-            patch.object(system_log, "LOGS_ROOT", self.root / "logs"),
+            patch.object(context, "LOGS_ROOT", self.root / "logs"),
             patch.object(system_log, "capture_system_snapshot", return_value={"stub": True}),
             patch("cli.wallet.checkout_wallet", return_value=(dict(FAKE_WALLET), False)),
             patch("cli.wallet.release_wallet", return_value=None),
@@ -866,17 +866,23 @@ class RunTests(ScenarioTestCase):
             code = scenario.run(str(path), True)
         self.assertEqual(code, 0)
 
-        log_files = list((self.root / "logs" / "s").glob("*.json"))
-        self.assertEqual(len(log_files), 1)
-        doc = json.loads(log_files[0].read_text(encoding="utf-8"))
-        self.assertIsNotNone(doc["run_started_at"])
-        self.assertIsNotNone(doc["run_finished_at"])
-        phases = [event["phase"] for event in doc["events"]]
-        self.assertEqual(phases[0], "run_start")
-        self.assertIn("before_action", phases)
-        self.assertIn("after_action", phases)
-        self.assertEqual(phases[-1], "run_end")
-        after_action = next(event for event in doc["events"] if event["phase"] == "after_action")
+        run_dirs = list((self.root / "logs" / "s").glob("*"))
+        self.assertEqual(len(run_dirs), 1)
+        run_dir = run_dirs[0]
+
+        run_doc = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+        self.assertIsNotNone(run_doc["identity"]["run_started_at"])
+        run_phases = [event["phase"] for event in run_doc["events"]]
+        self.assertEqual(run_phases[0], "run_start")
+        self.assertEqual(run_phases[-1], "run_end")
+
+        action_files = list((run_dir / "actions").glob("*.json"))
+        self.assertEqual(len(action_files), 1)
+        action_doc = json.loads(action_files[0].read_text(encoding="utf-8"))
+        action_phases = [event["phase"] for event in action_doc["events"]]
+        self.assertIn("before_action", action_phases)
+        self.assertIn("after_action", action_phases)
+        after_action = next(event for event in action_doc["events"] if event["phase"] == "after_action")
         self.assertEqual(after_action["result"], {"botId": "b1"})
         self.assertGreaterEqual(after_action["duration_seconds"], 0)
 
@@ -892,7 +898,7 @@ class RunTests(ScenarioTestCase):
         ):
             scenario.run(str(path), True)
 
-        tmp_files = list((self.root / "logs" / "s").glob("*.tmp"))
+        tmp_files = list((self.root / "logs" / "s").rglob("*.tmp"))
         self.assertEqual(tmp_files, [])
 
     def test_run_records_run_end_even_when_action_fails(self) -> None:
@@ -908,11 +914,10 @@ class RunTests(ScenarioTestCase):
             code = scenario.run(str(path), True)
         self.assertNotEqual(code, 0)
 
-        log_files = list((self.root / "logs" / "s").glob("*.json"))
-        self.assertEqual(len(log_files), 1)
-        doc = json.loads(log_files[0].read_text(encoding="utf-8"))
-        self.assertIsNotNone(doc["run_finished_at"])
-        phases = [event["phase"] for event in doc["events"]]
+        run_dirs = list((self.root / "logs" / "s").glob("*"))
+        self.assertEqual(len(run_dirs), 1)
+        run_doc = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+        phases = [event["phase"] for event in run_doc["events"]]
         self.assertEqual(phases[-1], "run_end")
 
 
@@ -1086,9 +1091,13 @@ class SystemLogTests(ScenarioTestCase):
             time.sleep(0.05)
             sampler.stop()
 
-        during_events = [event for event in log._doc["events"] if event["phase"] == "during_action"]
+        action_files = list((log.run_dir / "actions").glob("*.json"))
+        self.assertEqual(len(action_files), 1)
+        doc = json.loads(action_files[0].read_text())
+        self.assertEqual(doc["identity"]["action_id"], "room1")
+
+        during_events = [event for event in doc["events"] if event["phase"] == "during_action"]
         self.assertGreater(len(during_events), 0)
-        self.assertEqual(during_events[0]["action_id"], "room1")
 
 
 if __name__ == "__main__":

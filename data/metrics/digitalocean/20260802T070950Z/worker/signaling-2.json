@@ -1,0 +1,183 @@
+{
+  "identity": {
+    "process_key": "signaling-2",
+    "host": "001",
+    "service": "signaling",
+    "provider": "digitalocean",
+    "env": "devnet",
+    "backend": "vm",
+    "worker_index": 2,
+    "region": null,
+    "zone": null
+  },
+  "logging": [
+    {
+      "timestamp": "2026-08-02T07:10:52.194404+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:11:00.216983+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:11:07.281534+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:12:17.823573+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:12:23.293972+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:12:30.325149+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:13:39.761648+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:13:44.933308+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:13:50.982420+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:15:00.429949+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:15:07.414312+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:15:14.040374+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:16:24.844398+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:16:32.452252+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:16:40.001060+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:17:50.730643+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:17:57.390257+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:18:02.787117+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:19:11.465380+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:19:18.418252+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:19:24.121550+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "rooms_with_participants": 0,
+        "total_participants_across_rooms": null
+      }
+    }
+  ]
+}

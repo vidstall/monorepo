@@ -25,6 +25,17 @@ RUNTIME_WALLET_TOML = RUNTIME_DIR / "wallet.toml"
 RUNTIME_SCENARIO_LOCK = RUNTIME_DIR / "scenario.lock"
 RUNTIME_IMAGES_TOML = RUNTIME_DIR / "images.toml"
 RUNTIME_OBSERVER_TOML = RUNTIME_DIR / "observer.toml"
+# data/metrics/<provider>/<run-timestamp>/{infra,worker,room,user}/*.json --
+# the live per-entity metrics schema, distinct from LOGS_ROOT (system_log.py's
+# scenario-run event trail). Promoted here because multiple
+# cli/observer/metrics_*.py and cli/scenario/metrics_sampler.py modules all
+# need it.
+METRICS_ROOT = ROOT / "data" / "metrics"
+# data/logs/<scenario_name>/<run_timestamp>/{run.json, actions/*.json} --
+# system_log.py's scenario-run event trail, split per-entity the same way as
+# METRICS_ROOT above (one file per action, plus a run-level file) instead of
+# one single ever-growing file per run.
+LOGS_ROOT = ROOT / "data" / "logs"
 SECRETS_DIR = ROOT / "secrets" / "cloud"
 REGISTRY_SECRETS_DIR = ROOT / "secrets" / "registry"
 WALLET_SECRETS_DIR = ROOT / "secrets" / "wallets"

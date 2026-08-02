@@ -171,6 +171,62 @@
         }
       },
       "options": { "colorMode": "background", "graphMode": "none", "textMode": "value_and_name" }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "PSI pressure (cpu/memory/io) + OOM kills",
+      "description": "node_pressure_{cpu,memory,io}_waiting_seconds_total and node_pressure_memory_stalled_seconds_total (Linux PSI, rate x100 = % of time stalled) plus node_vmstat_oom_kill -- surfaces saturation that raw CPU%/load-avg can miss, and outright OOM-kill events.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 44 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "100 * rate(node_pressure_cpu_waiting_seconds_total{instance=~\"$host\"}[5m])", "legendFormat": "cpu some {{instance}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "100 * rate(node_pressure_memory_waiting_seconds_total{instance=~\"$host\"}[5m])", "legendFormat": "memory some {{instance}}", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "100 * rate(node_pressure_memory_stalled_seconds_total{instance=~\"$host\"}[5m])", "legendFormat": "memory full {{instance}}", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "100 * rate(node_pressure_io_waiting_seconds_total{instance=~\"$host\"}[5m])", "legendFormat": "io some {{instance}}", "refId": "D" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(node_vmstat_oom_kill{instance=~\"$host\"}[5m])", "legendFormat": "oom kills/s {{instance}}", "refId": "E" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Disk I/O throughput",
+      "description": "node_disk_{read,written}_bytes_total -- per-device disk throughput, distinct from the filesystem-space panels above.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 44 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(node_disk_read_bytes_total{instance=~\"$host\"}[5m])", "legendFormat": "read {{instance}}/{{device}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(node_disk_written_bytes_total{instance=~\"$host\"}[5m])", "legendFormat": "write {{instance}}/{{device}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps" } }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Network errors + drops",
+      "description": "node_network_{receive,transmit}_{errs,drop}_total -- distinct from the throughput panel above; a healthy-looking throughput graph can still hide a rising error/drop rate.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 52 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(node_network_receive_errs_total{instance=~\"$host\", device!=\"lo\"}[5m])", "legendFormat": "rx errs {{instance}}/{{device}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(node_network_transmit_errs_total{instance=~\"$host\", device!=\"lo\"}[5m])", "legendFormat": "tx errs {{instance}}/{{device}}", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(node_network_receive_drop_total{instance=~\"$host\", device!=\"lo\"}[5m])", "legendFormat": "rx drop {{instance}}/{{device}}", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(node_network_transmit_drop_total{instance=~\"$host\", device!=\"lo\"}[5m])", "legendFormat": "tx drop {{instance}}/{{device}}", "refId": "D" }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Conntrack + TCP established connections",
+      "description": "node_nf_conntrack_entries vs node_nf_conntrack_entries_limit, and node_netstat_Tcp_CurrEstab -- relay/signaling under heavy WebRTC/TCP fallback load can exhaust the conntrack table before CPU/memory look stressed.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 52 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_nf_conntrack_entries{instance=~\"$host\"}", "legendFormat": "conntrack used {{instance}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_nf_conntrack_entries_limit{instance=~\"$host\"}", "legendFormat": "conntrack limit {{instance}}", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "node_netstat_Tcp_CurrEstab{instance=~\"$host\"}", "legendFormat": "tcp established {{instance}}", "refId": "C" }
+      ]
     }
   ]
 }

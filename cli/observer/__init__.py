@@ -5,7 +5,7 @@ from .contract_exporter import export_contract_state
 from .deploy import deploy
 from .inventory import ALL_SERVICE_NAMES, build_inventory, write_inventory
 from .lifecycle import clean, destroy, restart, start, stop
-from .query import query, room_participant_counts
+from .query import discover_active_peers, query, room_participant_counts
 from .secrets import grafana_admin_password, loki_auth_token, tempo_auth_token
 from .status import status
 
@@ -32,4 +32,5 @@ __all__ = [
     "export_contract_state",
     "query",
     "room_participant_counts",
+    "discover_active_peers",
 ]

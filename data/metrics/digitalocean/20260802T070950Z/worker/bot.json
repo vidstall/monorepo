@@ -1,0 +1,169 @@
+{
+  "identity": {
+    "process_key": "bot",
+    "host": "001",
+    "service": "bot",
+    "provider": "digitalocean",
+    "env": "devnet",
+    "backend": "vm",
+    "worker_index": 1,
+    "region": null,
+    "zone": null
+  },
+  "logging": [
+    {
+      "timestamp": "2026-08-02T07:10:59.641307+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "sessions_active": 1.0,
+        "sessions_total": 1.0,
+        "session_errors_total": 0.0,
+        "join_phase_avg_seconds": {},
+        "ffmpeg_respawns_total": {},
+        "ffmpeg_stderr_lines_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 57.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 61.0
+        },
+        "frame_drops_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 11.0
+        },
+        "underruns_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 105.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 64.0
+        }
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:12:22.705117+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "sessions_active": 1.0,
+        "sessions_total": 1.0,
+        "session_errors_total": 0.0,
+        "join_phase_avg_seconds": {},
+        "ffmpeg_respawns_total": {},
+        "ffmpeg_stderr_lines_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 204.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 209.0
+        },
+        "frame_drops_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 11.0
+        },
+        "underruns_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 105.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 64.0
+        }
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:13:44.349254+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "sessions_active": 1.0,
+        "sessions_total": 1.0,
+        "session_errors_total": 0.0,
+        "join_phase_avg_seconds": {},
+        "ffmpeg_respawns_total": {},
+        "ffmpeg_stderr_lines_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 379.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 387.0
+        },
+        "frame_drops_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 43.0
+        },
+        "underruns_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 105.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 97.0
+        }
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:15:06.794467+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "sessions_active": 1.0,
+        "sessions_total": 1.0,
+        "session_errors_total": 0.0,
+        "join_phase_avg_seconds": {},
+        "ffmpeg_respawns_total": {},
+        "ffmpeg_stderr_lines_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 527.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 535.0
+        },
+        "frame_drops_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 43.0
+        },
+        "underruns_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 105.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 97.0
+        }
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:16:31.812494+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "sessions_active": 1.0,
+        "sessions_total": 1.0,
+        "session_errors_total": 0.0,
+        "join_phase_avg_seconds": {},
+        "ffmpeg_respawns_total": {},
+        "ffmpeg_stderr_lines_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 703.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 714.0
+        },
+        "frame_drops_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 57.0
+        },
+        "underruns_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 105.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 111.0
+        }
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:17:56.733882+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "sessions_active": 1.0,
+        "sessions_total": 1.0,
+        "session_errors_total": 0.0,
+        "join_phase_avg_seconds": {},
+        "ffmpeg_respawns_total": {},
+        "ffmpeg_stderr_lines_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 881.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 892.0
+        },
+        "frame_drops_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 57.0
+        },
+        "underruns_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 105.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 111.0
+        }
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:19:17.856410+00:00",
+      "interval_seconds": 60,
+      "application": {
+        "sessions_active": 1.0,
+        "sessions_total": 1.0,
+        "session_errors_total": 0.0,
+        "join_phase_avg_seconds": {},
+        "ffmpeg_respawns_total": {},
+        "ffmpeg_stderr_lines_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 1027.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 1040.0
+        },
+        "frame_drops_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 81.0
+        },
+        "underruns_total": {
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=audio": 105.0,
+          "instance=digitalocean-001-bot-1.209-97-144-215.sslip.io:443,job=xaisen-bot,service=bot,track=video": 135.0
+        }
+      }
+    }
+  ]
+}

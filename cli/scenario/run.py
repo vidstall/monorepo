@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .actions import run_actions
 from .lock import read_lock
+from .metrics_sampler import INTERVAL_SECONDS, MetricsSampler
 from .spec import load_scenario
 from .system_log import SystemLog, record_snapshot_event
 
@@ -34,10 +35,17 @@ def run(path_str: str, yes: bool) -> int:
 
     env = scenario["env"]
     system_log = SystemLog(scenario_path_display, env, path.stem)
-    print(f"Logging system status for this run to: {system_log.path}")
+    print(f"Logging system status for this run to: {system_log.run_dir}")
     record_snapshot_event(system_log, env, "run_start")
+
+    metrics_sampler = MetricsSampler(env)
+    metrics_sampler.start()
+    print(
+        f"Capturing live metrics every {INTERVAL_SECONDS}s "
+        f"under data/metrics/<provider>/{metrics_sampler.run_timestamp}/"
+    )
     try:
         return run_actions(scenario, env, system_log=system_log)
     finally:
         record_snapshot_event(system_log, env, "run_end")
-        system_log.finish()
+        metrics_sampler.stop()

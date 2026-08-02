@@ -1,0 +1,154 @@
+{
+  "identity": {
+    "error": "could not fetch on-chain RoomInfo for 0x1351b55191ae3ddf761ef8e7393b0df51d142933784c7494b7164a99decc031a"
+  },
+  "metrics": [
+    {
+      "timestamp": "2026-08-02T07:11:15.592276+00:00",
+      "interval_seconds": 60,
+      "peer_quality": {
+        "avg_latency_ms": null,
+        "avg_packet_loss": null,
+        "avg_jitter_ms": null,
+        "avg_bitrate_up_kbps": null,
+        "avg_bitrate_down_kbps": null,
+        "freeze_count_total": null,
+        "pause_count_total": null,
+        "avg_connection_setup_ms": null,
+        "ice_success_rate": null
+      },
+      "rtc_quality_server_observed": {
+        "avg_jitter_ms": 7.208333333333333,
+        "avg_packet_loss_ratio": 0.0,
+        "avg_bitrate_kbps": 43.648,
+        "avg_rtt_ms": 1.617431640625
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:12:37.321767+00:00",
+      "interval_seconds": 60,
+      "peer_quality": {
+        "avg_latency_ms": null,
+        "avg_packet_loss": null,
+        "avg_jitter_ms": null,
+        "avg_bitrate_up_kbps": null,
+        "avg_bitrate_down_kbps": null,
+        "freeze_count_total": null,
+        "pause_count_total": null,
+        "avg_connection_setup_ms": null,
+        "ice_success_rate": null
+      },
+      "rtc_quality_server_observed": {
+        "avg_jitter_ms": 12.16712962962963,
+        "avg_packet_loss_ratio": 2.3333333333333335,
+        "avg_bitrate_kbps": 87.839,
+        "avg_rtt_ms": 219.8333740234375
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:13:57.872464+00:00",
+      "interval_seconds": 60,
+      "peer_quality": {
+        "avg_latency_ms": null,
+        "avg_packet_loss": null,
+        "avg_jitter_ms": null,
+        "avg_bitrate_up_kbps": null,
+        "avg_bitrate_down_kbps": null,
+        "freeze_count_total": null,
+        "pause_count_total": null,
+        "avg_connection_setup_ms": null,
+        "ice_success_rate": null
+      },
+      "rtc_quality_server_observed": {
+        "avg_jitter_ms": 11.936574074074073,
+        "avg_packet_loss_ratio": 0.6666666666666666,
+        "avg_bitrate_kbps": 83.41666666666667,
+        "avg_rtt_ms": 212.6617431640625
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:15:22.261768+00:00",
+      "interval_seconds": 60,
+      "peer_quality": {
+        "avg_latency_ms": null,
+        "avg_packet_loss": null,
+        "avg_jitter_ms": null,
+        "avg_bitrate_up_kbps": null,
+        "avg_bitrate_down_kbps": null,
+        "freeze_count_total": null,
+        "pause_count_total": null,
+        "avg_connection_setup_ms": null,
+        "ice_success_rate": null
+      },
+      "rtc_quality_server_observed": {
+        "avg_jitter_ms": 10.100925925925926,
+        "avg_packet_loss_ratio": 1.0,
+        "avg_bitrate_kbps": 81.04533333333333,
+        "avg_rtt_ms": 180.98958333333334
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:16:48.002175+00:00",
+      "interval_seconds": 60,
+      "peer_quality": {
+        "avg_latency_ms": null,
+        "avg_packet_loss": null,
+        "avg_jitter_ms": null,
+        "avg_bitrate_up_kbps": null,
+        "avg_bitrate_down_kbps": null,
+        "freeze_count_total": null,
+        "pause_count_total": null,
+        "avg_connection_setup_ms": null,
+        "ice_success_rate": null
+      },
+      "rtc_quality_server_observed": {
+        "avg_jitter_ms": 7.794444444444444,
+        "avg_packet_loss_ratio": 1.4,
+        "avg_bitrate_kbps": 159.026,
+        "avg_rtt_ms": 202.0904541015625
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:18:08.686417+00:00",
+      "interval_seconds": 60,
+      "peer_quality": {
+        "avg_latency_ms": null,
+        "avg_packet_loss": null,
+        "avg_jitter_ms": null,
+        "avg_bitrate_up_kbps": null,
+        "avg_bitrate_down_kbps": null,
+        "freeze_count_total": null,
+        "pause_count_total": null,
+        "avg_connection_setup_ms": null,
+        "ice_success_rate": null
+      },
+      "rtc_quality_server_observed": {
+        "avg_jitter_ms": 8.104444444444443,
+        "avg_packet_loss_ratio": 2.6,
+        "avg_bitrate_kbps": 158.698,
+        "avg_rtt_ms": 201.470947265625
+      }
+    },
+    {
+      "timestamp": "2026-08-02T07:19:31.597232+00:00",
+      "interval_seconds": 60,
+      "peer_quality": {
+        "avg_latency_ms": null,
+        "avg_packet_loss": null,
+        "avg_jitter_ms": null,
+        "avg_bitrate_up_kbps": null,
+        "avg_bitrate_down_kbps": null,
+        "freeze_count_total": null,
+        "pause_count_total": null,
+        "avg_connection_setup_ms": null,
+        "ice_success_rate": null
+      },
+      "rtc_quality_server_observed": {
+        "avg_jitter_ms": 9.3125,
+        "avg_packet_loss_ratio": 0.0,
+        "avg_bitrate_kbps": 155.9504,
+        "avg_rtt_ms": 202.276611328125
+      }
+    }
+  ]
+}

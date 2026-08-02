@@ -111,13 +111,21 @@ def _ensure_hosts() -> tuple[dict, dict]:
     return bourbon, vermouth
 
 
-def _grafana_url(address: str, dashboard_uid: str) -> str:
-    # ?kiosk hides Grafana's own nav chrome. theme=light forces Grafana's
-    # OWN UI into light mode -- Grafana defaults to dark regardless of this
-    # app's page.theme_mode (a separate app entirely, embedded via webview),
-    # and this page is deliberately light (see theme.py) -- without this the
-    # embed clashes.
+def _grafana_embed_url(address: str, dashboard_uid: str) -> str:
+    # ?kiosk hides Grafana's own nav chrome -- correct for the in-app
+    # WebView embed only, where this app's own chrome replaces it. theme=light
+    # forces Grafana's OWN UI into light mode -- Grafana defaults to dark
+    # regardless of this app's page.theme_mode (a separate app entirely,
+    # embedded via webview), and this page is deliberately light (see
+    # theme.py) -- without this the embed clashes.
     return f"https://grafana.{address.replace('.', '-')}.sslip.io/d/{dashboard_uid}/{dashboard_uid}?kiosk&theme=light"
+
+
+def _grafana_url(address: str, dashboard_uid: str) -> str:
+    # No ?kiosk: this URL is opened in a real external browser (or copied out
+    # by the user) rather than embedded, so Grafana's own toolbar -- template
+    # variable dropdowns, time-range picker -- should stay visible.
+    return f"https://grafana.{address.replace('.', '-')}.sslip.io/d/{dashboard_uid}/{dashboard_uid}?theme=light"
 
 
 def _tempo_ingest_url(address: str) -> str:
@@ -187,7 +195,7 @@ def build_observation_page(state) -> ft.Control:
             return False
 
     if address and _WEBVIEW_SUPPORTED:
-        webview_control = WebView(url=_grafana_url(address, selected["uid"]), expand=True)
+        webview_control = WebView(url=_grafana_embed_url(address, selected["uid"]), expand=True)
         detail_content: ft.Control = _panel(ft.Container(content=webview_control, expand=True), padding=0)
         detail_content.expand = True
     elif address:
@@ -217,7 +225,7 @@ def build_observation_page(state) -> ft.Control:
         selected["uid"] = uid
         refresh_dashboard_tabs()
         if webview_control is not None:
-            new_url = _grafana_url(current_address(), uid)
+            new_url = _grafana_embed_url(current_address(), uid)
             if webview_control.url != new_url:
                 webview_control.url = new_url
                 if _is_mounted(webview_control):

@@ -1,57 +1,53 @@
 from __future__ import annotations
 
-import json
-import os
 import threading
 from datetime import datetime, timezone
 from typing import Any
 
 from .. import context
+from ..observer.metrics_writer import MetricsFileRegistry, write_metrics_entry
 from .system_status import capture_system_snapshot
 
-LOGS_ROOT = context.ROOT / "logs"
 SAMPLE_INTERVAL_SECONDS = 5
+
+_ACTION_IDENTITY_FIELDS = ("action_index", "action_id", "action_type")
 
 
 class SystemLog:
-    """Owns one `scenario run`'s logs/<scenario-name>/<timestamp>.json file:
-    an in-memory event list plus atomic incremental persistence (write to a
-    sibling temp file, then os.replace) after every event, so a crash
-    mid-run leaves a valid, complete-so-far JSON file rather than a
-    truncated one or nothing at all."""
+    """Owns one `scenario run`'s event trail under
+    data/logs/<scenario_name>/<run_timestamp>/ -- `run.json` for run-level
+    events (run_start/run_end) and `actions/<index>-<type>.json` for one
+    action's events (before_action/during_action x N/after_action), mirroring
+    cli.scenario.metrics_sampler's per-entity file layout under
+    context.METRICS_ROOT instead of a single ever-growing file per run.
+    Reuses cli.observer.metrics_writer's atomic read-append-write primitive
+    directly rather than re-implementing it."""
 
     def __init__(self, scenario_path: str, env: str, scenario_name: str) -> None:
         self.env = env
         started = datetime.now(timezone.utc)
-        run_dir = LOGS_ROOT / scenario_name
-        run_dir.mkdir(parents=True, exist_ok=True)
-        self.path = run_dir / f"{started.strftime('%Y%m%dT%H%M%SZ')}.json"
-        self._file_lock = threading.Lock()
-        self._doc: dict[str, Any] = {
+        self.run_timestamp = started.strftime("%Y%m%dT%H%M%SZ")
+        self.run_dir = context.LOGS_ROOT / scenario_name / self.run_timestamp
+        self._registry = MetricsFileRegistry()
+        self._run_identity = {
             "scenario_path": scenario_path,
             "env": env,
             "run_started_at": started.isoformat(),
-            "run_finished_at": None,
-            "events": [],
         }
-        self._flush()
 
     def record(self, phase: str, **fields: Any) -> None:
-        event = {"phase": phase, "timestamp": datetime.now(timezone.utc).isoformat(), **fields}
-        with self._file_lock:
-            self._doc["events"].append(event)
-            self._flush()
+        action_index = fields.get("action_index")
+        if action_index is None:
+            event = {"phase": phase, "timestamp": datetime.now(timezone.utc).isoformat(), **fields}
+            write_metrics_entry(self._registry, self.run_dir / "run.json", self._run_identity, "events", event)
+            return
 
-    def finish(self) -> None:
-        with self._file_lock:
-            self._doc["run_finished_at"] = datetime.now(timezone.utc).isoformat()
-            self._flush()
-
-    def _flush(self) -> None:
-        # Caller already holds self._file_lock.
-        tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp_path.write_text(json.dumps(self._doc, indent=2, default=str), encoding="utf-8")
-        os.replace(tmp_path, self.path)
+        identity = {name: fields.get(name) for name in _ACTION_IDENTITY_FIELDS}
+        remaining = {k: v for k, v in fields.items() if k not in _ACTION_IDENTITY_FIELDS}
+        event = {"phase": phase, "timestamp": datetime.now(timezone.utc).isoformat(), **remaining}
+        safe_type = str(identity["action_type"] or "unknown").replace(".", "-")
+        path = self.run_dir / "actions" / f"{action_index:03d}-{safe_type}.json"
+        write_metrics_entry(self._registry, path, identity, "events", event)
 
 
 def record_snapshot_event(system_log: SystemLog | None, env: str, phase: str, **fields: Any) -> None:

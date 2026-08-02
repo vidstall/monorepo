@@ -77,6 +77,33 @@ def query(promql: str) -> list[dict] | None:
     return result if isinstance(result, list) else None
 
 
+_PEER_LABEL_QUERY = '{__name__=~"dvconf_relay_peer_.*|dvconf_rtc_.*"}'
+
+
+def discover_active_peers() -> dict[str, set[str]] | None:
+    """{roomId: {peerId, ...}} for every (roomId, peerId) pair currently
+    producing dvconf_relay_peer_*/dvconf_rtc_* samples -- the enumeration
+    source cli.scenario.metrics_sampler uses each tick to know which rooms
+    and peers to collect room/ and user/ metrics files for. Reuses this
+    module's existing query() primitive rather than a new Prometheus
+    label-values endpoint, since the same broad-regex query already used
+    by system_status.py's _relay_quality_snapshot() carries the roomId/
+    peerId labels this needs. None on any query failure, matching this
+    module's other functions."""
+    result = query(_PEER_LABEL_QUERY)
+    if result is None:
+        return None
+    active: dict[str, set[str]] = {}
+    for entry in result:
+        labels = entry.get("metric") or {}
+        room_id = str(labels.get("roomId", ""))
+        peer_id = str(labels.get("peerId", ""))
+        if not room_id or not peer_id:
+            continue
+        active.setdefault(room_id, set()).add(peer_id)
+    return active
+
+
 def room_participant_counts() -> dict[str, int] | None:
     """{roomId: current participant count} for every room Prometheus has a
     dvconf_room_participants sample for -- the signaling service's live

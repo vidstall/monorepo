@@ -43,6 +43,18 @@
       ]
     },
     {
+      "id": 7,
+      "type": "stat",
+      "title": "Active sessions",
+      "description": "dvconf_active_sessions{job=\"xaisen-bot\"} -- current gauge, distinct from the started/errored rates above.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_active_sessions{job=\"xaisen-bot\"}", "legendFormat": "{{instance}}", "refId": "A" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "area", "textMode": "value_and_name" }
+    },
+    {
       "id": 4,
       "type": "timeseries",
       "title": "CPU + resident memory",

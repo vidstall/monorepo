@@ -155,6 +155,99 @@
       "targets": [
         { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_role_assignment_wait_seconds_count{job=\"$role\"}[5m])", "legendFormat": "{{result}}", "refId": "A" }
       ]
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Relay (only populated for role=relay)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 49 },
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Active sessions + room count",
+      "description": "dvconf_relay_active_sessions / dvconf_relay_room_count -- apps/relay/src's SFU worker-side session/room gauges. Only populated for relay.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 50 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_relay_active_sessions{job=\"$role\"}", "legendFormat": "sessions {{instance}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_relay_room_count{job=\"$role\"}", "legendFormat": "rooms {{instance}}", "refId": "B" }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Bytes forwarded + mediasoup worker deaths",
+      "description": "rate(dvconf_relay_bytes_forwarded_total) and rate(dvconf_relay_worker_died_total) -- the latter is a hard-failure signal (a mediasoup child worker process exited). Only populated for relay.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 50 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_relay_bytes_forwarded_total{job=\"$role\"}[5m])", "legendFormat": "bytes/s {{instance}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_relay_worker_died_total{job=\"$role\"}[5m])", "legendFormat": "worker deaths/s {{instance}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps" } }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "mediasoup worker resource usage",
+      "description": "dvconf_relay_worker_ru_{utime,stime}_ms / ru_maxrss_kb -- per mediasoup child-worker getrusage() sample. Only populated for relay.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 58 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_relay_worker_ru_utime_ms{job=\"$role\"}", "legendFormat": "utime {{workerId}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_relay_worker_ru_stime_ms{job=\"$role\"}", "legendFormat": "stime {{workerId}}", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_relay_worker_ru_maxrss_kb{job=\"$role\"}", "legendFormat": "maxrss {{workerId}}", "refId": "C" }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Failover events + duration by phase",
+      "description": "rate(dvconf_failover_events_total) and dvconf_failover_duration_seconds by phase -- relay standby/promotion failover path. Only populated for relay.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 58 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_failover_events_total{job=\"$role\"}[5m])", "legendFormat": "events/s {{phase}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "histogram_quantile(0.95, sum(rate(dvconf_failover_duration_seconds_bucket{job=\"$role\"}[5m])) by (le, phase))", "legendFormat": "p95 duration {{phase}}", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 19,
+      "type": "row",
+      "title": "Validator canary (only populated for role=validator-daemon)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 66 },
+      "panels": []
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Relay probe RTT/jitter/loss (validator-observed)",
+      "description": "dvconf_validator_relay_rtt_ms / relay_jitter_ms / relay_loss_bps by relay -- validator-daemon's independent canary probe of each relay, apps/validator-daemon. Only populated for validator-daemon.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 67 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_validator_relay_rtt_ms{job=\"$role\"}", "legendFormat": "rtt {{relay}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_validator_relay_jitter_ms{job=\"$role\"}", "legendFormat": "jitter {{relay}}", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_validator_relay_loss_bps{job=\"$role\"}", "legendFormat": "loss bps {{relay}}", "refId": "C" }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Canary coverage + quorum + divergence",
+      "description": "dvconf_canary_coverage_distinct_validators / dvconf_canary_quorum_met by relay, and rate(dvconf_canary_divergence_promoted_total) -- cross-validator canary consensus signals. Only populated for validator-daemon.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 67 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_canary_coverage_distinct_validators{job=\"$role\"}", "legendFormat": "coverage {{relay}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_canary_quorum_met{job=\"$role\"}", "legendFormat": "quorum met {{relay}}", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "rate(dvconf_canary_divergence_promoted_total{job=\"$role\"}[5m])", "legendFormat": "divergence promotions/s", "refId": "C" }
+      ]
     }
   ]
 }
