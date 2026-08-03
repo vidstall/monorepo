@@ -100,10 +100,24 @@ def _rate_series(instance_filter: str, metric_name: str) -> tuple[list[tuple[str
     return series, False
 
 
+# Every real Prometheus series carries these two labels unconditionally
+# (attached by Prometheus itself from the scrape target), regardless of
+# how few labels the metric's own exporter output has -- they're not a
+# "real" distinguishing dimension the way e.g. cpu's `mode` or network's
+# `device` are.
+_UNIVERSAL_LABELS = {"instance", "job"}
+
+
 def _scalar(series: list[tuple[str, dict[str, str], float]]) -> dict[str, float]:
     """Metric-name -> value for series with no other distinguishing label
-    (load average, memory totals, boot time, ...)."""
-    return {name: value for name, labels, value in series if not labels}
+    (load average, memory totals, boot time, ...) beyond the universal
+    instance/job pair every series carries. Previously required `labels`
+    to be entirely empty, which no real series ever is -- this silently
+    returned {} for every field routed through it (memory, load average,
+    uptime, TCP/conntrack counts, OOM kills, all PSI percentages) despite
+    the underlying Prometheus data existing; confirmed live against a real
+    deployment."""
+    return {name: value for name, labels, value in series if not (set(labels) - _UNIVERSAL_LABELS)}
 
 
 def _cpu_usage_percent(rate_series: list[tuple[str, dict[str, str], float]]) -> float | None:
@@ -170,9 +184,28 @@ def _disk_partitions(gauge_series: list[tuple[str, dict[str, str], float]]) -> l
     return partitions
 
 
+_NETWORK_RATE_NAMES = {
+    "node_network_receive_bytes_total",
+    "node_network_transmit_bytes_total",
+    "node_network_receive_errs_total",
+    "node_network_transmit_errs_total",
+    "node_network_receive_drop_total",
+    "node_network_transmit_drop_total",
+}
+
+
 def _network_interfaces(rate_series: list[tuple[str, dict[str, str], float]]) -> list[dict[str, Any]]:
+    # node_disk_read_bytes_total/node_disk_written_bytes_total also carry a
+    # `device` label (the block device name, e.g. vda/vdb) -- rate_series
+    # here is the FULL combined series across every _RATE_NAMES metric, so
+    # without this filter disk device names leaked into this "network
+    # interfaces" list with every field null (confirmed live: vda/vdb
+    # showing up alongside eth0). Restricting to the actual
+    # node_network_* names keeps this list to real interfaces only.
     by_iface: dict[str, dict[str, float]] = {}
     for name, labels, value in rate_series:
+        if name not in _NETWORK_RATE_NAMES:
+            continue
         iface = labels.get("device")
         if not iface or iface == "lo":
             continue

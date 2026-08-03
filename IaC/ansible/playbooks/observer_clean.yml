@@ -36,6 +36,7 @@
         - xaisen-prometheus
         - xaisen-tempo
         - xaisen-grafana
+        - xaisen-grafana-renderer
         - xaisen-pushgateway
         - xaisen-loki
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sys
 import threading
+import traceback
 from datetime import datetime, timezone
 from typing import Any
 
@@ -9,17 +11,24 @@ from ..observer import metrics_infra, metrics_room, metrics_user, metrics_worker
 from ..observer.metrics_writer import MetricsFileRegistry, write_metrics_entry
 from .system_status import _worker_key
 
-# Independent of DuringActionSampler's SAMPLE_INTERVAL_SECONDS=5 (which is
-# action-scoped, sampling only while one action's blocking dispatch call is
-# in flight) -- this sampler runs for the whole scenario run's duration on
-# its own fixed timer, per the user's explicit direction.
-INTERVAL_SECONDS = 60
+# Independent of DuringActionSampler's SAMPLE_INTERVAL_SECONDS (action-scoped,
+# sampling only while one action's blocking dispatch call is in flight) --
+# this sampler runs for the whole scenario run's duration on its own fixed
+# timer, per the user's explicit direction. Same numeric value as that one
+# is coincidental, not a shared constant -- keep them independently settable.
+INTERVAL_SECONDS = 5
 
 # room/ and user/ metrics aren't naturally scoped to one infra provider (a
-# room's relay could be on any provider) -- filing them under a fixed
-# pseudo-provider directory keeps the on-disk layout consistent
-# (data/metrics/<provider>/<run_timestamp>/...) without guessing which
-# physical host "owns" a room.
+# room's relay could be on any provider). Historically filed under a fixed
+# "chain" pseudo-provider directory for that reason -- but that split a
+# single scenario run's output across two top-level folders (its real
+# provider(s) for infra/worker, "chain" for room/user) even once
+# infra/worker/room/user all shared the same <run_timestamp>. Now MetricsSampler
+# is constructed with the SAME top-level key SystemLog's run_dir uses
+# (scenario_name / the scenario file's stem, see run.py) so one run's
+# entire logs/<key>/<run_timestamp>/ tree -- actions, run.json, infra,
+# worker, room, user -- lands in one folder. Kept as the fallback default
+# for the rare direct construction (e.g. tests) that doesn't pass one in.
 _CHAIN_PSEUDO_PROVIDER = "chain"
 
 
@@ -102,8 +111,8 @@ def _capture_worker_entry(worker: dict[str, Any], run_timestamp: str, registry: 
     write_metrics_entry(registry, path, identity, "logging", entry)
 
 
-def _capture_room_entry(room_id: str, run_timestamp: str, registry: MetricsFileRegistry) -> None:
-    path = context.METRICS_ROOT / _CHAIN_PSEUDO_PROVIDER / run_timestamp / "room" / f"{room_id}.json"
+def _capture_room_entry(room_id: str, run_timestamp: str, room_provider_key: str, registry: MetricsFileRegistry) -> None:
+    path = context.METRICS_ROOT / room_provider_key / run_timestamp / "room" / f"{room_id}.json"
     identity = metrics_room.collect_room_identity(room_id)
     quality = metrics_room.collect_room_peer_quality(room_id)
     entry = {
@@ -114,11 +123,13 @@ def _capture_room_entry(room_id: str, run_timestamp: str, registry: MetricsFileR
     write_metrics_entry(registry, path, identity, "metrics", entry)
 
 
-def _capture_user_entry(room_id: str, peer_id: str, run_timestamp: str, registry: MetricsFileRegistry) -> None:
+def _capture_user_entry(
+    room_id: str, peer_id: str, run_timestamp: str, room_provider_key: str, registry: MetricsFileRegistry
+) -> None:
     sample = metrics_user.collect_user_sample(room_id, peer_id)
     if sample is None:
         return
-    path = context.METRICS_ROOT / _CHAIN_PSEUDO_PROVIDER / run_timestamp / "user" / f"{peer_id}.json"
+    path = context.METRICS_ROOT / room_provider_key / run_timestamp / "user" / f"{peer_id}.json"
     identity = {"room_id": room_id, "peer_id": peer_id}
     entry = {
         "timestamp": infra.timestamp(),
@@ -128,14 +139,19 @@ def _capture_user_entry(room_id: str, peer_id: str, run_timestamp: str, registry
     write_metrics_entry(registry, path, identity, "metrics", entry)
 
 
-def capture_metrics_tick(env: str, run_timestamp: str, registry: MetricsFileRegistry) -> None:
+def capture_metrics_tick(
+    env: str, run_timestamp: str, room_provider_key: str, registry: MetricsFileRegistry
+) -> None:
     """One sampling tick: infra + worker + room + user metrics, written
-    directly to data/metrics/<provider>/<run_timestamp>/{infra,worker,room,user}/*.json.
-    Every sub-step is independently defensive (matching system_status.py's
-    warn-and-continue convention) so one bad host/query never blanks the
-    rest of the tick; the whole function is additionally wrapped by
-    MetricsSampler._run so an unexpected failure here can never kill the
-    sampler thread or the scenario run."""
+    directly to logs/<key>/<run_timestamp>/{infra,worker,room,user}/*.json --
+    infra/worker keyed by each worker's own real provider, room/user keyed
+    by `room_provider_key` (see MetricsSampler's docstring on why that's
+    NOT necessarily a real provider name). Every sub-step is independently
+    defensive (matching system_status.py's warn-and-continue convention) so
+    one bad host/query never blanks the rest of the tick; the whole
+    function is additionally wrapped by MetricsSampler._run so an
+    unexpected failure here can never kill the sampler thread or the
+    scenario run."""
     workers = _active_workers(env)
 
     for host_worker in _distinct_hosts(workers):
@@ -146,24 +162,42 @@ def capture_metrics_tick(env: str, run_timestamp: str, registry: MetricsFileRegi
 
     active_peers = observer.discover_active_peers() or {}
     for room_id, peer_ids in active_peers.items():
-        _capture_room_entry(room_id, run_timestamp, registry)
+        _capture_room_entry(room_id, run_timestamp, room_provider_key, registry)
         for peer_id in peer_ids:
-            _capture_user_entry(room_id, peer_id, run_timestamp, registry)
+            _capture_user_entry(room_id, peer_id, run_timestamp, room_provider_key, registry)
 
 
 class MetricsSampler:
-    """Background thread that captures the data/metrics/ schema for the
+    """Background thread that captures the logs/ metrics schema for the
     whole duration of one `vidctl scenario run`, ticking on its own fixed
-    60s timer -- independent of individual actions (unlike
+    fixed INTERVAL_SECONDS timer -- independent of individual actions (unlike
     cli.scenario.system_log.DuringActionSampler, which only samples while
     one action's blocking dispatch call is in flight). Fully additive to
     SystemLog: this never touches logs/ or system_log.record(), and a
     failure here can never abort the scenario run (see capture_metrics_tick's
     docstring and _run's blanket try/except below)."""
 
-    def __init__(self, env: str) -> None:
+    def __init__(
+        self, env: str, run_timestamp: str | None = None, room_provider_key: str = _CHAIN_PSEUDO_PROVIDER
+    ) -> None:
         self._env = env
-        self.run_timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        # Normally passed in by run() -- generated ONCE, before either
+        # SystemLog or MetricsSampler is constructed, so this run's
+        # metrics land under the same <run_timestamp> as its event log
+        # (logs/<scenario_name>/<run_timestamp>/ vs
+        # logs/<provider>/<run_timestamp>/) instead of each independently
+        # stamping "now" a few dozen ms apart. run_timestamp represents
+        # when `scenario run` was INVOKED, not when this sampler's first
+        # tick actually fires (that's always run_timestamp + INTERVAL_SECONDS,
+        # see _run() below).
+        self.run_timestamp = run_timestamp if run_timestamp is not None else datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        # room_provider_key: normally also passed in by run() as the SAME
+        # scenario_name SystemLog uses, so room/ and user/ land in the same
+        # logs/<key>/<run_timestamp>/ folder as infra/worker/actions/run.json
+        # instead of a separate "chain" top-level folder -- see module
+        # docstring on _CHAIN_PSEUDO_PROVIDER for why room/user were ever
+        # split out in the first place.
+        self._room_provider_key = room_provider_key
         self._registry = MetricsFileRegistry()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -178,6 +212,18 @@ class MetricsSampler:
     def _run(self) -> None:
         while not self._stop.wait(INTERVAL_SECONDS):
             try:
-                capture_metrics_tick(self._env, self.run_timestamp, self._registry)
+                capture_metrics_tick(self._env, self.run_timestamp, self._room_provider_key, self._registry)
             except Exception:  # noqa: BLE001 - a sampler crash must never kill the run
-                pass
+                # Previously a silent `pass` -- a tick failing for ANY reason
+                # (a transient Prometheus auth hiccup, a query timeout, ...)
+                # left that tick's room/user/infra/worker files simply
+                # missing with zero trace afterward, indistinguishable from
+                # "nothing was active this tick". Print (not raise) so the
+                # scenario run still can't be aborted by a sampler bug, but
+                # a gap in logs/<provider>/<run_timestamp>/ is now
+                # explainable instead of a silent mystery.
+                print(
+                    f"Warning: metrics sampler tick failed for run {self.run_timestamp!r}:\n"
+                    f"{traceback.format_exc()}",
+                    file=sys.stderr,
+                )

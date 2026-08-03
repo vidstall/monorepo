@@ -350,6 +350,228 @@
       }
     },
     {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Latency avg/min/max (cumulative since join)",
+      "description": "dvconf_relay_peer_latency_ms_avg/_min/_max{roomId,peerId} -- client-computed running avg/min/max since the peer joined the room, apps/relay/src/metrics-server.ts. Distinct from the instantaneous latency panel above.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_latency_ms_avg{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "avg {{roomId}}/{{peerId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_latency_ms_min{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "min {{roomId}}/{{peerId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_latency_ms_max{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "max {{roomId}}/{{peerId}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Jitter avg/min/max (cumulative since join)",
+      "description": "dvconf_relay_peer_jitter_ms_avg/_min/_max{roomId,peerId} -- client-computed running avg/min/max since the peer joined the room, apps/relay/src/metrics-server.ts.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_jitter_ms_avg{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "avg {{roomId}}/{{peerId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_jitter_ms_min{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "min {{roomId}}/{{peerId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_jitter_ms_max{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "max {{roomId}}/{{peerId}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Packet loss avg/min/max (cumulative since join)",
+      "description": "dvconf_relay_peer_packet_loss_avg/_min/_max{roomId,peerId} -- client-computed running avg/min/max since the peer joined the room, apps/relay/src/metrics-server.ts.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_packet_loss_avg{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "avg {{roomId}}/{{peerId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_packet_loss_min{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "min {{roomId}}/{{peerId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_packet_loss_max{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "max {{roomId}}/{{peerId}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Bitrate up/down avg/min/max (cumulative since join)",
+      "description": "dvconf_relay_peer_bitrate_{up,down}_kbps_avg/_min/_max{roomId,peerId} -- client-computed running avg/min/max since the peer joined the room, apps/relay/src/metrics-server.ts.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_bitrate_up_kbps_avg{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "up avg {{roomId}}/{{peerId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_bitrate_up_kbps_min{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "up min {{roomId}}/{{peerId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_bitrate_up_kbps_max{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "up max {{roomId}}/{{peerId}}",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_bitrate_down_kbps_avg{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "down avg {{roomId}}/{{peerId}}",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_bitrate_down_kbps_min{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "down min {{roomId}}/{{peerId}}",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_bitrate_down_kbps_max{roomId=~\"$room\"}) by (roomId, peerId)",
+          "legendFormat": "down max {{roomId}}/{{peerId}}",
+          "refId": "F"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Kbits"
+        }
+      }
+    },
+    {
       "id": 101,
       "type": "row",
       "title": "Bot (fake test participant) internals",
@@ -358,7 +580,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 32
+        "y": 48
       },
       "panels": [
         {
@@ -374,7 +596,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 33
+            "y": 49
           },
           "targets": [
             {
@@ -401,7 +623,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 41
+            "y": 57
           },
           "targets": [
             {
@@ -433,7 +655,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 41
+            "y": 57
           },
           "targets": [
             {
@@ -468,7 +690,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 49
+            "y": 65
           },
           "targets": [
             {
@@ -509,7 +731,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 57
+            "y": 73
           },
           "targets": [
             {
@@ -545,7 +767,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 57
+            "y": 73
           },
           "targets": [
             {
@@ -581,7 +803,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 65
+            "y": 81
           },
           "targets": [
             {

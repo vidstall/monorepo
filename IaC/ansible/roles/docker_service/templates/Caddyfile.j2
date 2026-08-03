@@ -38,10 +38,15 @@
    probe (room-assignment.ts) reach ANY candidate relay's health endpoint
    over the public hostname, regardless of whether cp-daemon happens to be
    colocated with that relay or on a different host entirely. /stats/*
-   (the client's POST /stats/report) is
-   relay/signaling's own app-protocol route, not a generic metrics-server
-   feature -- scoped to xaisen_stats_report_services so it isn't wrongly
-   added for bot/cp-daemon/validator-daemon, which don't implement it. #}
+   (the client's POST /stats/report), /logs/* (POST /logs/report), and
+   /relay-down-hint* are relay's own app-protocol routes, not a generic
+   metrics-server feature -- scoped to xaisen_stats_report_services so
+   they aren't wrongly added for bot/cp-daemon/validator-daemon, which
+   don't implement them. Without an explicit handle block here, a path
+   falls through to the generic handle{} below and gets proxied to the
+   WRONG port (the main WS/signaling port, not the metrics port these
+   routes actually live on) -- confirmed missing for /logs/* and
+   /relay-down-hint* before this comment was added. #}
 {% set xaisen_internal_ports = {'relay': 4000, 'signaling': 8080, 'bot': 8095} %}
 {% set xaisen_metrics_ports = {'relay': 4001, 'signaling': 8083, 'bot': 8096, 'cp-daemon': 8092, 'validator-daemon': 8103} %}
 {% set xaisen_stats_report_services = ['relay', 'signaling'] %}
@@ -56,6 +61,12 @@
     }
 {% if svc.service in xaisen_stats_report_services %}
     handle /stats/* {
+        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
+    }
+    handle /logs/* {
+        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
+    }
+    handle /relay-down-hint* {
         reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
     }
 {% endif %}

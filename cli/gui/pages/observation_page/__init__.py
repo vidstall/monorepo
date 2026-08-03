@@ -22,20 +22,20 @@ except ImportError:
     WebView = None  # type: ignore[assignment, misc]
     _WEBVIEW_SUPPORTED = False
 
-# The two static, never-Pulumi-managed, never-rebooted monitoring boxes this
-# page watches -- bourbon and vermouth, two weak (1cpu/1gb) hosts dividing
-# the observer stack between them instead of each running all 5 services
-# colocated (see cli/observer/inventory.py's per-host `services` split).
-# Hardcoded rather than exposed as an add/remove-able list in the UI, same
-# reasoning as before this split existed: there are exactly 2 fixed hosts in
-# practice, never added/removed through this page. Kept as module constants
-# (not form defaults) since nothing here ever prompts for these values --
-# see _ensure_hosts() below.
+# The three static, never-Pulumi-managed, never-rebooted monitoring boxes
+# this page watches -- bourbon, vermouth, and baileys, dividing the observer
+# stack between them instead of each running all 5 services colocated (see
+# cli/observer/inventory.py's per-host `services` split). Hardcoded rather
+# than exposed as an add/remove-able list in the UI, same reasoning as
+# before this split existed: there are exactly 3 fixed hosts in practice,
+# never added/removed through this page. Kept as module constants (not form
+# defaults) since nothing here ever prompts for these values -- see
+# _ensure_hosts() below.
 BOURBON_HOST = "bourbon"
 BOURBON_ADDRESS = "161.118.232.63"
 BOURBON_SSH_USER = "deploy"
 BOURBON_SSH_KEY = "~/.ssh/rotexai/bourbon-deploy"
-BOURBON_SERVICES = ["prometheus", "grafana", "pushgateway"]
+BOURBON_SERVICES = ["prometheus", "pushgateway"]
 
 VERMOUTH_HOST = "vermouth"
 VERMOUTH_ADDRESS = "140.245.113.173"
@@ -43,10 +43,15 @@ VERMOUTH_SSH_USER = "deploy"
 VERMOUTH_SSH_KEY = "~/.ssh/rotexai/vermouth-deploy"
 VERMOUTH_SERVICES = ["tempo", "loki"]
 
-# Grafana always lives on bourbon under the chosen split -- this alias is
-# what the dashboard-embed path (current_address()/_grafana_url()) resolves
-# against.
-DEFAULT_HOST = BOURBON_HOST
+BAILEYS_HOST = "baileys"
+BAILEYS_ADDRESS = "161.118.231.171"
+BAILEYS_SSH_USER = "deploy"
+BAILEYS_SSH_KEY = "~/.ssh/rotexai/baileys-deploy"
+BAILEYS_SERVICES = ["grafana"]
+
+# Grafana lives on baileys under the current split -- this alias is what the
+# dashboard-embed path (current_address()/_grafana_url()) resolves against.
+DEFAULT_HOST = BAILEYS_HOST
 
 # (dashboard uid, display name, description, icon) for every dashboard
 # provisioned by grafana-dashboard-provider.yml.j2 -- see
@@ -96,12 +101,12 @@ DASHBOARDS = [
 DEFAULT_DASHBOARD_UID = "overview"
 
 
-def _ensure_hosts() -> tuple[dict, dict]:
-    """Register both hardcoded observer hosts if they aren't already in
+def _ensure_hosts() -> tuple[dict, dict, dict]:
+    """Register all three hardcoded observer hosts if they aren't already in
     runtime/observer.toml -- idempotent (add_host() updates in place by
     name), so this is safe to call on every page build. bourbon gets
-    prometheus+grafana+pushgateway, vermouth gets tempo+loki -- the
-    confirmed split dividing the monitoring stack across the two weak
+    prometheus+pushgateway, vermouth gets tempo+loki, baileys gets grafana --
+    the confirmed split dividing the monitoring stack across the three weak
     static hosts."""
     bourbon = observer_cli.find_host(BOURBON_HOST) or observer_cli.add_host(
         BOURBON_HOST, BOURBON_ADDRESS, BOURBON_SSH_USER, BOURBON_SSH_KEY, services=BOURBON_SERVICES
@@ -109,7 +114,10 @@ def _ensure_hosts() -> tuple[dict, dict]:
     vermouth = observer_cli.find_host(VERMOUTH_HOST) or observer_cli.add_host(
         VERMOUTH_HOST, VERMOUTH_ADDRESS, VERMOUTH_SSH_USER, VERMOUTH_SSH_KEY, services=VERMOUTH_SERVICES
     )
-    return bourbon, vermouth
+    baileys = observer_cli.find_host(BAILEYS_HOST) or observer_cli.add_host(
+        BAILEYS_HOST, BAILEYS_ADDRESS, BAILEYS_SSH_USER, BAILEYS_SSH_KEY, services=BAILEYS_SERVICES
+    )
+    return bourbon, vermouth, baileys
 
 
 def _grafana_embed_url(address: str, dashboard_uid: str) -> str:
@@ -151,7 +159,7 @@ def build_observation_page(state) -> ft.Control:
     selected = {"uid": DEFAULT_DASHBOARD_UID}
 
     def current_address() -> str:
-        host = observer_cli.find_host(BOURBON_HOST)
+        host = observer_cli.find_host(BAILEYS_HOST)
         return str(host.get("address", "")) if host else ""
 
     def vermouth_address() -> str:
@@ -183,7 +191,7 @@ def build_observation_page(state) -> ft.Control:
     # Flet Web), which matches this GUI's real target -- the native desktop
     # app. One persistent WebView control (never recreated) built once, up
     # front, off the address available at page-build time -- this page only
-    # ever watches the hardcoded BOURBON_HOST (grafana's home under the
+    # ever watches the hardcoded BAILEYS_HOST (grafana's home under the
     # chosen split), whose address doesn't change without a full page
     # rebuild anyway.
     _ensure_hosts()
@@ -245,11 +253,12 @@ def build_observation_page(state) -> ft.Control:
 
     def open_manage_dialog(_: ft.ControlEvent) -> None:
         """Everything that isn't "watch a dashboard" -- secrets and
-        lifecycle actions for the two hardcoded observer hosts (bourbon and
-        vermouth, dividing the stack between them) -- lives behind this
-        settings button instead of on the main page, which is the live
-        monitoring view first and a control panel only on request."""
-        bourbon_address = current_address()
+        lifecycle actions for the three hardcoded observer hosts (bourbon,
+        vermouth, and baileys, dividing the stack between them) -- lives
+        behind this settings button instead of on the main page, which is
+        the live monitoring view first and a control panel only on
+        request."""
+        baileys_address = current_address()
         vermouth_addr = vermouth_address()
 
         def action(host_name: str, action_name: str, fn, needs_confirm: bool = False, confirm_message: str = "") -> Callable[[ft.ControlEvent], None]:
@@ -315,12 +324,12 @@ def build_observation_page(state) -> ft.Control:
 
         manage_body = ft.Column(
             [
-                ft.Text("bourbon — prometheus, grafana, pushgateway", size=12, color=theme.INK_MUTED, weight=ft.FontWeight.BOLD),
+                ft.Text("baileys — grafana", size=12, color=theme.INK_MUTED, weight=ft.FontWeight.BOLD),
                 _panel(
                     ft.Column(
                         [
                             ft.Row([ft.Icon(ft.Icons.DASHBOARD, color=theme.INK_MUTED, size=16), _label("GRAFANA")]),
-                            copyable_id(_grafana_url(bourbon_address, selected["uid"]), page) if bourbon_address else _data_text("-"),
+                            copyable_id(_grafana_url(baileys_address, selected["uid"]), page) if baileys_address else _data_text("-"),
                             ft.Text(
                                 "Anonymous viewers see dashboards read-only -- this password is for editing:",
                                 size=11,
@@ -332,11 +341,20 @@ def build_observation_page(state) -> ft.Control:
                     )
                 ),
                 *lifecycle_rows(
+                    BAILEYS_HOST,
+                    destroy_message="Removes the grafana container, but keeps its stored data on disk -- "
+                    "a later deploy/start recreates it with dashboards/login intact.",
+                    clean_message="Removes the container AND wipes Grafana's stored data permanently. "
+                    "This cannot be undone.",
+                ),
+                ft.Divider(height=1, color=theme.HAIRLINE),
+                ft.Text("bourbon — prometheus, pushgateway", size=12, color=theme.INK_MUTED, weight=ft.FontWeight.BOLD),
+                *lifecycle_rows(
                     BOURBON_HOST,
-                    destroy_message="Removes the prometheus/grafana/pushgateway containers, but keeps their "
+                    destroy_message="Removes the prometheus/pushgateway containers, but keeps their "
                     "stored data on disk -- a later deploy/start recreates them with history intact.",
-                    clean_message="Removes the containers AND wipes Prometheus's stored history permanently "
-                    "(Grafana's dashboards/login are kept). This cannot be undone.",
+                    clean_message="Removes the containers AND wipes Prometheus's stored history permanently. "
+                    "This cannot be undone.",
                 ),
                 ft.Divider(height=1, color=theme.HAIRLINE),
                 ft.Text("vermouth — tempo, loki", size=12, color=theme.INK_MUTED, weight=ft.FontWeight.BOLD),

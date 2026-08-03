@@ -23,21 +23,42 @@ def collect_room_peer_quality(room_id: str) -> dict[str, Any]:
     to one roomId via PromQL label matching instead of pulled fleet-wide.
     Mirrors the field shape already established for
     worker/relay-001.json's `peer_quality`/`rtc_quality_server_observed`
-    blocks, so room-level and relay-level fixtures stay comparable."""
+    blocks, so room-level and relay-level fixtures stay comparable.
+
+    dvconf_rtc_* now carries a `kind` (audio/video) label (see
+    rtc-quality-metrics.ts) -- rtc_quality_server_observed is split per kind
+    below so audio and video quality can actually be told apart and compared
+    (e.g. to see one running hotter/laggier than the other), rather than a
+    single flat average that silently favored whichever kind's getStats()
+    happened to resolve last on the relay each tick (the bug this
+    per-kind split replaces)."""
     result = query(f'{{__name__=~"dvconf_relay_peer_.*|dvconf_rtc_.*", roomId="{room_id}"}}')
 
     by_metric: dict[str, list[float]] = {}
+    by_metric_kind: dict[str, dict[str, list[float]]] = {}
     if result:
         for entry in result:
             labels = dict(entry.get("metric") or {})
             name = labels.pop("__name__", "")
+            kind = labels.get("kind")
             value = entry.get("value")
             if not name or not isinstance(value, list) or len(value) != 2:
                 continue
             try:
-                by_metric.setdefault(name, []).append(float(value[1]))
+                parsed = float(value[1])
             except (TypeError, ValueError):
                 continue
+            by_metric.setdefault(name, []).append(parsed)
+            if kind:
+                by_metric_kind.setdefault(kind, {}).setdefault(name, []).append(parsed)
+
+    def _rtc_quality_for(kind_values: dict[str, list[float]]) -> dict[str, float | None]:
+        return {
+            "avg_jitter_ms": _avg(kind_values.get("dvconf_rtc_jitter_ms", [])),
+            "avg_packet_loss_ratio": _avg(kind_values.get("dvconf_rtc_packet_loss_ratio", [])),
+            "avg_bitrate_kbps": _avg(kind_values.get("dvconf_rtc_bitrate_kbps", [])),
+            "avg_rtt_ms": _avg(kind_values.get("dvconf_rtc_rtt_ms", [])),
+        }
 
     return {
         "peer_quality": {
@@ -50,12 +71,11 @@ def collect_room_peer_quality(room_id: str) -> dict[str, Any]:
             "pause_count_total": _sum_or_none(by_metric.get("dvconf_relay_peer_pause_count", [])),
             "avg_connection_setup_ms": _avg(by_metric.get("dvconf_relay_peer_connection_setup_ms", [])),
             "ice_success_rate": _avg(by_metric.get("dvconf_relay_peer_ice_success", [])),
+            "avg_av_sync_drift_ms": _avg(by_metric.get("dvconf_relay_peer_av_sync_drift_ms", [])),
         },
         "rtc_quality_server_observed": {
-            "avg_jitter_ms": _avg(by_metric.get("dvconf_rtc_jitter_ms", [])),
-            "avg_packet_loss_ratio": _avg(by_metric.get("dvconf_rtc_packet_loss_ratio", [])),
-            "avg_bitrate_kbps": _avg(by_metric.get("dvconf_rtc_bitrate_kbps", [])),
-            "avg_rtt_ms": _avg(by_metric.get("dvconf_rtc_rtt_ms", [])),
+            "audio": _rtc_quality_for(by_metric_kind.get("audio", {})),
+            "video": _rtc_quality_for(by_metric_kind.get("video", {})),
         },
         # participants.peers[].has_*_producer/e2ee_session_key_established
         # and audio_top_k: relay's in-memory RoomState/PeerState

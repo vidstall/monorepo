@@ -437,13 +437,16 @@ class ApplyTests(ScenarioTestCase):
         self.assertEqual(lock["status"], "active")
         self.assertEqual(lock["scenario_hash"], scenario.scenario_hash_of(path))
 
-    def test_apply_refreshes_observer_stack_for_each_registered_host(self) -> None:
+    def test_apply_refreshes_observer_stack_in_one_combined_call(self) -> None:
         observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key")
         path = self.write_scenario("s.toml", SCENARIO_TOML)
         with patch.object(observer, "deploy", return_value=0) as observer_deploy:
             code = scenario.apply(str(path), True)
         self.assertEqual(code, 0)
-        observer_deploy.assert_called_once_with("bourbon")
+        # observer.deploy(host=None) already covers every registered host in
+        # one combined Ansible run -- apply() calls it once, not once per
+        # registered host, to avoid paying a full playbook startup per host.
+        observer_deploy.assert_called_once_with(None)
 
     def test_apply_skips_observer_refresh_when_none_registered(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)

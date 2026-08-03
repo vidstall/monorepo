@@ -46,24 +46,34 @@ def _timed(timings: list[tuple[str, float]], label: str) -> Iterator[None]:
 # raise/propagate a failure, when a registered host errors.
 def _refresh_observer_stack() -> None:
     """Called once the new/reconciled worker set is live (see apply()) --
-    re-runs `vidctl observer deploy` per registered host so Prometheus's
-    scrape config (rendered from the CURRENT merged Ansible inventory)
-    picks up the just-applied worker set, and so any containers a prior
-    `scenario destroy` cleaned away come back. Never touches stored data."""
+    re-runs `vidctl observer deploy` so Prometheus's scrape config
+    (rendered from the CURRENT merged Ansible inventory) picks up the
+    just-applied worker set, and so any containers a prior `scenario
+    destroy` cleaned away come back. Never touches stored data.
+
+    observer.deploy(host=None) already covers EVERY registered observer
+    host in one combined Ansible run (a single comma-joined --limit) --
+    calling it once here, instead of looping and calling
+    observer.deploy(name) per host, avoids paying a full separate
+    ansible-playbook startup (SSH handshake + fact-gathering) per
+    registered host. Loses per-host error attribution in the warning
+    below, but this whole function is already best-effort (never raises),
+    so that's an acceptable trade for cutting N sequential playbook
+    startups down to 1."""
     try:
         hosts = observer.read_hosts()
     except Exception as exc:
         print(f"Warning: could not read observer hosts, skipping observer refresh: {exc}", file=sys.stderr)
         return
-    for host in hosts:
-        name = str(host.get("name", ""))
-        try:
-            code = observer.deploy(name)
-        except Exception as exc:
-            print(f"Warning: observer refresh failed for {name!r}: {exc}", file=sys.stderr)
-            continue
-        if code != 0:
-            print(f"Warning: observer refresh failed for {name!r} (exit {code}).", file=sys.stderr)
+    if not hosts:
+        return
+    try:
+        code = observer.deploy(None)
+    except Exception as exc:
+        print(f"Warning: observer refresh failed: {exc}", file=sys.stderr)
+        return
+    if code != 0:
+        print(f"Warning: observer refresh failed (exit {code}).", file=sys.stderr)
 
 
 def _push_contract_state(env: str) -> None:

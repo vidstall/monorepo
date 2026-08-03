@@ -375,7 +375,14 @@ class ObserverCleanPlaybookTests(unittest.TestCase):
         removed_containers = tasks["Remove monitoring containers"]["loop"]
         self.assertEqual(
             set(removed_containers),
-            {"xaisen-prometheus", "xaisen-tempo", "xaisen-grafana", "xaisen-pushgateway", "xaisen-loki"},
+            {
+                "xaisen-prometheus",
+                "xaisen-tempo",
+                "xaisen-grafana",
+                "xaisen-grafana-renderer",
+                "xaisen-pushgateway",
+                "xaisen-loki",
+            },
         )
 
         wiped_data_dirs = tasks["Wipe monitoring data directories"]["loop"]

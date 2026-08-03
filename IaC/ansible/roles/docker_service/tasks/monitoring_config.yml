@@ -121,3 +121,44 @@
     mode: "0640"
   when: xaisen_service_item.service == 'grafana'
   register: xaisen_dashboards_write
+
+# Sidecar for Grafana's PNG render API (/render/d-solo/<uid>/<slug>?panelId=N),
+# used by cli/observer/grafana_render.py to capture per-panel screenshots at
+# the end of `vidctl scenario run` (into logs/<key>/<run_timestamp>/img/).
+# Not a PINNED_IMAGES/DOCKER_SERVICES entry -- unlike prometheus/tempo/etc.
+# this is never independently scheduled in a scenario/topology.toml, it's a
+# pure grafana sidecar, same pattern as reverse_proxy.yml's shared Caddy
+# containers being driven off `xaisen_service_item.service == 'grafana'`
+# rather than being a service of its own. Fixed container name (not
+# worker_key-suffixed) since grafana itself is a singleton per host, same
+# convention as xaisen-caddy/xaisen-observer-caddy. Runs the OFFICIAL remote
+# renderer image (bundles its own headless Chromium + HTTP server) rather
+# than GF_INSTALL_PLUGINS baking the renderer into Grafana's own container
+# -- keeps Grafana's image untouched and the renderer's (much heavier,
+# Chromium-based) resource usage isolated to its own container.
+- name: Run the Grafana image-renderer sidecar
+  community.docker.docker_container:
+    name: xaisen-grafana-renderer
+    image: "grafana/grafana-image-renderer:3.12.4"
+    restart_policy: unless-stopped
+    state: started
+    # Docker's default /dev/shm is 64MB, far too small for headless Chromium
+    # -- it crashes on launch (Puppeteer never sees the WS endpoint URL in
+    # stdout, every render times out after 30s with no other hint). This is
+    # the documented fix for grafana/grafana-image-renderer specifically,
+    # not a generic tuning knob.
+    shm_size: 1G
+    # community.docker.docker_container does NOT compare shm_size against a
+    # running container's actual config by default -- without this, changing
+    # shm_size above (as just happened) is silently a no-op against an
+    # already-running container: `state: started` reports "ok" and leaves
+    # the stale 64MB-shm container running untouched, with no error or hint
+    # that the new value was never applied. Confirmed live: a real `observer
+    # deploy` reported success while `docker inspect` still showed the old
+    # 67108864-byte default; only forcing this comparison actually recreated
+    # the container.
+    comparisons:
+      shm_size: strict
+    networks:
+      - name: xaisen-net
+  when: xaisen_service_item.service == 'grafana'

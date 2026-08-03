@@ -275,6 +275,14 @@
     # dashboards, Grafana's own admin settings). GF_SERVER_ROOT_URL tells
     # Grafana its own real public URL so redirects/asset links are correct
     # behind the reverse proxy.
+    # GF_RENDERING_SERVER_URL points Grafana at the xaisen-grafana-renderer
+    # sidecar (monitoring_config.yml) over the shared xaisen-net bridge by
+    # container name -- same trust boundary Grafana already uses to reach
+    # Prometheus/Tempo. GF_RENDERING_CALLBACK_URL tells the renderer how to
+    # call Grafana BACK (it loads the dashboard itself via headless
+    # Chromium) -- also container-name-addressed rather than the public
+    # sslip.io URL, since the renderer lives on the same host/network, not
+    # on the public internet.
     env: >-
       {{
         {
@@ -299,6 +307,8 @@
             'GF_AUTH_ANONYMOUS_ENABLED': 'true',
             'GF_AUTH_ANONYMOUS_ORG_ROLE': 'Viewer',
             'GF_SECURITY_ALLOW_EMBEDDING': 'true',
+            'GF_RENDERING_SERVER_URL': 'http://xaisen-grafana-renderer:8081/render',
+            'GF_RENDERING_CALLBACK_URL': 'http://xaisen-' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ ':' ~ xaisen_service_item.port ~ '/',
           } if xaisen_service_item.service == 'grafana' else {})
       }}
   async: 300

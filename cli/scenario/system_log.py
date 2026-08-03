@@ -15,7 +15,7 @@ _ACTION_IDENTITY_FIELDS = ("action_index", "action_id", "action_type")
 
 class SystemLog:
     """Owns one `scenario run`'s event trail under
-    data/logs/<scenario_name>/<run_timestamp>/ -- `run.json` for run-level
+    logs/<scenario_name>/<run_timestamp>/ -- `run.json` for run-level
     events (run_start/run_end) and `actions/<index>-<type>.json` for one
     action's events (before_action/during_action x N/after_action), mirroring
     cli.scenario.metrics_sampler's per-entity file layout under
@@ -23,10 +23,19 @@ class SystemLog:
     Reuses cli.observer.metrics_writer's atomic read-append-write primitive
     directly rather than re-implementing it."""
 
-    def __init__(self, scenario_path: str, env: str, scenario_name: str) -> None:
+    def __init__(
+        self, scenario_path: str, env: str, scenario_name: str, run_timestamp: str | None = None
+    ) -> None:
         self.env = env
         started = datetime.now(timezone.utc)
-        self.run_timestamp = started.strftime("%Y%m%dT%H%M%SZ")
+        # run_timestamp is normally passed in by run() -- generated ONCE,
+        # before either SystemLog or MetricsSampler is constructed -- so
+        # both trees land under the exact same <run_timestamp> even though
+        # they're keyed by different first-level names (scenario_name here,
+        # provider for MetricsSampler). Falling back to generating our own
+        # here only matters for the one direct-construction test call site;
+        # every real `scenario run` invocation always passes one in.
+        self.run_timestamp = run_timestamp if run_timestamp is not None else started.strftime("%Y%m%dT%H%M%SZ")
         self.run_dir = context.LOGS_ROOT / scenario_name / self.run_timestamp
         self._registry = MetricsFileRegistry()
         self._run_identity = {
