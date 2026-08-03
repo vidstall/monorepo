@@ -76,6 +76,17 @@ Lifecycle commands update topology, run Pulumi from `IaC/pulumi`, and append an 
 
 `infra inventory` writes `IaC/ansible/inventory/hosts.generated.yml` from the Pulumi `ansibleInventory` output. Frontend object-storage instances are excluded from that inventory.
 
+### Ansible role layout
+
+`IaC/ansible/roles/` has two roles: `common` (generic host setup -- state directories, contract env file, Docker/registry/network prerequisites) and `docker_service` (everything that runs a container). `docker_service/tasks/` is split one file per concern rather than one large task list:
+
+- `main.yml` -- thin orchestrator: image prefetch, loops `deploy_one_service.yml` over this host's services, waits for container starts, then runs `reverse_proxy.yml`.
+- `deploy_one_service.yml` -- thin includer, run once per colocated service on the host, in order: `service_common_setup.yml` (state dir, secrets, wallet) -> `monitoring_config.yml` (prometheus/tempo/loki/grafana config, gated per service name) -> `worker_env.yml` (keypair/cap/endpoint env facts, image-pull decision) -> `run_container.yml`.
+- `run_container.yml` -- the single `docker_container` task shared by every service type (worker daemon or monitoring-stack), with per-service differences expressed as inline Jinja rather than duplicated across N task files.
+- `reverse_proxy.yml` -- the two shared Caddy TLS-proxy containers (worker-facing, observer-facing), run once per host after all its services are up.
+
+`docker_service` stays a single Ansible role rather than several, since `run_container.yml`'s container task is genuinely shared logic across every service type -- splitting it into per-role duplicates would risk drift with no automated test coverage on the underlying infrastructure.
+
 ## Contract
 
 ```bash

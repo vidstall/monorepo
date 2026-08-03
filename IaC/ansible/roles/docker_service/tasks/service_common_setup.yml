@@ -1,0 +1,73 @@
+---
+# First stage of deploy_one_service.yml's per-service pipeline (see that
+# file for the xaisen_service_item.service vs .worker_key namespacing note
+# and the include order this file depends on). Generic groundwork every
+# service needs regardless of type: its own state directory, an optional
+# secrets file, and (for worker daemons) its wallet credentials.
+
+- name: Ensure persistent state directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
+    state: directory
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    # 'other' gets EXECUTE only (traverse), not read -- lets the non-root
+    # `dvconf` container user (relay/signaling/cp-daemon/validator-daemon's
+    # event-cursor dir lives one level down, see worker_env.yml's "Ensure
+    # event-cursor directory exists") `cd` into this dir to reach its own
+    # world-writable subdirectory, without being able to `ls` this
+    # directory's contents or read anything in it at its own (stricter)
+    # mode -- the wallet JSON (0600) and service.env (0640) both already
+    # deny 'other' regardless, so this adds no exposure to them.
+    mode: "0751"
+
+- name: Check for a per-service secrets file locally
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service_item.service }}.env"
+  delegate_to: localhost
+  become: false
+  register: xaisen_service_secrets_file
+
+- name: Copy per-service secrets file to host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../secrets/services/{{ xaisen_service_item.service }}.env"
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/service.env"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_secrets_file.stat.exists | default(false)
+
+# xaisen_operator_wallets is a dict NESTED by host then worker_key --
+# {inventory_hostname: {worker_key: wallet_json}} -- because a single
+# `vidctl scenario apply` batch pass (see cli/infra.py control_many_hosts())
+# can cover MANY hosts in one Ansible run, and a flat worker_key-only dict
+# would collide whenever two different hosts share a worker_key (e.g.
+# "cp-daemon" exists on nearly every host in a multi-host scenario) --
+# writing one host's wallet onto another host's container. Nesting by
+# inventory_hostname keeps each host's lookup isolated even when many hosts
+# share the same playbook run. Only ever contains entries for instances
+# checked out by the current call; other colocated services/replicas simply
+# aren't in the dict this round, so this task is a no-op for them (their
+# wallet file is left untouched, whatever it currently holds -- correct,
+# since only ITS OWN start/restart call ever refreshes it).
+#
+# ALWAYS overwrite when this instance's entry IS present this round -- do NOT
+# skip just because a file already exists at this path. cli/infra.py's
+# checkout_wallet() may hand back a DIFFERENT wallet than whatever is
+# currently on disk (e.g. after this instance was killed and relaunched, and
+# the pool assigned a new/reassigned wallet) -- skipping on file-exists left
+# a stale, wrong wallet in place indefinitely, since nothing else ever
+# refreshes this file.
+- name: Write operator wallet credentials
+  ansible.builtin.copy:
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0600"
+    content: "{{ xaisen_operator_wallets[inventory_hostname][xaisen_service_item.worker_key | default(xaisen_service_item.service)] }}"
+  when:
+    - xaisen_operator_wallets is defined
+    - inventory_hostname in xaisen_operator_wallets
+    - (xaisen_service_item.worker_key | default(xaisen_service_item.service)) in xaisen_operator_wallets[inventory_hostname]
+  no_log: true
+  register: xaisen_wallet_credentials_write

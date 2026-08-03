@@ -87,6 +87,41 @@ def _loki_extra_vars() -> dict[str, str]:
     }
 
 
+def _tempo_extra_vars() -> dict[str, str]:
+    """Flat xaisen_tempo_auth_token var -- read (never generate) from
+    secrets/services/observer-tempo.env, same decoupling reasoning as
+    _otel_extra_vars()/_loki_extra_vars(): the real token belongs to
+    `vidctl observer`'s tempo deployment (cli/observer/secrets.py's
+    tempo_auth_token()), which persists it there on first `observer
+    deploy`. Always present as a (possibly empty) key -- grafana-
+    datasource.yml.j2 and observer-caddyfile.j2 reference this var
+    unconditionally whenever this host runs grafana/tempo, so an omitted
+    key raises AnsibleUndefinedVariable; an empty string renders a
+    syntactically valid (just not-yet-matching) bearer token until
+    `observer deploy` has run at least once."""
+    from .. import infra
+
+    values = read_env_file(infra.SERVICE_SECRETS_DIR / "observer-tempo.env")
+    return {"xaisen_tempo_auth_token": values.get("TEMPO_AUTH_TOKEN", "")}
+
+
+def _grafana_extra_vars() -> dict[str, str]:
+    """Flat xaisen_grafana_admin_password var, same read-never-generate
+    decoupling reasoning as _tempo_extra_vars(): the real password belongs
+    to `vidctl observer`'s grafana deployment (cli/observer/secrets.py's
+    grafana_admin_password()), persisted in
+    secrets/services/observer-grafana.env on first `observer deploy`.
+    run_container.yml's env combine() only injects this (as
+    GF_SECURITY_ADMIN_PASSWORD) when this host runs grafana, but references
+    the var unconditionally in that expression -- an omitted key raises
+    AnsibleUndefinedVariable, so this is always present, empty until
+    `observer deploy` has run at least once."""
+    from .. import infra
+
+    values = read_env_file(infra.SERVICE_SECRETS_DIR / "observer-grafana.env")
+    return {"xaisen_grafana_admin_password": values.get("GF_SECURITY_ADMIN_PASSWORD", "")}
+
+
 def docker_deploy_extra_vars() -> dict[str, Any]:
     from .. import registry
 
@@ -102,6 +137,8 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
             "xaisen_metrics_auth_token": metrics_auth_token(),
             **_otel_extra_vars(),
             **_loki_extra_vars(),
+            **_tempo_extra_vars(),
+            **_grafana_extra_vars(),
         }
 
     # loadNetworkConfig() (services/worker/packages/shared/src/chain/client.ts)
@@ -146,6 +183,8 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
         "xaisen_metrics_auth_token": metrics_auth_token(),
         **_otel_extra_vars(),
         **_loki_extra_vars(),
+        **_tempo_extra_vars(),
+        **_grafana_extra_vars(),
     }
     try:
         config = registry.provider_config(state.provider, require_credentials=True)

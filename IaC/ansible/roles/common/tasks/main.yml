@@ -24,3 +24,74 @@
     group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
     mode: "0640"
   when: xaisen_contract_env is defined and xaisen_contract_env | length > 0
+
+# All Docker-prerequisite tasks below are skipped on a host with no
+# xaisen_services -- mirrors docker_service's own skip guard (its main.yml's
+# first task) since that role is the only consumer of Docker on this host;
+# a host with nothing to deploy shouldn't get Docker installed/logged-in/
+# networked for no reason.
+- name: Determine whether this host has any Docker-managed services
+  ansible.builtin.set_fact:
+    xaisen_has_docker_services: "{{ xaisen_services is defined and xaisen_services | length > 0 }}"
+
+# Skipped for static hosts (bourbon): operator-provisioned, Docker already
+# installed/running, and no become available to run apt/systemd here (see
+# cli/observer/inventory.py's ansible_become: false).
+- name: Install Docker
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+    update_cache: true
+  when: xaisen_provider != 'static' and xaisen_has_docker_services
+
+- name: Ensure Docker service is running
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+  when: xaisen_provider != 'static' and xaisen_has_docker_services
+
+# Fleet-wide log shipping (every container docker_service ever creates, on
+# every host including the static observer host) logs via Docker's native
+# `loki` logging driver -- see docker_service's run_container.yml log_driver/
+# log_options. That driver is a separate Docker plugin, not built in, so
+# it must be installed once per host before any docker_container task
+# fires. Both calls are natively idempotent (docker_plugin's `state:
+# present` is a no-op if already installed; `state: enable` is a no-op if
+# already enabled), so no `when:` guard is needed here, and no become
+# beyond what every docker_container task on this same host already
+# assumes (the ssh user is already in the docker group).
+- name: Install Loki Docker logging-driver plugin
+  community.docker.docker_plugin:
+    plugin_name: grafana/loki-docker-driver:latest
+    alias: loki
+    state: present
+  register: xaisen_loki_plugin_install
+  when: xaisen_has_docker_services
+
+- name: Enable Loki Docker logging-driver plugin
+  community.docker.docker_plugin:
+    plugin_name: loki
+    state: enable
+  when: xaisen_has_docker_services
+
+- name: Log in to the container registry
+  community.docker.docker_login:
+    registry_url: "{{ xaisen_registry_host }}"
+    username: "{{ xaisen_registry_username }}"
+    password: "{{ xaisen_registry_password }}"
+  no_log: true
+  when: xaisen_registry_host is defined and xaisen_has_docker_services
+
+# Shared user-defined bridge network for this host's containers. Docker's
+# DEFAULT bridge network does NOT support container-name DNS resolution --
+# only user-defined networks do -- and the shared Caddy TLS proxy
+# (docker_service's reverse_proxy.yml) needs to reverse_proxy to each
+# relay/signaling container by name (xaisen-<worker_key>). Idempotent; safe
+# to (re)ensure on every run regardless of which services this round's
+# xaisen_services happens to include.
+- name: Ensure shared xaisen docker network exists
+  community.docker.docker_network:
+    name: xaisen-net
+    state: present
+  when: xaisen_has_docker_services

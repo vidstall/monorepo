@@ -3,71 +3,16 @@
   ansible.builtin.meta: end_host
   when: xaisen_services is not defined or xaisen_services | length == 0
 
-# Skipped for static hosts (bourbon): operator-provisioned, Docker already
-# installed/running, and no become available to run apt/systemd here (see
-# cli/observer/inventory.py's ansible_become: false).
-- name: Install Docker
-  ansible.builtin.apt:
-    name: docker.io
-    state: present
-    update_cache: true
-  when: xaisen_provider != 'static'
-
-- name: Ensure Docker service is running
-  ansible.builtin.systemd:
-    name: docker
-    state: started
-    enabled: true
-  when: xaisen_provider != 'static'
-
-# Fleet-wide log shipping (every container this role ever creates, on
-# every host including the static observer host) logs via Docker's native
-# `loki` logging driver -- see deploy_one_service.yml's log_driver/
-# log_options. That driver is a separate Docker plugin, not built in, so
-# it must be installed once per host before any docker_container task
-# fires. Both calls are natively idempotent (docker_plugin's `state:
-# present` is a no-op if already installed; `state: enable` is a no-op if
-# already enabled), so no `when:` guard is needed here, and no become
-# beyond what every docker_container task on this same host already
-# assumes (the ssh user is already in the docker group).
-- name: Install Loki Docker logging-driver plugin
-  community.docker.docker_plugin:
-    plugin_name: grafana/loki-docker-driver:latest
-    alias: loki
-    state: present
-  register: xaisen_loki_plugin_install
-
-- name: Enable Loki Docker logging-driver plugin
-  community.docker.docker_plugin:
-    plugin_name: loki
-    state: enable
-
-- name: Log in to the container registry
-  community.docker.docker_login:
-    registry_url: "{{ xaisen_registry_host }}"
-    username: "{{ xaisen_registry_username }}"
-    password: "{{ xaisen_registry_password }}"
-  no_log: true
-  when: xaisen_registry_host is defined
-
-# Shared user-defined bridge network for this host's containers. Docker's
-# DEFAULT bridge network does NOT support container-name DNS resolution --
-# only user-defined networks do -- and the shared Caddy TLS proxy below
-# needs to reverse_proxy to each relay/signaling container by name
-# (xaisen-<worker_key>). Idempotent; safe to (re)ensure on every run
-# regardless of which services this round's xaisen_services happens to
-# include.
-- name: Ensure shared xaisen docker network exists
-  community.docker.docker_network:
-    name: xaisen-net
-    state: present
+# Docker itself, the Loki logging-driver plugin, registry login, and the
+# shared xaisen-net network are host-level prerequisites, not specific to
+# this role's services -- see roles/common/tasks/main.yml.
 
 # Best-effort cache warm: fire every distinct image this host needs
 # concurrently (backgrounded `docker pull` + `wait`, plain shell -- not
 # Ansible async/poll, which mitogen's connection layer special-cases and is
 # less battle-tested) instead of paying each colocated service's pull
 # serially in the per-service loop below. Only matters when content
-# genuinely changed (deploy_one_service.yml's xaisen_needs_pull digest check
+# genuinely changed (worker_env.yml's xaisen_needs_pull digest check
 # skips the pull entirely on a no-op reconcile) -- this just makes the
 # unavoidable-transfer case faster too, by overlapping N pulls into
 # ~max(N) instead of ~sum(N). Never fails the play: a slow/failed prefetch
@@ -96,12 +41,12 @@
     loop_var: xaisen_service_item
     label: "{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}"
 
-# deploy_one_service.yml's "Run the service container" task fires each
-# container start with poll:0 (see its own comment) rather than waiting for
-# each one before starting the next -- this collects on all of them here,
-# once per host, so this host's N container creates/starts (and any real
-# pulls) run concurrently instead of paying N sequential waits. Failures
-# still propagate normally (no ignore_errors) -- this is the actual
+# deploy_one_service.yml's run_container.yml fires each container start with
+# poll:0 (see its own comment) rather than waiting for each one before
+# starting the next -- this collects on all of them here, once per host, so
+# this host's N container creates/starts (and any real pulls) run
+# concurrently instead of paying N sequential waits. Failures still
+# propagate normally (no ignore_errors) -- this is the actual
 # correctness-bearing container start, unlike the best-effort prefetch above.
 - name: Wait for all this host's service containers to finish starting
   ansible.builtin.async_status:
@@ -115,127 +60,9 @@
     label: "{{ item.label }}"
   when: xaisen_container_jobs is defined
 
-# Every relay/signaling instance on this host shares ONE Caddy TLS proxy --
-# ports 80/443 can only be bound once per host, so this can't be a
-# per-instance sidecar (see deploy_one_service.yml's endpoint-URL comment
-# for why each instance still gets its own sslip.io hostname/cert via a
-# distinct Caddyfile site block keyed by worker_key). cp-daemon/
-# validator-daemon are chain-facing daemons with no client-facing surface
-# of their own, but they DO already run a Prometheus /metrics server (see
-# packages/shared/src/metrics-prom.ts) -- with no private network between
-# fleet droplets, a public (bearer-token-gated, same as relay/signaling's
-# metrics) Caddy site block is the only way to reach it. See Caddyfile.j2's
-# xaisen_metrics_ports for how their site block ends up metrics-only (no
-# generic fallback route, since they have nothing else to proxy to).
-- name: Determine which colocated services need the shared Caddy TLS proxy
-  ansible.builtin.set_fact:
-    xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'signaling', 'bot', 'cp-daemon', 'validator-daemon']) | list }}"
-
-- name: Ensure Caddy config directory exists
-  ansible.builtin.file:
-    path: "{{ xaisen_services_root }}/runtime/caddy"
-    state: directory
-    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    mode: "0750"
-  when: xaisen_public_services | length > 0
-
-- name: Write shared Caddyfile (one site block per relay/signaling instance)
-  ansible.builtin.template:
-    src: Caddyfile.j2
-    dest: "{{ xaisen_services_root }}/runtime/caddy/Caddyfile"
-    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    mode: "0644"
-  when: xaisen_public_services | length > 0
-  register: xaisen_caddyfile_write
-
-- name: Run the shared Caddy TLS proxy container
-  community.docker.docker_container:
-    name: xaisen-caddy
-    image: "caddy:2-alpine"
-    restart_policy: unless-stopped
-    state: started
-    restart: "{{ xaisen_caddyfile_write is changed }}"
-    networks:
-      - name: xaisen-net
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - "{{ xaisen_services_root }}/runtime/caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
-      - "{{ xaisen_services_root }}/runtime/caddy/data:/data"
-      - "{{ xaisen_services_root }}/runtime/caddy/config:/config"
-  when: xaisen_public_services | length > 0
-
-# Tempo's OTLP/HTTP receiver is loopback-only (see deploy_one_service.yml's
-# ports: mapping) -- unlike relay/signaling/bot, it must still be reachable
-# from every fleet VM to receive PUSHED spans, so it gets its OWN small
-# bearer-token-gated ingress proxy here, entirely separate from the shared
-# xaisen-caddy above (which is keyed to relay/signaling/bot's public-service
-# convention and has no concept of auth-gating a route). Tempo's query API
-# (3200) is NOT proxied here -- it stays SSH-tunnel-only, like Prometheus.
-# Grafana (also loopback-only) shares this same ingress container -- it
-# needs no bearer gate (Grafana has its own login), just a plain reverse
-# proxy, so it gets a second site block in the same Caddyfile. Pushgateway
-# (also loopback-only, see deploy_one_service.yml's ports: mapping) gets a
-# THIRD site block, bearer-gated the same way as tempo -- eval-harness
-# scripts (scripts/eval/measure-onchain-cost.ts etc.) run on a dev machine
-# against a local Sui node, not on the fleet, so they need a public (but
-# gated) path to push their one-shot results in.
-- name: Determine whether this host runs tempo (observer ingress needed)
-  ansible.builtin.set_fact:
-    xaisen_observer_tempo_service: "{{ xaisen_services | selectattr('service', 'equalto', 'tempo') | list }}"
-
-- name: Determine whether this host runs grafana (observer ingress needed)
-  ansible.builtin.set_fact:
-    xaisen_observer_grafana_service: "{{ xaisen_services | selectattr('service', 'equalto', 'grafana') | list }}"
-
-- name: Determine whether this host runs pushgateway (observer ingress needed)
-  ansible.builtin.set_fact:
-    xaisen_observer_pushgateway_service: "{{ xaisen_services | selectattr('service', 'equalto', 'pushgateway') | list }}"
-
-- name: Determine whether this host runs loki (observer ingress needed)
-  ansible.builtin.set_fact:
-    xaisen_observer_loki_service: "{{ xaisen_services | selectattr('service', 'equalto', 'loki') | list }}"
-
-- name: Determine whether this host runs prometheus (observer ingress needed)
-  ansible.builtin.set_fact:
-    xaisen_observer_prometheus_service: "{{ xaisen_services | selectattr('service', 'equalto', 'prometheus') | list }}"
-
-- name: Ensure observer ingress Caddy config directory exists
-  ansible.builtin.file:
-    path: "{{ xaisen_services_root }}/runtime/observer-caddy"
-    state: directory
-    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    mode: "0750"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0) or (xaisen_observer_prometheus_service | length > 0)
-
-- name: Write observer ingress Caddyfile (tempo's bearer-gated OTLP receiver + grafana's plain proxy + pushgateway's bearer-gated write endpoint + loki's Basic-Auth-gated push endpoint + prometheus's bearer-gated query endpoint)
-  ansible.builtin.template:
-    src: observer-caddyfile.j2
-    dest: "{{ xaisen_services_root }}/runtime/observer-caddy/Caddyfile"
-    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
-    mode: "0640"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0) or (xaisen_observer_prometheus_service | length > 0)
-  register: xaisen_observer_caddyfile_write
-
-- name: Run the observer ingress Caddy container
-  community.docker.docker_container:
-    name: xaisen-observer-caddy
-    image: "caddy:2-alpine"
-    restart_policy: unless-stopped
-    state: started
-    restart: "{{ xaisen_observer_caddyfile_write is changed }}"
-    networks:
-      - name: xaisen-net
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - "{{ xaisen_services_root }}/runtime/observer-caddy/Caddyfile:/etc/caddy/Caddyfile:ro"
-      - "{{ xaisen_services_root }}/runtime/observer-caddy/data:/data"
-      - "{{ xaisen_services_root }}/runtime/observer-caddy/config:/config"
-  when: (xaisen_observer_tempo_service | length > 0) or (xaisen_observer_grafana_service | length > 0) or (xaisen_observer_pushgateway_service | length > 0) or (xaisen_observer_loki_service | length > 0) or (xaisen_observer_prometheus_service | length > 0)
+# Both shared TLS-terminating Caddy proxies (worker-facing + observer-facing)
+# must run after every service above has started -- ports 80/443 can only be
+# bound once per host, so they're single containers covering every eligible
+# colocated service, not per-service sidecars. See reverse_proxy.yml.
+- name: Configure and run the shared reverse-proxy containers
+  ansible.builtin.import_tasks: reverse_proxy.yml

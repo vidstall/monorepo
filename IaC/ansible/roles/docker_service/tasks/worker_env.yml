@@ -1,0 +1,145 @@
+---
+# Third stage of deploy_one_service.yml's per-service pipeline. Worker-daemon
+# specific facts (keypair/cap-id env vars, public sslip.io endpoint) plus the
+# image-pull decision shared by every service type. Two facts here are
+# gated to the service types their lookup dict actually covers (see each
+# task's own comment) -- run_container.yml compensates with `| default('')`
+# on every reference to these facts, since a gated-out service now leaves
+# them undefined rather than set-to-empty-string.
+
+# ChainEventListener (packages/chain-event-listener) persists each subscribed
+# module's poll cursor at <DATA_DIR>/.cursors/<module>.json, defaulting
+# DATA_DIR to the container's own CWD ('.') when unset -- which is the
+# ephemeral writable layer, NOT this bind-mounted runtime dir. Left unset,
+# every container recreate (any redeploy that changes the image digest) wipes
+# the cursor, forcing a full event-history replay from genesis on next boot
+# -- for node_health's NodeDegraded arm specifically, that can re-deliver a
+# node's own historical level-2 event and immediately re-trigger
+# SelfShutdownWatcher's self-shutdown (it intentionally does not ignore
+# meta.replayed there, since a replayed self-slash SHOULD still shut the node
+# down). DATA_DIR (run_container.yml's env combine()) points these 4 daemons
+# at this dedicated, persisted subdirectory instead so the cursor survives
+# redeploys. Same 0777-not-0750 reasoning as monitoring_config.yml's data
+# dir -- each of these apps' Dockerfiles runs as its own non-root `dvconf`
+# user, not root, and cursor contents (a poll position) aren't sensitive
+# like the wallet secret file living one level up in this same worker
+# directory.
+- name: Ensure event-cursor directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/cursor-data"
+    state: directory
+    mode: "0777"
+  when: xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon']
+
+# Each worker app expects its own differently-named keypair env var
+# (CP_KEYPAIR, SIGNALING_KEYPAIR, PRIVATE_KEY for relay, SUI_PRIVATE_KEY for
+# validator-daemon -- see loadKeypair() calls in each apps/*/src/index.ts),
+# not the wallet JSON file path itself. Read the bech32 secretKey back from
+# the file on the host (written by service_common_setup.yml, or by an
+# earlier start of THIS instance if this loop iteration belongs to a
+# co-located sibling) and inject it as the correct env var.
+- name: Re-check operator state file (may have just been written above)
+  ansible.builtin.stat:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
+  register: xaisen_operator_state_file
+
+- name: Read operator wallet secret key from host
+  ansible.builtin.slurp:
+    src: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/{{ inventory_hostname }}.json"
+  register: xaisen_operator_state_slurp
+  when: xaisen_operator_state_file.stat.exists
+  no_log: true
+
+# Gated to the service types xaisen_keypair_env_names/xaisen_cap_env_names
+# below actually have entries for -- monitoring-stack services (prometheus/
+# tempo/grafana/loki/pushgateway/node_exporter) have no keypair/cap concept
+# at all, so this is a no-op for them either way; the explicit `when:` just
+# makes that skip visible instead of silently computing empty facts.
+- name: Determine this service's keypair and cap-id env vars
+  ansible.builtin.set_fact:
+    xaisen_keypair_env_name: "{{ xaisen_keypair_env_names.get(xaisen_service_item.service) }}"
+    xaisen_keypair_env_value: >-
+      {{
+        (xaisen_operator_state_slurp.content | b64decode | from_json).secretKey
+        if (xaisen_operator_state_slurp is defined and xaisen_operator_state_slurp.content is defined)
+        else ''
+      }}
+    xaisen_cap_env_name: "{{ xaisen_cap_env_names.get(xaisen_service_item.service) }}"
+    xaisen_cap_env_value: >-
+      {{
+        (xaisen_operator_state_slurp.content | b64decode | from_json).capId | default('')
+        if (xaisen_operator_state_slurp is defined and xaisen_operator_state_slurp.content is defined)
+        else ''
+      }}
+  vars:
+    xaisen_keypair_env_names:
+      relay: PRIVATE_KEY
+      signaling: SIGNALING_KEYPAIR
+      cp-daemon: CP_KEYPAIR
+      validator-daemon: SUI_PRIVATE_KEY
+      bot: PRIVATE_KEY
+    # Set only when cli/wallet.py's checkout_wallet() found this wallet
+    # already owns a Cap object on-chain (see wallet.py resolve_cap_id) --
+    # tells each daemon's auto-register.ts to skip registration instead of
+    # retrying it and hitting registration::E_ALREADY_REGISTERED forever.
+    xaisen_cap_env_names:
+      relay: MINER_CAP_ID
+      signaling: MINER_CAP_ID
+      cp-daemon: CP_CAP_ID
+      validator-daemon: VALIDATOR_CAP_ID
+  when: xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon', 'bot']
+  no_log: true
+
+# Skip the (40-100s, measured) network pull when the image already cached on
+# this host for the desired tag matches the digest cli/registry.py actually
+# pushed -- read from xaisen_image_digests (docker_deploy_extra_vars()).
+# Pinned images (prometheus) are untouched -- not in xaisen_images, so
+# xaisen_needs_pull below always evaluates true for them, same as before.
+# cli/registry.py's tag is a reused git-short-SHA and `docker build` is NOT
+# reproducible (floating base image, apt drift), so a same-tag image can
+# legitimately have different bytes between pushes -- comparing the actual
+# pushed DIGEST (not just presence of the tag) is what keeps this safe: any
+# real content change still forces a real pull, only a genuine no-op skips it.
+- name: Check locally cached image digest (skip redundant pulls when unchanged)
+  community.docker.docker_image_info:
+    name: "{{ xaisen_images[xaisen_service_item.service] }}:{{ xaisen_tags[xaisen_service_item.service] }}"
+  register: xaisen_local_image_info
+  when:
+    - xaisen_images is defined and xaisen_tags is defined
+    - xaisen_service_item.service in xaisen_images
+    - xaisen_service_item.service in xaisen_tags
+
+- name: Decide whether this service's image actually needs pulling
+  ansible.builtin.set_fact:
+    xaisen_needs_pull: >-
+      {{
+        (xaisen_images is not defined) or (xaisen_tags is not defined)
+        or (xaisen_service_item.service not in xaisen_images)
+        or ((xaisen_local_image_info.images | default([])) | length == 0)
+        or ((xaisen_image_digests | default({})).get(xaisen_service_item.service, '') == '')
+        or ((xaisen_image_digests[xaisen_service_item.service])
+            not in (xaisen_local_image_info.images[0].RepoDigests | default([])))
+      }}
+
+# relay/signaling each register THEIR OWN address on-chain (RelayNodeInfo /
+# SignalingNodeInfo's endpoint_url) so clients know where to connect --
+# without this, both apps default to `ws://127.0.0.1:<port>` (see
+# apps/relay/src/index.ts / apps/signaling/src/index.ts), which is useless
+# to any client since it's the visitor's own loopback address, not the
+# droplet's. sslip.io resolves "<anything>.<a>-<b>-<c>-<d>.sslip.io" to
+# a.b.c.d with no real DNS registration needed -- the worker_key prefix
+# gives each colocated service on this host its OWN hostname (and therefore
+# its own Let's Encrypt cert + Caddy site block, see reverse_proxy.yml's
+# shared xaisen-caddy) sharing one droplet IP, since relay and signaling both
+# publicly listen on the same host and can't each own ports 80/443.
+# Gated to relay/signaling only, per xaisen_public_endpoint_env_names below --
+# no other service registers a public endpoint on-chain.
+- name: Determine this service's public sslip.io endpoint env var
+  ansible.builtin.set_fact:
+    xaisen_public_endpoint_env_name: "{{ xaisen_public_endpoint_env_names.get(xaisen_service_item.service) }}"
+    xaisen_sslip_host: "{{ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) }}.{{ ansible_host | replace('.', '-') }}.sslip.io"
+  vars:
+    xaisen_public_endpoint_env_names:
+      relay: RELAY_ENDPOINT_URL
+      signaling: ENDPOINT_URL
+  when: xaisen_service_item.service in ['relay', 'signaling']

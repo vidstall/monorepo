@@ -1,0 +1,123 @@
+---
+# Second stage of deploy_one_service.yml's per-service pipeline. No-ops
+# entirely for worker daemons (relay/signaling/cp-daemon/validator-daemon/
+# bot) -- every task here is gated on a specific monitoring-stack service
+# name. Prometheus/tempo/grafana are pinned upstream images (see
+# cli/context.py PINNED_IMAGES) with no keypair/cap/on-chain-endpoint
+# concept -- they need a mounted CONFIG file instead, a need no other
+# service has. Rendered here, before run_container.yml's docker_container
+# task, so it's in place before the container (re)starts. Pushgateway is
+# ALSO a pinned upstream image but needs neither a config file nor a data
+# directory (it holds pushed metrics in memory only, no `--persistence.file`
+# flag set in run_container.yml) -- it's deliberately absent from the
+# `when:` lists below.
+- name: Ensure monitoring config directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config"
+    state: directory
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0750"
+  when: xaisen_service_item.service in ['prometheus', 'tempo', 'grafana', 'loki']
+
+# The upstream prom/prometheus, grafana/tempo, grafana/grafana, and
+# grafana/loki images each run as their own unprivileged UID, not root --
+# 0777 (rather than a root-owned 0750) is what lets that in-container user
+# actually write its data into this bind-mounted host directory.
+- name: Ensure monitoring data directory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/data"
+    state: directory
+    mode: "0777"
+  when: xaisen_service_item.service in ['prometheus', 'tempo', 'grafana', 'loki']
+
+- name: Write Prometheus scrape config
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/prometheus.yml"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_item.service == 'prometheus'
+  register: xaisen_prometheus_config_write
+
+- name: Write Tempo config
+  ansible.builtin.template:
+    src: tempo.yaml.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/tempo.yaml"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_item.service == 'tempo'
+  register: xaisen_tempo_config_write
+
+- name: Write Loki config
+  ansible.builtin.template:
+    src: loki.yaml.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/loki.yaml"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_item.service == 'loki'
+  register: xaisen_loki_config_write
+
+- name: Write Grafana datasource provisioning config
+  ansible.builtin.template:
+    src: grafana-datasource.yml.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/datasource.yml"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_item.service == 'grafana'
+  register: xaisen_grafana_config_write
+
+- name: Write Grafana dashboard provider config
+  ansible.builtin.template:
+    src: grafana-dashboard-provider.yml.j2
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboard-provider.yml"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_item.service == 'grafana'
+  register: xaisen_dashboard_provider_write
+
+- name: Ensure Grafana dashboards config subdirectory exists
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards"
+    state: directory
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0750"
+  when: xaisen_service_item.service == 'grafana'
+
+# Both old dashboards (xaisen-fleet, xaisen-academic-eval) were replaced by
+# the 6-dashboard set under files/dashboards/ -- ansible.builtin.copy's
+# directory sync (below) only adds/updates files, it never deletes a
+# destination file whose source was removed, so the stale rendered files
+# from any host deployed before this change need an explicit cleanup pass.
+# bot.json was folded into peer-quality.json (now titled "User") since the
+# bot is just a fake user, same reasoning applies to its leftover file.
+- name: Remove stale pre-redesign dashboard JSON files
+  ansible.builtin.file:
+    path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards/{{ item }}"
+    state: absent
+  loop:
+    - xaisen-fleet.json
+    - xaisen-academic-eval.json
+    - bot.json
+  when: xaisen_service_item.service == 'grafana'
+
+# Static JSON (no real Jinja templating happens in any of them), so a plain
+# directory-wide copy replaces the old one-template-task-per-dashboard
+# boilerplate -- Grafana's file-provider polls the whole mounted folder
+# (see grafana-dashboard-provider.yml.j2), so adding/removing a dashboard is
+# just adding/removing a file under files/dashboards/, no task changes needed.
+- name: Copy Grafana dashboard JSON files
+  ansible.builtin.copy:
+    src: dashboards/
+    dest: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/config/dashboards/"
+    owner: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    group: "{{ 'root' if xaisen_provider | default('') != 'static' else omit }}"
+    mode: "0640"
+  when: xaisen_service_item.service == 'grafana'
+  register: xaisen_dashboards_write
