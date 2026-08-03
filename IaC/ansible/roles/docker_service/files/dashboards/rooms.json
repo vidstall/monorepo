@@ -1,23 +1,37 @@
 {
   "uid": "rooms",
   "title": "Rooms",
-  "tags": ["xaisen"],
+  "tags": [
+    "xaisen"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
         "name": "room",
         "type": "query",
-        "datasource": { "type": "prometheus", "uid": "Prometheus" },
-        "query": { "query": "label_values(dvconf_rtc_packet_loss_ratio, roomId)", "refId": "roomVariable" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "query": {
+          "query": "label_values(dvconf_relay_peer_latency_ms, roomId)",
+          "refId": "roomVariable"
+        },
         "refresh": 2,
         "includeAll": true,
         "multi": true,
-        "current": { "text": "All", "value": "$__all" }
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
       }
     ]
   },
@@ -26,10 +40,26 @@
       "id": 1,
       "type": "stat",
       "title": "Active rooms",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_rooms_active", "legendFormat": "rooms active", "refId": "A" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "dvconf_rooms_active",
+          "legendFormat": "rooms active",
+          "refId": "A"
+        }
       ]
     },
     {
@@ -37,10 +67,26 @@
       "type": "timeseries",
       "title": "Participants per room",
       "description": "dvconf_room_participants{roomId} -- apps/signaling/src/rooms.ts, set on join/leave.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "dvconf_room_participants{roomId=~\"$room\"}", "legendFormat": "{{roomId}}", "refId": "A" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "dvconf_room_participants{roomId=~\"$room\"}",
+          "legendFormat": "{{roomId}}",
+          "refId": "A"
+        }
       ]
     },
     {
@@ -48,36 +94,711 @@
       "type": "heatmap",
       "title": "Room duration distribution",
       "description": "dvconf_room_duration_seconds -- observed on room close, apps/signaling/src/rooms.ts.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "sum(rate(dvconf_room_duration_seconds_bucket[5m])) by (le)", "format": "heatmap", "legendFormat": "{{le}}", "refId": "A" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "sum(rate(dvconf_room_duration_seconds_bucket[5m])) by (le)",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
       ]
     },
     {
       "id": 4,
       "type": "timeseries",
-      "title": "RTT + jitter by room",
-      "description": "dvconf_rtc_rtt_ms / dvconf_rtc_jitter_ms{roomId,direction} -- server-observed mediasoup Consumer/Producer RTP-stream stats.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "title": "Latency (All Users)",
+      "description": "dvconf_relay_peer_latency_ms{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_rtc_rtt_ms{roomId=~\"$room\"}) by (roomId, direction)", "legendFormat": "rtt {{roomId}}/{{direction}}", "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_rtc_jitter_ms{roomId=~\"$room\"}) by (roomId, direction)", "legendFormat": "jitter {{roomId}}/{{direction}}", "refId": "B" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_latency_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_latency_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_latency_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "max {{roomId}}",
+          "refId": "C"
+        }
       ],
-      "fieldConfig": { "defaults": { "unit": "ms" } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
     },
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Packet loss + bitrate by room",
-      "description": "dvconf_rtc_packet_loss_ratio / dvconf_rtc_bitrate_kbps{roomId,direction}.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "title": "Jitter (All Users)",
+      "description": "dvconf_relay_peer_jitter_ms{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "avg(dvconf_rtc_packet_loss_ratio{roomId=~\"$room\"}) by (roomId, direction)", "legendFormat": "loss {{roomId}}/{{direction}}", "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "Prometheus" }, "expr": "sum(dvconf_rtc_bitrate_kbps{roomId=~\"$room\"}) by (roomId, direction)", "legendFormat": "kbps {{roomId}}/{{direction}}", "refId": "B" }
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_jitter_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_jitter_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_jitter_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "max {{roomId}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Packet Loss & Reordering (All Users)",
+      "description": "dvconf_relay_peer_packet_loss / dvconf_relay_peer_packet_reordering_rate{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 22
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_packet_loss{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "loss avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_packet_loss{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "loss min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_packet_loss{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "loss max {{roomId}}",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "reordering avg {{roomId}}",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "reordering min {{roomId}}",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "reordering max {{roomId}}",
+          "refId": "F"
+        }
       ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Bitrate Up/Down (All Users)",
+      "description": "dvconf_relay_peer_bitrate_up_kbps / dvconf_relay_peer_bitrate_down_kbps{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 22
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_bitrate_up_kbps{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "up avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_bitrate_up_kbps{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "up min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_bitrate_up_kbps{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "up max {{roomId}}",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_bitrate_down_kbps{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "down avg {{roomId}}",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_bitrate_down_kbps{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "down min {{roomId}}",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_bitrate_down_kbps{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "down max {{roomId}}",
+          "refId": "F"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Kbits"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Resolution (All Users)",
+      "description": "dvconf_relay_peer_resolution_width/_height{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_resolution_width{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "width avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_resolution_width{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "width min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_resolution_width{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "width max {{roomId}}",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_resolution_height{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "height avg {{roomId}}",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_resolution_height{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "height min {{roomId}}",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_resolution_height{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "height max {{roomId}}",
+          "refId": "F"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Frame Rate (All Users)",
+      "description": "dvconf_relay_peer_framerate{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_framerate{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_framerate{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_framerate{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "max {{roomId}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Encode/Decode Latency (All Users)",
+      "description": "dvconf_relay_peer_encode_latency_ms / dvconf_relay_peer_decode_latency_ms{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 38
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_encode_latency_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "encode avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_encode_latency_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "encode min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_encode_latency_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "encode max {{roomId}}",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_decode_latency_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "decode avg {{roomId}}",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_decode_latency_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "decode min {{roomId}}",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_decode_latency_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "decode max {{roomId}}",
+          "refId": "F"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Freeze Count (All Users)",
+      "description": "dvconf_relay_peer_freeze_count{roomId,peerId} -- cumulative counter, apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 38
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_freeze_count{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_freeze_count{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_freeze_count{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "max {{roomId}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Pause Count (All Users)",
+      "description": "dvconf_relay_peer_pause_count{roomId,peerId} -- cumulative counter, apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 46
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_pause_count{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_pause_count{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_pause_count{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "max {{roomId}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Connection Setup Time (All Users)",
+      "description": "dvconf_relay_peer_connection_setup_ms{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 46
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_connection_setup_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_connection_setup_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_connection_setup_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "max {{roomId}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Reconnect Time (All Users)",
+      "description": "dvconf_relay_peer_reconnect_ms{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 54
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_reconnect_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_reconnect_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_reconnect_ms{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "max {{roomId}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "ICE Success Rate (All Users)",
+      "description": "dvconf_relay_peer_ice_success{roomId,peerId} -- 1 = success, 0 = failure, apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 54
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_ice_success{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_ice_success{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_ice_success{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "max {{roomId}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      }
     }
   ]
 }
