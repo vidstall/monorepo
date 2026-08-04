@@ -22,11 +22,17 @@ def _fetch_rooms(env: str) -> list[dict[str, Any]] | None:
     configured, or devInspect couldn't run) -- a failed/unavailable
     Prometheus read degrades to "participants unknown" per room instead of
     failing the whole tab, since live counts are a nice-to-have on top of
-    the authoritative on-chain room list."""
+    the authoritative on-chain room list.
+
+    Uses room_occupancy_counts(), not room_participant_counts() -- the
+    latter is signaling-only and never counts bots (they connect straight
+    to the relay's WS, never touching signaling), which showed as a
+    permanent "0 / N" here even with bots actually in the room. See
+    query.py's room_occupancy_counts() docstring."""
     rooms = contract_cli.list_active_rooms(env)
     if rooms is None:
         return None
-    participant_counts = observer_cli.room_participant_counts()
+    participant_counts = observer_cli.room_occupancy_counts()
     for room in rooms:
         room_id = str(room.get("room_id", ""))
         room["participants"] = None if participant_counts is None else participant_counts.get(room_id, 0)

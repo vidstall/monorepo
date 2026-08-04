@@ -121,7 +121,15 @@ def room_participant_counts() -> dict[str, int] | None:
     (see prometheus.yml.j2's xaisen-signaling job). Rooms with zero current
     participants aren't in this dict at all (the gauge is removed, not set
     to 0, when a room empties -- see RoomManager.leave()); callers should
-    treat a missing roomId as 0, not omit it."""
+    treat a missing roomId as 0, not omit it.
+
+    NOTE: signaling-only -- bots connect straight to the relay's WS and
+    never touch signaling at all, so this NEVER counts them (same issue the
+    Rooms Grafana dashboard already moved off of, see dashboards/rooms.json's
+    comment on its participants panel). Only meaningful for a
+    signaling-role-specific view (see metrics_worker.py's
+    _signaling_application()); for actual room occupancy (bots + browser
+    clients both), use room_occupancy_counts() instead."""
     result = query("dvconf_room_participants")
     if result is None:
         return None
@@ -136,3 +144,18 @@ def room_participant_counts() -> dict[str, int] | None:
         except (TypeError, ValueError):
             continue
     return counts
+
+
+def room_occupancy_counts() -> dict[str, int] | None:
+    """{roomId: current occupant count}, counting BOTH bots and browser
+    clients -- unlike room_participant_counts() above, built on
+    discover_active_peers()'s dvconf_relay_peer_*/dvconf_rtc_* samples
+    (populated by apps/bot/src/stats-reporter.ts and useConnectionStats.ts
+    alike, same relay-based metric family the Rooms Grafana dashboard
+    switched to for exactly this reason). Rooms with zero current peers
+    aren't in this dict, same missing-means-0 convention as
+    room_participant_counts()."""
+    active = discover_active_peers()
+    if active is None:
+        return None
+    return {room_id: len(peer_ids) for room_id, peer_ids in active.items()}

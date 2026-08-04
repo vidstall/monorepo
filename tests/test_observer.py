@@ -432,5 +432,27 @@ class QueryAtTimeTests(unittest.TestCase):
         self.assertIn("time=1700000000.0", request.full_url)
 
 
+class RoomOccupancyCountsTests(unittest.TestCase):
+    def test_counts_distinct_peers_per_room_including_bots(self) -> None:
+        # discover_active_peers() is built on dvconf_relay_peer_*/
+        # dvconf_rtc_* -- populated by both bots and browser clients (see
+        # room_occupancy_counts()'s docstring) -- unlike
+        # room_participant_counts()'s signaling-only gauge, which bots
+        # never touch at all.
+        with patch(
+            "cli.observer.query.discover_active_peers",
+            return_value={"room-1": {"bot-peer", "browser-peer"}, "room-2": {"bot-peer-2"}},
+        ):
+            counts = observer.room_occupancy_counts()
+
+        self.assertEqual(counts, {"room-1": 2, "room-2": 1})
+
+    def test_returns_none_when_discover_active_peers_fails(self) -> None:
+        with patch("cli.observer.query.discover_active_peers", return_value=None):
+            counts = observer.room_occupancy_counts()
+
+        self.assertIsNone(counts)
+
+
 if __name__ == "__main__":
     unittest.main()
