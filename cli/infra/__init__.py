@@ -1,4 +1,5 @@
 from ..context import (
+    ANSIBLE_DETACHED_LOG_ROOT,
     DOCKER_SERVICES,
     GENERATED_INVENTORY,
     PINNED_IMAGES,
@@ -8,6 +9,7 @@ from ..context import (
     command_env,
     contract_env_path,
     run,
+    run_detached,
 )
 from ._constants import (
     NETWORKS,
@@ -25,6 +27,7 @@ from .ansible import (
     configure,
     docker_deploy_extra_vars,
     ping,
+    toggle_container,
 )
 from .commands import apply, deploy, init, preview
 from .control import control
@@ -78,9 +81,11 @@ __all__ = [
     "GENERATED_INVENTORY",
     "RUNTIME_HISTORY_TOML",
     "RUNTIME_TOPOLOGY_TOML",
+    "ANSIBLE_DETACHED_LOG_ROOT",
     "command_env",
     "contract_env_path",
     "run",
+    "run_detached",
     "NETWORKS",
     "PROVIDERS",
     "SERVICE_BACKENDS",
@@ -94,6 +99,7 @@ __all__ = [
     "configure",
     "docker_deploy_extra_vars",
     "ping",
+    "toggle_container",
     "apply",
     "deploy",
     "init",

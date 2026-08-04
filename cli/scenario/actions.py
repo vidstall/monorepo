@@ -5,7 +5,7 @@ import time
 from typing import Any
 
 from .. import bot_client, infra
-from .system_log import DuringActionSampler, SystemLog, record_snapshot_event
+from .system_log import DuringActionSampler, SystemLog, record_action_marker
 
 
 def find_pooled_worker(
@@ -100,13 +100,41 @@ def _worker_join(
     reserved: set[tuple[str, int]],
     deferred_by_key: dict[tuple[str, str, str, int], dict[str, Any]],
 ) -> dict[str, Any] | None:
+    """Both infra.control() calls below pass detach=True: the actual
+    container start/restart is quick, but getting there means an Ansible
+    SSH-reconnect wait plus a reconcile loop over every OTHER service
+    colocated on this host (see docker_service/tasks/main.yml) -- minutes
+    of overhead a scripted scenario timeline shouldn't have to block on.
+    detach=True fires that off in the background (see control.py's
+    `detach` param) and returns as soon as pulumi/inventory succeed, before
+    Ansible itself finishes -- this action's result (host/worker_index) is
+    known synchronously regardless, so there's nothing later actions need
+    to wait on it for.
+
+    The pooled-reuse ("restart") call below also passes docker_only=True:
+    a pooled worker was already fully provisioned once (by `vidctl scenario
+    apply`) and is only ever paused/resumed by churn, never reconfigured --
+    so control() skips the whole Ansible reconcile entirely and just fires
+    a bare `docker start <container>` (see control.py's `docker_only`
+    param). Not passed on the fresh-provision ("start") call just below --
+    that container doesn't exist yet, so it still needs the full reconcile
+    regardless (control() ignores docker_only for a fresh "start" anyway)."""
     service = action["service"]
     provider = action["provider"]
     pooled = find_pooled_worker(env, service, provider, reserved)
     if pooled is not None:
         host = str(pooled.get("host"))
         worker_index = int(pooled.get("worker_index", 1) or 1)
-        code = infra.control("restart", host, service, provider, yes=True, worker_index=worker_index)
+        code = infra.control(
+            "restart",
+            host,
+            service,
+            provider,
+            yes=True,
+            worker_index=worker_index,
+            detach=True,
+            docker_only=True,
+        )
         if code != 0:
             return None
         reserved.add((host, worker_index))
@@ -148,6 +176,7 @@ def _worker_join(
         size=size,
         worker_index=worker_index,
         region=region,
+        detach=True,
     )
     if code != 0:
         return None
@@ -156,10 +185,23 @@ def _worker_join(
 
 
 def _worker_leave(action: dict[str, Any]) -> dict[str, Any] | None:
+    """docker_only=True: pause alone runs no Ansible by default (just a
+    VM-power-state check) -- see control.py's docker_only pause branch for
+    why this action now also fires a targeted `docker stop <container>`
+    (skipped when this is the last active worker on the host, since the
+    whole VM is powering off anyway). detach=True so the scripted timeline
+    doesn't block on it, same rationale as _worker_join above."""
     host = action["host"]
     worker_index = int(action.get("worker_index") or 1)
     code = infra.control(
-        "pause", host, action["service"], action["provider"], yes=True, worker_index=worker_index
+        "pause",
+        host,
+        action["service"],
+        action["provider"],
+        yes=True,
+        worker_index=worker_index,
+        detach=True,
+        docker_only=True,
     )
     if code != 0:
         return None
@@ -187,9 +229,8 @@ def run_actions(scenario: dict[str, Any], env: str, system_log: SystemLog | None
             print(f"Scenario run failed resolving references for action #{index + 1}.", file=sys.stderr)
             return 1
 
-        record_snapshot_event(
+        record_action_marker(
             system_log,
-            env,
             "before_action",
             action_index=index,
             action_id=resolved.get("id"),
@@ -230,9 +271,8 @@ def run_actions(scenario: dict[str, Any], env: str, system_log: SystemLog | None
         duration_seconds = time.monotonic() - action_started
 
         if result is None:
-            record_snapshot_event(
+            record_action_marker(
                 system_log,
-                env,
                 "after_action",
                 action_index=index,
                 action_id=resolved.get("id"),
@@ -249,9 +289,8 @@ def run_actions(scenario: dict[str, Any], env: str, system_log: SystemLog | None
 
         if resolved.get("id"):
             results[resolved["id"]] = result
-        record_snapshot_event(
+        record_action_marker(
             system_log,
-            env,
             "after_action",
             action_index=index,
             action_id=resolved.get("id"),

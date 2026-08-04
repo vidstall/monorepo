@@ -66,9 +66,9 @@ def _relay_application() -> dict[str, Any]:
     }
 
 
-def _bot_application(instance_filter: str | None = None) -> dict[str, Any]:
+def _bot_application(instance_filter: str | None = None, at_time: float | None = None) -> dict[str, Any]:
     filter_clause = f", {instance_filter}" if instance_filter else ""
-    result = query(f'{{__name__=~"dvconf_active_sessions|dvconf_bot_.*"{filter_clause}}}')
+    result = query(f'{{__name__=~"dvconf_active_sessions|dvconf_bot_.*"{filter_clause}}}', at_time=at_time)
     metrics = _reshape(result)
     return {
         "sessions_active": _single(metrics, "dvconf_active_sessions"),
@@ -82,7 +82,7 @@ def _bot_application(instance_filter: str | None = None) -> dict[str, Any]:
     }
 
 
-def registration_status(instance_filter: str) -> bool | None:
+def registration_status(instance_filter: str, at_time: float | None = None) -> bool | None:
     """Whether one worker instance is currently registered on-chain, per its
     self-reported dvconf_registered gauge (services/worker/packages/shared/
     src/metrics-prom.ts's createRegistrationGauge, set right after each
@@ -90,8 +90,10 @@ def registration_status(instance_filter: str) -> bool | None:
     `docker logs | grep 'operator address|node_id=|bootstrap failed'` check
     (cli/infra/inventory.py's registry_status()). None if no series matched
     (host not yet redeployed with the gauge, or the query failed), not an
-    exception -- same convention as every other collector in this module."""
-    result = query(f'{{__name__="dvconf_registered", {instance_filter}}}')
+    exception -- same convention as every other collector in this module.
+    `at_time`: see query()'s doc -- historical point-in-time lookup instead
+    of "now"."""
+    result = query(f'{{__name__="dvconf_registered", {instance_filter}}}', at_time=at_time)
     metrics = _reshape(result)
     value = _single(metrics, "dvconf_registered")
     return None if value is None else bool(value)
@@ -171,7 +173,9 @@ _ROLE_COLLECTORS = {
 }
 
 
-def collect_worker_application(service: str, instance_filter: str | None = None) -> dict[str, Any] | None:
+def collect_worker_application(
+    service: str, instance_filter: str | None = None, at_time: float | None = None
+) -> dict[str, Any] | None:
     """One worker role's real, confirmed dvconf_* metrics, reshaped into
     the `application` block for that role's worker/<role>-<instance>.json
     entry. None for an unrecognized service; {"error": ...} (not a raised
@@ -181,13 +185,15 @@ def collect_worker_application(service: str, instance_filter: str | None = None)
     to one host's series instead of collapsing the whole fleet into a single
     value -- only the "bot" collector currently accepts it (per-host active
     session count, used by cli.scenario.system_status's per-worker snapshot);
-    every other role ignores it, unchanged fleet-wide behavior."""
+    every other role ignores it, unchanged fleet-wide behavior. `at_time`:
+    see query()'s doc -- historical point-in-time lookup instead of "now";
+    only meaningful for the "bot" collector for the same reason."""
     collector = _ROLE_COLLECTORS.get(service)
     if collector is None:
         return None
     try:
         if service == "bot":
-            return _bot_application(instance_filter)
+            return _bot_application(instance_filter, at_time)
         return collector()
     except Exception as exc:  # noqa: BLE001 - one worker's metrics query must not sink the tick
         return {"error": str(exc)}

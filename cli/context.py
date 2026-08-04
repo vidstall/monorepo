@@ -43,6 +43,11 @@ METRICS_ROOT = ROOT / "logs"
 # top-level logs/ as METRICS_ROOT (not data/) so .gitignore's bare `logs/`
 # rule covers it too -- also generated per run, never meant to be tracked.
 LOGS_ROOT = ROOT / "logs"
+# Output destination for infra.control()'s detach=True path (see control.py)
+# -- a detached `ansible-playbook` run has no parent process left to stream
+# its output to once control() returns, so it's redirected here instead.
+# Under LOGS_ROOT so .gitignore's bare `logs/` rule covers it too.
+ANSIBLE_DETACHED_LOG_ROOT = LOGS_ROOT / "ansible-detached"
 SECRETS_DIR = ROOT / "secrets" / "cloud"
 REGISTRY_SECRETS_DIR = ROOT / "secrets" / "registry"
 WALLET_SECRETS_DIR = ROOT / "secrets" / "wallets"
@@ -193,6 +198,38 @@ def run(
         text=True,
         check=False,
     ).returncode
+
+
+def run_detached(
+    args: Iterable[str | Path],
+    cwd: Path = ROOT,
+    env: dict[str, str] | None = None,
+    log_path: Path | None = None,
+) -> None:
+    """Starts args as an independent background process (the `nohup ... &`
+    pattern) and returns immediately -- no exit code, since nothing waits
+    for it. start_new_session=True detaches it from this process's session
+    so it keeps running even after this process exits, not just while this
+    call is on the stack. Output has nowhere to stream to once this
+    returns, so it's redirected to log_path (parent directory created if
+    needed) instead of inheriting this process's stdout/stderr."""
+    stdout = subprocess.DEVNULL
+    if log_path is not None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        stdout = open(log_path, "a")
+    try:
+        subprocess.Popen(
+            [str(arg) for arg in args],
+            cwd=cwd,
+            env=env or command_env(),
+            stdin=subprocess.DEVNULL,
+            stdout=stdout,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    finally:
+        if stdout is not subprocess.DEVNULL:
+            stdout.close()
 
 
 def ensure_venv() -> None:

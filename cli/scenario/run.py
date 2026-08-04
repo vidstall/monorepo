@@ -9,7 +9,7 @@ from .actions import run_actions
 from .lock import read_lock
 from .metrics_sampler import INTERVAL_SECONDS, MetricsSampler
 from .spec import load_scenario
-from .system_log import SystemLog, record_snapshot_event
+from .system_log import SystemLog, backfill_action_snapshots, record_snapshot_event
 
 
 def run(path_str: str | None, yes: bool, fast: bool = False) -> int:
@@ -67,13 +67,26 @@ def run(path_str: str | None, yes: bool, fast: bool = False) -> int:
     run_start_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     if fast:
         print(
-            "--fast: skipping per-action system-wide snapshots (SSH/on-chain/Prometheus probes) -- "
-            "room/user quality metrics are unaffected."
+            "--fast: skipping per-action markers entirely (no before/after/during_action events, "
+            "and nothing to backfill at run end) -- room/user quality metrics are unaffected. Since "
+            "per-action telemetry no longer queries live during the run either way (see "
+            "backfill_action_snapshots), --fast now only saves the run-end historical batch pass, "
+            "not any in-run overhead."
         )
     try:
         return run_actions(scenario, env, system_log=None if fast else system_log)
     finally:
         record_snapshot_event(system_log, env, "run_end")
+        # Every before_action/after_action/during_action marker recorded
+        # during the run was cheap (identity + timestamp, no Prometheus
+        # query -- see record_action_marker()'s doc); this is the single
+        # bounded batch pass that fetches each one's historical telemetry
+        # now that the scripted timeline is done and there's nothing left
+        # to block. A --fast run has no markers to backfill at all (system_log
+        # was None throughout run_actions), so this is a fast no-op there.
+        backfilled = backfill_action_snapshots(system_log, env)
+        if backfilled:
+            print(f"Backfilled historical telemetry for {backfilled} action marker(s).")
         metrics_sampler.stop()
         run_end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         img_dir = system_log.run_dir / "img"

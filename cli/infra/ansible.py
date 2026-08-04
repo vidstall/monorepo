@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 from ..context import ANSIBLE_DIR, CONTRACT_RUNTIME_DIR, PINNED_IMAGES, read_env_file, venv_bin
@@ -14,10 +15,12 @@ def ansible_playbook(
     playbook: str,
     extra_vars: dict[str, Any] | None = None,
     host_limit: str | None = None,
+    detach: bool = False,
+    log_path: Path | None = None,
 ) -> int:
-    # Deferred self-import: `run` is patched by tests as a flat cli.infra
-    # attribute -- looking it up through the package at call time is what
-    # makes that patch take effect here.
+    # Deferred self-import: `run`/`run_detached` are patched by tests as
+    # flat cli.infra attributes -- looking them up through the package at
+    # call time is what makes those patches take effect here.
     from .. import infra
 
     executable = venv_bin("ansible-playbook")
@@ -29,6 +32,13 @@ def ansible_playbook(
         args += ["--limit", host_limit]
     if extra_vars:
         args += ["--extra-vars", json.dumps(extra_vars)]
+    if detach:
+        # Fire-and-forget: caller doesn't wait for this playbook run to
+        # finish (see control.py's `detach` param) -- there's no exit code
+        # to return, so 0 just means "started", not "succeeded". Progress/
+        # errors land in log_path instead of this process's stdout.
+        infra.run_detached(args, cwd=ANSIBLE_DIR, log_path=log_path)
+        return 0
     return infra.run(args, cwd=ANSIBLE_DIR)
 
 
@@ -52,13 +62,42 @@ def configure(
     host_limit: str | None = None,
     container_state: str = "started",
     extra_vars: dict[str, Any] | None = None,
+    detach: bool = False,
+    log_path: Path | None = None,
 ) -> int:
     all_extra_vars = docker_deploy_extra_vars()
     all_extra_vars["xaisen_container_state"] = container_state
     if extra_vars:
         all_extra_vars.update(extra_vars)
-    code = ansible_playbook("site.yml", extra_vars=all_extra_vars, host_limit=host_limit)
+    code = ansible_playbook(
+        "site.yml", extra_vars=all_extra_vars, host_limit=host_limit, detach=detach, log_path=log_path
+    )
     record_history("infra configure", env=active_stack(), result_for_code=code)
+    return code
+
+
+def toggle_container(
+    host_limit: str,
+    container_name: str,
+    action: str,
+    detach: bool = False,
+    log_path: Path | None = None,
+) -> int:
+    """Fast path for scenario worker churn (see control.py's `docker_only`
+    param) -- runs toggle_container.yml, which skips site.yml's `common`/
+    `docker_service` roles entirely and just SSHes in to run one bare
+    `docker start`/`docker stop <container_name>`. Only valid when the
+    container already exists with correct config (a prior full `configure()`
+    provisioned it) -- `action` is `"start"` or `"stop"`, matching the
+    literal `docker <action>` subcommand."""
+    code = ansible_playbook(
+        "toggle_container.yml",
+        extra_vars={"xaisen_toggle_action": action, "xaisen_container_name": container_name},
+        host_limit=host_limit,
+        detach=detach,
+        log_path=log_path,
+    )
+    record_history(f"infra toggle_container {action}", env=active_stack(), result_for_code=code)
     return code
 
 

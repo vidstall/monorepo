@@ -78,11 +78,13 @@ def _raw_series(result: list[dict] | None) -> list[tuple[str, dict[str, str], fl
     return series
 
 
-def _rate_series(instance_filter: str, metric_name: str) -> tuple[list[tuple[str, dict[str, str], float]], bool]:
+def _rate_series(
+    instance_filter: str, metric_name: str, at_time: float | None = None
+) -> tuple[list[tuple[str, dict[str, str], float]], bool]:
     """One metric's rate() series, tagged with `metric_name` directly rather
     than parsed from a `__name__` label -- rate() strips __name__ from its
     output, so there's nothing to parse. Returns (series, query_failed)."""
-    result = query(f'rate({metric_name}{{{instance_filter}}}[1m])')
+    result = query(f'rate({metric_name}{{{instance_filter}}}[1m])', at_time=at_time)
     if result is None:
         return [], True
     series: list[tuple[str, dict[str, str], float]] = []
@@ -235,7 +237,7 @@ def _psi_percent(rates: dict[str, float], name: str) -> float | None:
     return round(value * 100.0, 2) if value is not None else None
 
 
-def collect_infra_evaluation(public_ip: str, interval_seconds: int) -> dict[str, Any]:
+def collect_infra_evaluation(public_ip: str, interval_seconds: int, at_time: float | None = None) -> dict[str, Any]:
     """One infra/<provider>-<instance>.json `evaluation[]` entry, sourced
     entirely from node_exporter via Prometheus (job xaisen-node-exporter) --
     no SSH. Matches `instance=~".*<dashed-ip>.*"` on the host's dashed
@@ -246,25 +248,32 @@ def collect_infra_evaluation(public_ip: str, interval_seconds: int) -> dict[str,
     per-interface link_utilization_percent/peak bandwidth, gateway_probe)
     are omitted, not fabricated. Never raises -- a failed query yields
     empty gauge/rate maps, so every derived field below naturally becomes
-    None rather than propagating an exception."""
+    None rather than propagating an exception.
+
+    `at_time` (a unix timestamp) asks Prometheus for its view of the system
+    as of that past instant instead of "now" -- see query()'s doc. Used by
+    cli.scenario.system_log.backfill_action_snapshots() to reconstruct a
+    scenario-run action's telemetry after the fact instead of querying live
+    at action time."""
     dashed_ip = public_ip.replace(".", "-")
     instance_filter = f'instance=~".*{dashed_ip}.*"'
 
-    gauge_result = query(f'{{__name__=~"{_GAUGE_NAMES}", {instance_filter}}}')
+    gauge_result = query(f'{{__name__=~"{_GAUGE_NAMES}", {instance_filter}}}', at_time=at_time)
     gauge_series = _raw_series(gauge_result)
 
     rate_series: list[tuple[str, dict[str, str], float]] = []
     all_rate_queries_failed = True
     for metric_name in _RATE_NAMES:
-        series, failed = _rate_series(instance_filter, metric_name)
+        series, failed = _rate_series(instance_filter, metric_name, at_time=at_time)
         rate_series.extend(series)
         all_rate_queries_failed = all_rate_queries_failed and failed
 
     gauges = _scalar(gauge_series)
     rates = _scalar(rate_series)
 
+    reference_time = at_time if at_time is not None else time.time()
     boot_time = gauges.get("node_boot_time_seconds")
-    uptime_seconds = (time.time() - boot_time) if boot_time is not None else None
+    uptime_seconds = (reference_time - boot_time) if boot_time is not None else None
 
     errors = None
     if gauge_result is None and all_rate_queries_failed:
@@ -273,7 +282,7 @@ def collect_infra_evaluation(public_ip: str, interval_seconds: int) -> dict[str,
         errors = f"no node_exporter series matched instance filter for {public_ip}"
 
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.fromtimestamp(reference_time, tz=timezone.utc).isoformat(),
         "interval_seconds": interval_seconds,
         "cpu": {
             "usage_percent": _cpu_usage_percent(rate_series),

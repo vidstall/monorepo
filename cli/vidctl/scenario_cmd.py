@@ -74,8 +74,11 @@ def add_scenario_parser(subparsers: argparse._SubParsersAction[argparse.Argument
         "--fast",
         action="store_true",
         help=(
-            "Skip per-action system-wide snapshots (SSH/on-chain/Prometheus probes) to run close to the "
-            "scenario's own scripted pace. Room/user quality metrics are unaffected."
+            "Skip per-action system-wide telemetry entirely (no before/after/during_action markers, "
+            "and nothing to backfill from Prometheus at run end). Per-action telemetry never queries "
+            "live during the run either way (it's reconstructed from Prometheus history in one batch "
+            "pass at run end), so --fast only saves that end-of-run batch pass, not any in-run "
+            "overhead. Room/user quality metrics are unaffected."
         ),
     )
     run_parser.set_defaults(handler=lambda args: scenario.run(args.path, args.yes, args.fast))

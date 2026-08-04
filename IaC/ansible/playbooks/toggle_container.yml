@@ -1,0 +1,29 @@
+---
+# Fast path for scenario worker churn (cli/scenario/actions.py's
+# worker.join/worker.leave, via cli/infra/control.py's docker_only=True) --
+# the container already exists with correct config from an earlier full
+# site.yml provision (vidctl scenario apply); a churn cycle only ever
+# pauses/resumes it, never reconfigures it. Deliberately skips site.yml's
+# `common`/`docker_service` roles entirely (host bootstrap, per-colocated-
+# service reconcile loop, Caddy) -- just one `docker start`/`docker stop`
+# against the one named container.
+- name: Toggle one Xaisen service container's running state
+  hosts: xaisen
+  gather_facts: false
+  become: true
+  pre_tasks:
+    # Shorter than site.yml's 300s wait -- this only ever targets an
+    # already-running, already-provisioned host (never a freshly
+    # (re)booting VM), so a brief retry window is enough of a safety net
+    # against a momentarily busy SSH daemon without paying reboot-grade
+    # patience on a real failure.
+    - name: Wait for the host to accept SSH connections
+      ansible.builtin.wait_for_connection:
+        delay: 2
+        sleep: 2
+        connect_timeout: 10
+        timeout: 30
+  tasks:
+    - name: "docker {{ xaisen_toggle_action }} {{ xaisen_container_name }}"
+      ansible.builtin.command: "docker {{ xaisen_toggle_action }} {{ xaisen_container_name }}"
+      changed_when: true

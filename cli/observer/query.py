@@ -27,7 +27,7 @@ def _prometheus_query_url(host: dict) -> str:
     return f"https://prometheus-query.{dashed}.sslip.io/api/v1/query"
 
 
-def query(promql: str) -> list[dict] | None:
+def query(promql: str, at_time: float | None = None) -> list[dict] | None:
     """Instant-query Prometheus's /api/v1/query over the bearer-gated
     "prometheus-query" Caddy route (see observer-caddyfile.j2) -- the only
     reachable path from an operator's machine, since Prometheus's own port
@@ -35,7 +35,14 @@ def query(promql: str) -> list[dict] | None:
     comments). Returns the raw `data.result` vector (a list of
     {"metric": {...labels}, "value": [timestamp, "stringValue"]} entries),
     or None on any failure (no prometheus host registered, unreachable,
-    non-2xx, malformed JSON, or a non-"success" Prometheus response)."""
+    non-2xx, malformed JSON, or a non-"success" Prometheus response).
+
+    `at_time` (a unix timestamp) asks Prometheus to evaluate the query AS OF
+    that past instant instead of "now" -- Prometheus's HTTP API supports
+    this natively via the `time` query param, including for expressions
+    with embedded range vectors (e.g. rate()), which get evaluated over the
+    window ending at `at_time`. Omitted (None, the default) preserves
+    today's "now" behavior for every existing caller."""
     # Deferred self-import: metrics_auth_token is patched by tests as a flat
     # cli.infra attribute -- looking it up through the package at call time
     # is what makes that patch take effect here.
@@ -46,7 +53,10 @@ def query(promql: str) -> list[dict] | None:
         print("query: no observer host currently runs prometheus.")
         return None
 
-    url = f"{_prometheus_query_url(host)}?{urllib.parse.urlencode({'query': promql})}"
+    params: dict[str, str | float] = {"query": promql}
+    if at_time is not None:
+        params["time"] = at_time
+    url = f"{_prometheus_query_url(host)}?{urllib.parse.urlencode(params)}"
     request = urllib.request.Request(
         url,
         headers={"Authorization": f"Bearer {infra.metrics_auth_token()}"},

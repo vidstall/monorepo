@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from cli import context, infra, observer
+from cli.observer.query import query
 
 
 class ObserverConfigTests(unittest.TestCase):
@@ -391,6 +393,43 @@ class ObserverCleanPlaybookTests(unittest.TestCase):
         # prometheus/tempo/loki's history is meant to be wiped.
         self.assertEqual(set(wiped_data_dirs), {"prometheus", "tempo", "loki"})
         self.assertNotIn("grafana", wiped_data_dirs)
+
+
+class QueryAtTimeTests(unittest.TestCase):
+    """cli.observer.query.query()'s `at_time` param -- enables
+    cli.scenario.system_log.backfill_action_snapshots() to ask Prometheus
+    for its historical view of the system instead of "now"."""
+
+    def _fake_response(self, body: bytes) -> MagicMock:
+        response = MagicMock()
+        response.read.return_value = body
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+        return response
+
+    def test_omits_time_param_when_at_time_is_none(self) -> None:
+        body = json.dumps({"status": "success", "data": {"result": []}}).encode()
+        with (
+            patch("cli.observer.query.read_hosts", return_value=[{"address": "1.2.3.4", "services": ["prometheus"]}]),
+            patch.object(infra, "metrics_auth_token", return_value="tok"),
+            patch("urllib.request.urlopen", return_value=self._fake_response(body)) as mock_urlopen,
+        ):
+            query("up")
+
+        request = mock_urlopen.call_args[0][0]
+        self.assertNotIn("time=", request.full_url)
+
+    def test_includes_time_param_when_at_time_given(self) -> None:
+        body = json.dumps({"status": "success", "data": {"result": []}}).encode()
+        with (
+            patch("cli.observer.query.read_hosts", return_value=[{"address": "1.2.3.4", "services": ["prometheus"]}]),
+            patch.object(infra, "metrics_auth_token", return_value="tok"),
+            patch("urllib.request.urlopen", return_value=self._fake_response(body)) as mock_urlopen,
+        ):
+            query("up", at_time=1700000000.0)
+
+        request = mock_urlopen.call_args[0][0]
+        self.assertIn("time=1700000000.0", request.full_url)
 
 
 if __name__ == "__main__":
