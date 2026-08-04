@@ -1,0 +1,1162 @@
+name = "single-room-mixed-cloud-eval"
+env = "devnet"
+
+[contract]
+gas_budget = ""
+create_registry_if_missing = false
+force = false
+
+# Images already published to DigitalOcean's registry -- Akamai hosts just
+# pull from it like any other host, no second registry needed.
+[registry]
+provider = "digitalocean"
+tag = ""
+
+# Republish the existing frontend site (same name/provider as the currently
+# deployed bucket in runtime/topology.toml) so it picks up THIS scenario's
+# freshly-published contract IDs -- needed for a real browser client to join
+# the bot-populated room. Reusing name+provider updates it in place; never
+# deleted by apply/destroy (see scenario/README.md).
+[[frontends]]
+name = "site-2-bucket"
+object = "frontend"
+provider = "alibaba"
+
+# --- Topology hosts (6 of 10, randomly selected [seed=42] -- mixed across both providers): 001=digitalocean, 002=digitalocean, 005=akamai, 006=akamai, 007=akamai, 010=akamai ---
+# Each runs 3x validator-daemon, 2x relay, 3x cp-daemon, 2x signaling = 10
+# workers/instance x 6 instances = 60 workers.
+#
+# Hosts 001/002 (digitalocean) and 005 (akamai) are the STATIC baseline -- never
+# paused below -- so the room always has a live validator/relay/cp/signaling set
+# even while 006/007/010 are being knocked down. Worker pause/restart (used by
+# the worker.leave/worker.join churn below) is only supported for --provider
+# alibaba/akamai (see cli/infra/control.py) -- 001/002 (digitalocean) couldn't be
+# churned this way regardless.
+
+# host 001 (digitalocean) -- static baseline
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "001"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+# host 002 (digitalocean) -- static baseline
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "002"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "002"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+# host 005 (akamai) -- static baseline
+[[workers]]
+host = "005"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "005"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "005"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 3
+
+[[workers]]
+host = "005"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "005"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "005"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "005"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "005"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 3
+
+[[workers]]
+host = "005"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "005"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+# host 006 (akamai) -- CHURNED below
+[[workers]]
+host = "006"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "006"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "006"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 3
+
+[[workers]]
+host = "006"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "006"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "006"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "006"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "006"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 3
+
+[[workers]]
+host = "006"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "006"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+# host 007 (akamai) -- CHURNED below
+[[workers]]
+host = "007"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "007"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "007"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 3
+
+[[workers]]
+host = "007"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "007"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "007"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "007"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "007"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 3
+
+[[workers]]
+host = "007"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "007"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+# host 010 (akamai) -- CHURNED below
+[[workers]]
+host = "010"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "010"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "010"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 3
+
+[[workers]]
+host = "010"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "010"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "010"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "010"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "010"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 3
+
+[[workers]]
+host = "010"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "010"
+service = "signaling"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+# --- Bot-hosting instances (4 of 10, the remainder not used for topology): 003=digitalocean, 004=akamai, 008=akamai, 009=akamai ---
+# Bot control server is a singleton per host (its HTTP control API is reached
+# directly at a single host) -- never colocate a second instance. The actual
+# 5-bots-per-host figure comes from the actions timeline below (bot.create_room /
+# bot.join_room), not from extra [[workers]] rows.
+
+# host 003 (digitalocean)
+[[workers]]
+host = "003"
+service = "bot"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+# host 004 (akamai)
+[[workers]]
+host = "004"
+service = "bot"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+# host 008 (akamai)
+[[workers]]
+host = "008"
+service = "bot"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+# host 009 (akamai)
+[[workers]]
+host = "009"
+service = "bot"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+# --- Actions timeline (run separately via `vidctl scenario run`, only against an
+# already-`apply`'d + active scenario) -----------------------------------------
+#
+# Three overlapping phases:
+#   1. Room setup (0-5min): create the room, 19 bots join it, 5-per-bot-host, one
+#      media-mode bucket per host.
+#   2. Worker churn (5-13min): hosts 006/007/010 each go down as a WHOLE NODE (all
+#      10 workers on that host pause together) and come back ~4min later --
+#      staggered so the three outages overlap (a harder test than one-at-a-time).
+#      >= 30 workers get a leave action, covering every role.
+#   3. Bot churn (6-11min): 6 of the 20 bots (one from each media-mode bucket, plus
+#      2 extra) leave the room and rejoin later, independent of the worker churn.
+#   4. Final teardown once everything has settled back.
+
+[[actions]]
+id = "room1"
+type = "bot.create_room"
+timestamp = "+10s"
+host = "003"
+media_mode = "both"
+
+[[actions]]
+id = "churn1"
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+25s"
+host = "003"
+media_mode = "both"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+40s"
+host = "003"
+media_mode = "both"
+
+[[actions]]
+id = "churn2"
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+55s"
+host = "003"
+media_mode = "both"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+70s"
+host = "003"
+media_mode = "both"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+85s"
+host = "004"
+media_mode = "camera"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+100s"
+host = "004"
+media_mode = "camera"
+
+[[actions]]
+id = "churn3"
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+115s"
+host = "004"
+media_mode = "camera"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+130s"
+host = "004"
+media_mode = "camera"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+145s"
+host = "004"
+media_mode = "camera"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+160s"
+host = "008"
+media_mode = "mic"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+175s"
+host = "008"
+media_mode = "mic"
+
+[[actions]]
+id = "churn4"
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+190s"
+host = "008"
+media_mode = "mic"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+205s"
+host = "008"
+media_mode = "mic"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+220s"
+host = "008"
+media_mode = "mic"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+235s"
+host = "009"
+media_mode = "listen"
+
+[[actions]]
+id = "churn5"
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+250s"
+host = "009"
+media_mode = "listen"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+265s"
+host = "009"
+media_mode = "listen"
+
+[[actions]]
+id = "churn6"
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+280s"
+host = "009"
+media_mode = "listen"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+295s"
+host = "009"
+media_mode = "listen"
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+320s"
+host = "006"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+323s"
+host = "006"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+326s"
+host = "006"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 3
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+329s"
+host = "006"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+332s"
+host = "006"
+service = "relay"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+335s"
+host = "006"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+338s"
+host = "006"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+341s"
+host = "006"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 3
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+344s"
+host = "006"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+347s"
+host = "006"
+service = "signaling"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+360s"
+host = "003"
+bot_id = "$churn1.botId"
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+385s"
+host = "003"
+bot_id = "$churn2.botId"
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+400s"
+host = "007"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+403s"
+host = "007"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+406s"
+host = "007"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 3
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+409s"
+host = "007"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+410s"
+host = "004"
+bot_id = "$churn3.botId"
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+412s"
+host = "007"
+service = "relay"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+415s"
+host = "007"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+418s"
+host = "007"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+421s"
+host = "007"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 3
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+424s"
+host = "007"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+427s"
+host = "007"
+service = "signaling"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+435s"
+host = "008"
+bot_id = "$churn4.botId"
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+460s"
+host = "009"
+bot_id = "$churn5.botId"
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+480s"
+host = "010"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+483s"
+host = "010"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+485s"
+host = "009"
+bot_id = "$churn6.botId"
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+486s"
+host = "010"
+service = "validator-daemon"
+provider = "akamai"
+worker_index = 3
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+489s"
+host = "010"
+service = "relay"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+492s"
+host = "010"
+service = "relay"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+495s"
+host = "010"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+498s"
+host = "010"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+501s"
+host = "010"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 3
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+504s"
+host = "010"
+service = "signaling"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+507s"
+host = "010"
+service = "signaling"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "worker.join"
+timestamp = "+560s"
+service = "validator-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+560s"
+host = "003"
+media_mode = "both"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+563s"
+service = "validator-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+566s"
+service = "validator-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+569s"
+service = "relay"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+572s"
+service = "relay"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+575s"
+service = "cp-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+578s"
+service = "cp-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+581s"
+service = "cp-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+584s"
+service = "signaling"
+provider = "akamai"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+585s"
+host = "003"
+media_mode = "both"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+587s"
+service = "signaling"
+provider = "akamai"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+610s"
+host = "004"
+media_mode = "camera"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+635s"
+host = "008"
+media_mode = "mic"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+640s"
+service = "validator-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+643s"
+service = "validator-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+646s"
+service = "validator-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+649s"
+service = "relay"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+652s"
+service = "relay"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+655s"
+service = "cp-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+658s"
+service = "cp-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+660s"
+host = "009"
+media_mode = "listen"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+661s"
+service = "cp-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+664s"
+service = "signaling"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+667s"
+service = "signaling"
+provider = "akamai"
+
+[[actions]]
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+685s"
+host = "009"
+media_mode = "listen"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+720s"
+service = "validator-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+723s"
+service = "validator-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+726s"
+service = "validator-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+729s"
+service = "relay"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+732s"
+service = "relay"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+735s"
+service = "cp-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+738s"
+service = "cp-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+741s"
+service = "cp-daemon"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+744s"
+service = "signaling"
+provider = "akamai"
+
+[[actions]]
+type = "worker.join"
+timestamp = "+747s"
+service = "signaling"
+provider = "akamai"
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+807s"
+host = "003"
+bot_id = "$room1.botId"
