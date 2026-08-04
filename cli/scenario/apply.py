@@ -130,7 +130,7 @@ def _clean_observer_stack() -> None:
             print(f"Warning: observer data cleanup failed for {name!r} (exit {code}).", file=sys.stderr)
 
 
-def apply(path_str: str, yes: bool, rebake: bool = False, force_contract: bool = False) -> int:
+def apply(path_str: str | None, yes: bool, rebake: bool = False, force_contract: bool = False) -> int:
     # Deferred self-import: contract_env_path is patched by tests as a flat
     # cli.scenario attribute -- looking it up through the package at call
     # time is what makes that patch take effect here. Aliased since `scenario`
@@ -140,6 +140,17 @@ def apply(path_str: str, yes: bool, rebake: bool = False, force_contract: bool =
     if not yes:
         print("Refusing to apply a scenario without --yes.", file=sys.stderr)
         return 2
+
+    if path_str is None:
+        previous = read_lock()
+        if previous is None or not previous.get("scenario_path"):
+            print(
+                "Refusing to apply: no scenario path given and no previously applied scenario to reuse.",
+                file=sys.stderr,
+            )
+            return 2
+        path_str = str(previous["scenario_path"])
+        print(f"No scenario path given; reusing previously applied scenario: {path_str}")
 
     path = Path(path_str)
     try:
@@ -265,6 +276,14 @@ def apply(path_str: str, yes: bool, rebake: bool = False, force_contract: bool =
         _topology_worker_key(item, env): item for item in _active_workers_for_env(env)
     }
     to_kill, to_start = diff_workers(wanted, current)
+    # `await=true` workers are declared intent, not eager-start intent --
+    # they stay out of `to_kill` (still present in `wanted`, so a scenario
+    # that already brought one up via a worker.join action won't have it
+    # torn down as "extra" on a later apply) but are excluded here from
+    # `to_start` so `apply` never provisions them itself; only a matching
+    # worker.join action (during `scenario run`) does.
+    deferred_count = sum(1 for key in to_start if wanted[key].get("await"))
+    to_start = [key for key in to_start if not wanted[key].get("await")]
 
     with _timed(timings, "worker teardown"):
         code = 0
@@ -359,7 +378,10 @@ def apply(path_str: str, yes: bool, rebake: bool = False, force_contract: bool =
     with _timed(timings, "observer refresh"):
         _refresh_observer_stack()
         _push_contract_state(env)
-    print(f"Scenario '{scenario['name']}' applied: {len(to_kill)} removed, {len(to_start)} reconciled.")
+    print(
+        f"Scenario '{scenario['name']}' applied: {len(to_kill)} removed, {len(to_start)} reconciled, "
+        f"{deferred_count} awaiting worker.join."
+    )
     _print_timings(timings)
     return 0
 

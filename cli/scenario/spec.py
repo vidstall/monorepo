@@ -114,6 +114,7 @@ def load_scenario(path: Path) -> dict[str, Any]:
                 "worker_index": worker_index,
                 "size": row.get("size") or None,
                 "region": row.get("region") or None,
+                "await": bool(row.get("await", False)),
             }
         )
 
@@ -126,7 +127,13 @@ def load_scenario(path: Path) -> dict[str, Any]:
     # adding a new host. Appended after dedup so it doesn't collide with the
     # `seen` check above; first worker row seen for a host donates its
     # provider/size/region since node_exporter colocates on that same VM.
+    # A host's node_exporter is itself `await`-deferred only when EVERY
+    # worker on that host is -- an eager sibling worker already brings the
+    # host up, so node_exporter comes up with it regardless.
     seen_node_exporter_hosts: set[str] = set()
+    host_all_await: dict[str, bool] = {}
+    for row in workers:
+        host_all_await[row["host"]] = host_all_await.get(row["host"], True) and row["await"]
     for row in list(workers):
         host = row["host"]
         if host in seen_node_exporter_hosts:
@@ -140,6 +147,7 @@ def load_scenario(path: Path) -> dict[str, Any]:
                 "worker_index": 1,
                 "size": row["size"],
                 "region": row["region"],
+                "await": host_all_await[host],
             }
         )
 
@@ -239,6 +247,42 @@ def load_scenario(path: Path) -> dict[str, Any]:
                 "bot_id": row.get("bot_id") or None,
             }
         )
+
+    # An `await = true` worker only ever launches via a matching worker.join
+    # action's fresh-provision path (see actions.py::_worker_join, which
+    # matches by explicit host, or -- if the action omits host -- by
+    # (service, provider) as long as exactly one await worker qualifies).
+    # Warn (don't hard-error; the action might live in a different scenario
+    # file applied later, or launched manually) if this file itself has no
+    # such action, since otherwise the worker is dead declared intent.
+    join_actions = [row for row in actions if row["type"] == "worker.join"]
+    explicit_join_targets = {
+        (str(row.get("host") or ""), row.get("service"), row.get("provider"), int(row.get("worker_index", 1) or 1))
+        for row in join_actions
+        if row.get("host")
+    }
+    hostless_join_service_providers = {
+        (row.get("service"), row.get("provider")) for row in join_actions if not row.get("host")
+    }
+    await_service_provider_counts: dict[tuple[str, str], int] = {}
+    for row in workers:
+        if row["await"]:
+            sp = (row["service"], row["provider"])
+            await_service_provider_counts[sp] = await_service_provider_counts.get(sp, 0) + 1
+    for row in workers:
+        if not row["await"]:
+            continue
+        key = (row["host"], row["service"], row["provider"], row["worker_index"])
+        sp = (row["service"], row["provider"])
+        matched = key in explicit_join_targets or (
+            sp in hostless_join_service_providers and await_service_provider_counts[sp] == 1
+        )
+        if not matched:
+            print(
+                f"Warning: worker host={row['host']} service={row['service']} provider={row['provider']} "
+                f"has await=true but no matching worker.join action in this file -- it will never launch.",
+                file=sys.stderr,
+            )
 
     contract_opts = data.get("contract", {})
     contract_opts = contract_opts if isinstance(contract_opts, dict) else {}

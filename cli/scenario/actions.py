@@ -64,7 +64,42 @@ def _bot_delete_room(action: dict[str, Any]) -> dict[str, Any] | None:
     return bot_client.delete_room(action["host"], action["bot_id"])
 
 
-def _worker_join(action: dict[str, Any], env: str, reserved: set[tuple[str, int]]) -> dict[str, Any] | None:
+def _find_declared_await_worker(
+    action: dict[str, Any],
+    service: str,
+    provider: str,
+    reserved: set[tuple[str, int]],
+    deferred_by_key: dict[tuple[str, str, str, int], dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Match a worker.join action to a declared `await = true` [[workers]]
+    row (see spec.py::load_scenario) -- either directly by (host, service,
+    provider, worker_index) when the action gives a host, or, when it
+    doesn't, by (service, provider) alone as long as exactly one still-
+    unreserved await worker qualifies (ambiguous otherwise, left to the
+    caller to report)."""
+    host = action.get("host")
+    if host:
+        worker_index = int(action.get("worker_index") or 1)
+        return deferred_by_key.get((str(host), service, provider, worker_index))
+
+    candidates = [
+        row
+        for (row_host, row_service, row_provider, row_worker_index), row in deferred_by_key.items()
+        if row_service == service
+        and row_provider == provider
+        and (row_host, row_worker_index) not in reserved
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _worker_join(
+    action: dict[str, Any],
+    env: str,
+    reserved: set[tuple[str, int]],
+    deferred_by_key: dict[tuple[str, str, str, int], dict[str, Any]],
+) -> dict[str, Any] | None:
     service = action["service"]
     provider = action["provider"]
     pooled = find_pooled_worker(env, service, provider, reserved)
@@ -77,24 +112,42 @@ def _worker_join(action: dict[str, Any], env: str, reserved: set[tuple[str, int]
         reserved.add((host, worker_index))
         return {"host": host, "worker_index": worker_index, "reused": True}
 
-    host = action.get("host")
+    declared = _find_declared_await_worker(action, service, provider, reserved, deferred_by_key)
+    if declared is None and not action.get("host"):
+        ambiguous = [
+            row
+            for (row_host, row_service, row_provider, row_worker_index), row in deferred_by_key.items()
+            if row_service == service and row_provider == provider and (row_host, row_worker_index) not in reserved
+        ]
+        if len(ambiguous) > 1:
+            print(
+                f"worker.join (service={service}, provider={provider}): multiple declared await=true workers "
+                f"match and no 'host' was given to disambiguate: "
+                f"{sorted(row['host'] for row in ambiguous)}.",
+                file=sys.stderr,
+            )
+            return None
+
+    host = action.get("host") or (declared["host"] if declared else None)
     if not host:
         print(
             f"worker.join (service={service}, provider={provider}): no paused worker available to reuse, "
-            "and no 'host' given to provision a new one.",
+            "no declared await=true worker matches, and no 'host' given to provision a new one.",
             file=sys.stderr,
         )
         return None
-    worker_index = int(action.get("worker_index") or 1)
+    worker_index = int(action.get("worker_index") or (declared["worker_index"] if declared else 1))
+    size = action.get("size") or (declared.get("size") if declared else None)
+    region = action.get("region") or (declared.get("region") if declared else None)
     code = infra.control(
         "start",
         host,
         service,
         provider,
         yes=True,
-        size=action.get("size"),
+        size=size,
         worker_index=worker_index,
-        region=action.get("region"),
+        region=region,
     )
     if code != 0:
         return None
@@ -122,6 +175,11 @@ def run_actions(scenario: dict[str, Any], env: str, system_log: SystemLog | None
     t0 = time.monotonic()
     results: dict[str, dict[str, Any]] = {}
     reserved: set[tuple[str, int]] = set()
+    deferred_by_key: dict[tuple[str, str, str, int], dict[str, Any]] = {
+        (row["host"], row["service"], row["provider"], row["worker_index"]): row
+        for row in scenario.get("workers", [])
+        if row.get("await")
+    }
 
     for index, action in enumerate(actions):
         resolved = _resolve_refs(action, results)
@@ -160,7 +218,7 @@ def run_actions(scenario: dict[str, Any], env: str, system_log: SystemLog | None
             elif action_type == "bot.delete_room":
                 result = _bot_delete_room(resolved)
             elif action_type == "worker.join":
-                result = _worker_join(resolved, env, reserved)
+                result = _worker_join(resolved, env, reserved, deferred_by_key)
             elif action_type == "worker.leave":
                 result = _worker_leave(resolved)
             else:  # pragma: no cover - load_scenario() already rejects unknown types

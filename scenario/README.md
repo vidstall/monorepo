@@ -12,9 +12,18 @@ frontend (e.g. Alibaba OSS) is too costly to churn automatically.
 ```bash
 ./vidctl scenario apply scenario/example.toml --yes
 ./vidctl scenario apply scenario/digitalocean-sample.toml --yes
+./vidctl scenario apply --yes   # reuses the previously applied scenario's path (logged to stdout)
+./vidctl scenario run --yes     # reuses the currently active scenario's path
 ./vidctl scenario status
 ./vidctl scenario destroy
 ```
+
+The `path` argument to `apply`/`run` is optional. `apply` without a path reuses
+whichever scenario file was last applied (from the lock, even if its status is
+`failed`) and prints which one it picked before doing anything else -- errors
+out if there's no previous scenario to reuse. `run` without a path uses the
+currently *active* scenario (`status = "active"` in the lock) and errors out
+if none is active.
 
 Only one scenario can be active at a time. While a scenario is active, manual
 `vidctl infra ...` commands and `vidctl scenario apply` of a *different* file
@@ -58,12 +67,28 @@ to reconcile drift.
   `multicloud.toml` for how a multi-provider scenario renumbers each source
   file's hosts into one continuous sequence.
   `service` (one of the worker services), `provider`, optional `size`
-  (VM SKU override) and `worker_index` (defaults to `1`; only meaningful
-  when running multiple replicas of the same service under one `host`).
+  (VM SKU override), `worker_index` (defaults to `1`; only meaningful
+  when running multiple replicas of the same service under one `host`), and
+  optional `await` (defaults to `false`).
+
+  `await = true` declares a worker without eagerly launching it: `apply`
+  parses and tracks it (so it's never mistaken for drift and killed once it
+  eventually starts) but never provisions/starts/registers it itself. It
+  only actually launches when a `[[actions]]` `worker.join` entry targeting
+  it fires during `scenario run` -- matched either by giving that action the
+  same `host` (plus `service`/`provider`/`worker_index`), or, if the action
+  omits `host`, automatically as long as exactly one declared `await`
+  worker matches its `service`/`provider`. A matched join inherits the
+  declared worker's `size`/`region` unless the action overrides them.
+  `load_scenario()` prints a warning (not an error) for any `await` worker
+  with no matching `worker.join` action in the same file, since it would
+  otherwise never launch.
 
 Workers present in `runtime/topology.toml` but absent from the scenario
 file are killed on `apply` (full declarative reconcile) -- this applies only
-to `[[workers]]`, never to `[[frontends]]`.
+to `[[workers]]`, never to `[[frontends]]`; `await = true` workers are
+exempt from both halves of this reconcile until a `worker.join` action
+brings them up (see above).
 
 ## Samples
 
