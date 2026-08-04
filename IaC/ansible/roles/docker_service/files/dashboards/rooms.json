@@ -40,6 +40,7 @@
       "id": 1,
       "type": "stat",
       "title": "Active rooms",
+      "description": "sum(dvconf_rooms_active) -- one cluster-wide number. dvconf_rooms_active is a PER-SIGNALING-REPLICA local gauge (apps/signaling/src/index.ts); querying it bare returns one series per replica (12 in a 2-signaling-per-host x 6-host topology), all sharing the same hardcoded legendFormat, rendering as indistinguishable duplicate tiles.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -56,7 +57,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "dvconf_rooms_active",
+          "expr": "sum(dvconf_rooms_active)",
           "legendFormat": "rooms active",
           "refId": "A"
         }
@@ -66,7 +67,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "Participants per room",
-      "description": "dvconf_room_participants{roomId} -- apps/signaling/src/rooms.ts, set on join/leave.",
+      "description": "count by (roomId) (dvconf_relay_peer_latency_ms{roomId}) -- apps/relay/src/metrics-server.ts, one series per peerId reporting via POST /stats/report. dvconf_room_participants (apps/signaling/src/rooms.ts) was signaling-only and never counted bots, which connect straight to the relay's WS and never touch signaling at all; this metric is populated by both bots (apps/bot/src/stats-reporter.ts) and browser clients (useConnectionStats.ts) alike.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -83,7 +84,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "dvconf_room_participants{roomId=~\"$room\"}",
+          "expr": "count by (roomId) (dvconf_relay_peer_latency_ms{roomId=~\"$room\"})",
           "legendFormat": "{{roomId}}",
           "refId": "A"
         }
