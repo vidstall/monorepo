@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
-import subprocess
 import tempfile
 import time
 import unittest
@@ -301,6 +302,82 @@ class LoadScenarioTests(ScenarioTestCase):
         self.assertEqual(parsed["actions"][1]["type"], "worker.join")
         self.assertIsNone(parsed["actions"][1]["host"])
 
+    def test_await_defaults_false(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        parsed = scenario.load_scenario(path)
+        self.assertTrue(all(row["await"] is False for row in parsed["workers"]))
+
+    def test_await_field_parses_and_flags_solo_node_exporter(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            'env = "devnet"\nname = "await-test"\n'
+            '[[workers]]\nhost = "002"\nservice = "signaling"\nprovider = "digitalocean"\nawait = true\n'
+            '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            'host = "002"\nservice = "signaling"\nprovider = "digitalocean"\n',
+        )
+        parsed = scenario.load_scenario(path)
+        by_service = {row["service"]: row for row in parsed["workers"]}
+        self.assertTrue(by_service["signaling"]["await"])
+        # Sole worker on host "002" is deferred, so its auto-injected
+        # node_exporter is deferred too.
+        self.assertTrue(by_service["node_exporter"]["await"])
+
+    def test_await_node_exporter_stays_eager_with_eager_sibling(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            'env = "devnet"\nname = "await-test"\n'
+            '[[workers]]\nhost = "002"\nservice = "signaling"\nprovider = "digitalocean"\n'
+            '[[workers]]\nhost = "002"\nservice = "relay"\nprovider = "digitalocean"\nawait = true\n'
+            '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            'host = "002"\nservice = "relay"\nprovider = "digitalocean"\n',
+        )
+        parsed = scenario.load_scenario(path)
+        by_service = {row["service"]: row for row in parsed["workers"]}
+        self.assertFalse(by_service["signaling"]["await"])
+        self.assertTrue(by_service["relay"]["await"])
+        self.assertFalse(by_service["node_exporter"]["await"])
+
+    def test_await_worker_without_matching_join_action_warns(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            'env = "devnet"\nname = "await-test"\n'
+            '[[workers]]\nhost = "002"\nservice = "signaling"\nprovider = "digitalocean"\nawait = true\n',
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            scenario.load_scenario(path)  # must not raise
+        self.assertIn("await=true", buf.getvalue())
+
+    def test_await_worker_with_explicit_host_join_action_no_warning(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            'env = "devnet"\nname = "await-test"\n'
+            '[[workers]]\nhost = "002"\nservice = "signaling"\nprovider = "digitalocean"\nawait = true\n'
+            '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            'host = "002"\nservice = "signaling"\nprovider = "digitalocean"\n',
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            scenario.load_scenario(path)
+        # The declared signaling worker itself has a matching join action,
+        # so it must not be the one warned about (its co-located
+        # node_exporter is a separate, expected warning of its own -- see
+        # test_await_field_parses_and_flags_solo_node_exporter).
+        self.assertNotIn("service=signaling", buf.getvalue())
+
+    def test_await_worker_auto_match_unambiguous_no_warning(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            'env = "devnet"\nname = "await-test"\n'
+            '[[workers]]\nhost = "002"\nservice = "signaling"\nprovider = "digitalocean"\nawait = true\n'
+            '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            'service = "signaling"\nprovider = "digitalocean"\n',
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            scenario.load_scenario(path)
+        self.assertNotIn("service=signaling", buf.getvalue())
+
     def test_out_of_order_timestamps_warn_not_error(self) -> None:
         path = self.write_scenario(
             "s.toml",
@@ -422,6 +499,46 @@ class ApplyTests(ScenarioTestCase):
         signaling_row = next(r for r in workers if r["service"] == "signaling")
         self.assertEqual(signaling_row.get("region"), "sfo3")
 
+
+    def test_apply_excludes_await_worker_from_provisioning(self) -> None:
+        path = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML_ONE_INSTANCE
+            + '\n[[workers]]\nhost = "002"\nservice = "relay"\nprovider = "digitalocean"\nawait = true\n'
+            + '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            + 'host = "002"\nservice = "relay"\nprovider = "digitalocean"\n',
+        )
+        code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+        topology = self.read_topology()
+        hosts = {row["host"] for row in topology.get("workers", [])}
+        self.assertNotIn("002", hosts)
+        self.assertIn("001", hosts)
+
+    def test_apply_does_not_kill_worker_previously_started_via_join(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML_ONE_INSTANCE)
+        code = scenario.apply(str(path), True)
+        self.assertEqual(code, 0)
+
+        # Re-declare the already-running host "001" signaling worker as
+        # await=true (simulating a scenario file edited after the worker
+        # was separately brought up e.g. via worker.join) and re-apply --
+        # it must not be treated as drift and killed.
+        v2 = self.write_scenario(
+            "s.toml",
+            SCENARIO_TOML_ONE_INSTANCE.replace(
+                '[[workers]]\nhost = "001"\nservice = "signaling"\nprovider = "digitalocean"\nsize = "s-1vcpu-1gb"\n',
+                '[[workers]]\nhost = "001"\nservice = "signaling"\nprovider = "digitalocean"\n'
+                'size = "s-1vcpu-1gb"\nawait = true\n',
+            )
+            + '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            + 'host = "001"\nservice = "signaling"\nprovider = "digitalocean"\n',
+        )
+        code = scenario.apply(str(v2), True)
+        self.assertEqual(code, 0)
+        topology = self.read_topology()
+        hosts = {row["host"] for row in topology.get("workers", [])}
+        self.assertIn("001", hosts)
 
     def test_apply_creates_workers_and_locks(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML)
@@ -788,6 +905,59 @@ class ActionsExecutionTests(ScenarioTestCase):
         self.assertEqual(code, 0)
         control.assert_called_once_with("pause", "001", "relay", "akamai", yes=True, worker_index=1)
 
+    def test_worker_join_matches_declared_await_worker_and_inherits_size_region(self) -> None:
+        parsed = self._scenario(
+            '[[workers]]\nhost = "002"\nservice = "cp-daemon"\nprovider = "akamai"\n'
+            'size = "g6-standard-4"\nregion = "us-east"\nawait = true\n'
+            '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            'host = "002"\nservice = "cp-daemon"\nprovider = "akamai"\n'
+        )
+        with patch.object(infra, "control", return_value=0) as control:
+            code = scenario.run_actions(parsed, "devnet")
+        self.assertEqual(code, 0)
+        control.assert_called_once_with(
+            "start", "002", "cp-daemon", "akamai", yes=True, size="g6-standard-4", worker_index=1, region="us-east"
+        )
+
+    def test_worker_join_auto_matches_declared_await_worker_when_unambiguous(self) -> None:
+        parsed = self._scenario(
+            '[[workers]]\nhost = "003"\nservice = "cp-daemon"\nprovider = "akamai"\nawait = true\n'
+            '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            'service = "cp-daemon"\nprovider = "akamai"\n'
+        )
+        with patch.object(infra, "control", return_value=0) as control:
+            code = scenario.run_actions(parsed, "devnet")
+        self.assertEqual(code, 0)
+        control.assert_called_once_with(
+            "start", "003", "cp-daemon", "akamai", yes=True, size=None, worker_index=1, region=None
+        )
+
+    def test_worker_join_ambiguous_declared_await_workers_fails_without_host(self) -> None:
+        parsed = self._scenario(
+            '[[workers]]\nhost = "003"\nservice = "cp-daemon"\nprovider = "akamai"\nawait = true\n'
+            '[[workers]]\nhost = "004"\nservice = "cp-daemon"\nprovider = "akamai"\nawait = true\n'
+            '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            'service = "cp-daemon"\nprovider = "akamai"\n'
+        )
+        code = scenario.run_actions(parsed, "devnet")
+        self.assertNotEqual(code, 0)
+
+    def test_worker_join_ad_hoc_host_unmatched_by_any_declared_worker_still_works(self) -> None:
+        # Backward-compat: a host given directly on the action that matches
+        # no declared await=true worker behaves exactly as it did before
+        # this feature -- a plain fresh provision with whatever the action
+        # itself specifies.
+        parsed = self._scenario(
+            '[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
+            'service = "relay"\nprovider = "akamai"\nhost = "009"\n'
+        )
+        with patch.object(infra, "control", return_value=0) as control:
+            code = scenario.run_actions(parsed, "devnet")
+        self.assertEqual(code, 0)
+        control.assert_called_once_with(
+            "start", "009", "relay", "akamai", yes=True, size=None, worker_index=1, region=None
+        )
+
     def test_worker_join_reuses_pooled_worker_over_provisioning(self) -> None:
         topology = infra.ensure_topology("devnet")
         topology["workers"].append(
@@ -889,6 +1059,33 @@ class RunTests(ScenarioTestCase):
         self.assertEqual(after_action["result"], {"botId": "b1"})
         self.assertGreaterEqual(after_action["duration_seconds"], 0)
 
+    def test_run_fast_skips_per_action_snapshots(self) -> None:
+        path = self.write_scenario(
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
+        )
+        self.assertEqual(scenario.apply(str(path), True), 0)
+
+        with (
+            patch("cli.scenario.actions.time.sleep", return_value=None),
+            patch.object(bot_client, "create_room", return_value={"botId": "b1"}),
+        ):
+            code = scenario.run(str(path), True, True)
+        self.assertEqual(code, 0)
+
+        run_dirs = list((self.root / "logs" / "s").glob("*"))
+        self.assertEqual(len(run_dirs), 1)
+        run_dir = run_dirs[0]
+
+        # run_start/run_end are still recorded (cheap, twice per run)...
+        run_doc = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+        run_phases = [event["phase"] for event in run_doc["events"]]
+        self.assertEqual(run_phases, ["run_start", "run_end"])
+
+        # ...but no per-action before_action/after_action snapshot ever gets
+        # written, since run_actions() was handed system_log=None.
+        action_files = list((run_dir / "actions").glob("*.json"))
+        self.assertEqual(action_files, [])
+
     def test_system_log_atomic_write_leaves_no_tmp_file(self) -> None:
         path = self.write_scenario(
             "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
@@ -945,8 +1142,13 @@ class SystemStatusTests(ScenarioTestCase):
         infra.write_topology(topology)
 
         with (
-            patch.object(infra, "registry_status", side_effect=Exception("ssh boom")),
-            patch.object(bot_client, "list_sessions", side_effect=Exception("http boom")),
+            patch.object(
+                system_status.metrics_worker, "registration_status", side_effect=Exception("registry prom boom")
+            ),
+            patch.object(system_status.metrics_infra, "collect_infra_evaluation", side_effect=Exception("prom boom")),
+            patch.object(
+                system_status.metrics_worker, "collect_worker_application", side_effect=Exception("bot prom boom")
+            ),
             patch(
                 "cli.observer.contract_exporter.collect_contract_state",
                 side_effect=Exception("chain boom"),
@@ -956,53 +1158,56 @@ class SystemStatusTests(ScenarioTestCase):
 
         self.assertEqual(snapshot["contract_state"], {"error": "chain boom"})
         bot_worker = next(w for w in snapshot["workers"] if w["service"] == "bot")
-        self.assertEqual(bot_worker["registry_status"], {"error": "ssh boom"})
-        self.assertEqual(bot_worker["bot_sessions"], {"error": "http boom"})
-        self.assertEqual(
-            bot_worker["hardware_network"], {"error": "host unreachable (no address or missing SSH key)"}
+        self.assertEqual(bot_worker["registry_status"], {"error": "registry prom boom"})
+        self.assertEqual(bot_worker["bot_sessions"], {"error": "bot prom boom"})
+        self.assertEqual(bot_worker["hardware_network"], {"error": "prom boom"})
+
+    def test_worker_snapshot_queries_prometheus_scoped_to_host(self) -> None:
+        """_worker_snapshot() must route registry status, hardware/network,
+        and bot-session data through cli.observer.metrics_worker/
+        metrics_infra (the observation system) rather than SSH/HTTP, scoped
+        to this worker's own address via an instance_filter -- not a
+        fleet-wide query."""
+        topology = infra.ensure_topology("devnet")
+        topology["workers"].append(
+            {
+                "host": "002",
+                "service": "bot",
+                "provider": "akamai",
+                "env": "devnet",
+                "worker_index": 1,
+                "desired_state": "started",
+            }
         )
+        infra.write_topology(topology)
 
-    def test_hardware_network_probe_parses_ssh_output(self) -> None:
-        key_path = self.root / "runtime" / "ssh_key" / "999" / "id_ed25519"
-        _write(key_path, "fake-key")
+        fake_hardware = {"cpu": {"usage_percent": 12.3}}
+        fake_bot_application = {"sessions_active": 2.0}
+        with (
+            patch.object(
+                system_status.metrics_worker, "registration_status", return_value=True
+            ) as registration_status,
+            patch.object(infra, "host_address", return_value="1.2.3.4"),
+            patch.object(
+                system_status.metrics_infra, "collect_infra_evaluation", return_value=fake_hardware
+            ) as collect_infra,
+            patch.object(
+                system_status.metrics_worker, "collect_worker_application", return_value=fake_bot_application
+            ) as collect_worker_app,
+            patch(
+                "cli.observer.contract_exporter.collect_contract_state",
+                return_value=[],
+            ),
+        ):
+            snapshot = system_status.capture_system_snapshot("devnet")
 
-        canned_stdout = (
-            "---CPU---\n4\n"
-            "---MEMORY---\n"
-            "              total        used        free      shared  buff/cache   available\n"
-            "Mem:           7975        1203        5210          12         1562        6500\n"
-            "Swap:             0           0           0\n"
-            "---DISK---\n"
-            "Filesystem      Size  Used Avail Use% Mounted on\n"
-            "/dev/vda1        50G  8.1G   40G  17% /\n"
-            "---NETWORK-ADDR---\n"
-            "lo               UNKNOWN        127.0.0.1/8 ::1/128\n"
-            "eth0             UP             10.0.0.5/24\n"
-            "---NETWORK-COUNTERS---\n"
-            "Inter-|   Receive                                                |  Transmit\n"
-            " face |bytes    packets errs drop fifo frame compressed multicast|"
-            "bytes    packets errs drop fifo colls carrier compressed\n"
-            "    lo:  1234       10    0    0    0     0          0         0     1234       10"
-            "    0    0    0     0       0          0\n"
-            "  eth0: 123456      900    0    0    0     0          0         0    98765      700"
-            "    0    0    0     0       0          0\n"
-            "---KERNEL---\n"
-            "Linux worker-002 6.1.0-generic #1 SMP x86_64 GNU/Linux\n"
-        )
-        fake_result = subprocess.CompletedProcess(args=[], returncode=0, stdout=canned_stdout, stderr="")
-        with patch("cli.scenario.system_status.subprocess.run", return_value=fake_result):
-            probe = system_status._hardware_network_probe("root", key_path, "1.2.3.4")
-
-        self.assertEqual(probe["cpu"]["logical_cores"], 4)
-        self.assertEqual(probe["memory"]["total_mb"], 7975)
-        self.assertEqual(probe["memory"]["available_mb"], 6500)
-        self.assertEqual(probe["disk_root"]["use_percent"], "17%")
-        self.assertEqual(len(probe["network_addrs"]), 2)
-        self.assertEqual(len(probe["network_counters"]), 2)
-        eth0_counters = next(c for c in probe["network_counters"] if c["interface"] == "eth0")
-        self.assertEqual(eth0_counters["rx_bytes"], 123456)
-        self.assertEqual(eth0_counters["tx_bytes"], 98765)
-        self.assertIn("Linux worker-002", probe["kernel"])
+        bot_worker = next(w for w in snapshot["workers"] if w["service"] == "bot")
+        self.assertEqual(bot_worker["registry_status"], True)
+        self.assertEqual(bot_worker["hardware_network"], fake_hardware)
+        self.assertEqual(bot_worker["bot_sessions"], fake_bot_application)
+        registration_status.assert_called_with('instance=~".*1-2-3-4.*"')
+        collect_infra.assert_called_with("1.2.3.4", system_status._SNAPSHOT_INTERVAL_SECONDS)
+        collect_worker_app.assert_called_with("bot", 'instance=~".*1-2-3-4.*"')
 
     def test_workers_snapshot_includes_all_envs_and_states(self) -> None:
         topology = infra.ensure_topology("devnet")

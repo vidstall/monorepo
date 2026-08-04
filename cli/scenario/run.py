@@ -12,10 +12,22 @@ from .spec import load_scenario
 from .system_log import SystemLog, record_snapshot_event
 
 
-def run(path_str: str, yes: bool) -> int:
+def run(path_str: str | None, yes: bool, fast: bool = False) -> int:
     if not yes:
         print("Refusing to run a scenario's actions without --yes.", file=sys.stderr)
         return 2
+
+    if path_str is None:
+        active = read_lock()
+        if active is None or active.get("status") != "active" or not active.get("scenario_path"):
+            print(
+                "Refusing to run: no scenario path given and no scenario is currently active "
+                "(run 'vidctl scenario apply' first).",
+                file=sys.stderr,
+            )
+            return 1
+        path_str = str(active["scenario_path"])
+        print(f"No scenario path given; using currently active scenario: {path_str}")
 
     path = Path(path_str)
     try:
@@ -53,8 +65,13 @@ def run(path_str: str, yes: bool) -> int:
         f"under {system_log.run_dir} (room/user) and logs/<provider>/{metrics_sampler.run_timestamp}/ (infra/worker)"
     )
     run_start_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    if fast:
+        print(
+            "--fast: skipping per-action system-wide snapshots (SSH/on-chain/Prometheus probes) -- "
+            "room/user quality metrics are unaffected."
+        )
     try:
-        return run_actions(scenario, env, system_log=system_log)
+        return run_actions(scenario, env, system_log=None if fast else system_log)
     finally:
         record_snapshot_event(system_log, env, "run_end")
         metrics_sampler.stop()

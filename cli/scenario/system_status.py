@@ -1,22 +1,17 @@
 from __future__ import annotations
 
-import subprocess
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from typing import Any
 
-from .. import bot_client, infra
+from .. import infra
+from ..observer import metrics_infra, metrics_worker
 from .lock import read_lock
 
-_SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=8"]
-_HARDWARE_NETWORK_REMOTE_CMD = (
-    "echo ---CPU---; nproc; "
-    "echo ---MEMORY---; free -m; "
-    "echo ---DISK---; df -h /; "
-    "echo ---NETWORK-ADDR---; ip -br addr; "
-    "echo ---NETWORK-COUNTERS---; cat /proc/net/dev; "
-    "echo ---KERNEL---; uname -a"
-)
+# Independent of metrics_sampler.INTERVAL_SECONDS (that module imports
+# _worker_key from this one, so importing it back here to reuse its
+# constant would be circular) -- only affects collect_infra_evaluation's
+# rate() window and reported interval_seconds field, not correctness.
+_SNAPSHOT_INTERVAL_SECONDS = 5
 
 
 def _worker_key(worker: dict[str, Any]) -> str:
@@ -25,152 +20,43 @@ def _worker_key(worker: dict[str, Any]) -> str:
     return service if worker_index == 1 else f"{service}-{worker_index}"
 
 
-def _parse_cpu_section(lines: list[str]) -> dict[str, Any]:
-    try:
-        return {"logical_cores": int(lines[0].strip())}
-    except (IndexError, ValueError) as exc:
-        return {"error": str(exc)}
-
-
-def _parse_memory_section(lines: list[str]) -> dict[str, Any]:
-    # `free -m` header + "Mem:   total   used   free   shared  buff/cache  available"
-    try:
-        mem_line = next(line for line in lines if line.strip().startswith("Mem:"))
-        fields = mem_line.split()
-        return {
-            "total_mb": int(fields[1]),
-            "used_mb": int(fields[2]),
-            "free_mb": int(fields[3]),
-            "available_mb": int(fields[-1]),
-        }
-    except (StopIteration, IndexError, ValueError) as exc:
-        return {"error": str(exc)}
-
-
-def _parse_disk_section(lines: list[str]) -> dict[str, Any]:
-    # `df -h /` header + one data row: Filesystem Size Used Avail Use% Mounted-on
-    try:
-        data_line = lines[1]
-        fields = data_line.split()
-        return {
-            "filesystem": fields[0],
-            "size": fields[1],
-            "used": fields[2],
-            "avail": fields[3],
-            "use_percent": fields[4],
-        }
-    except (IndexError, ValueError) as exc:
-        return {"error": str(exc)}
-
-
-def _parse_network_addr_section(lines: list[str]) -> list[dict[str, Any]]:
-    # `ip -br addr`: NAME  STATE  ADDR1 ADDR2 ...
-    interfaces = []
-    for line in lines:
-        fields = line.split()
-        if len(fields) < 2:
-            continue
-        interfaces.append({"name": fields[0], "state": fields[1], "addresses": fields[2:]})
-    return interfaces
-
-
-def _parse_network_counters_section(lines: list[str]) -> list[dict[str, Any]]:
-    # /proc/net/dev: 2 header lines, then "iface: rx_bytes rx_packets rx_errs rx_drop ... tx_bytes tx_packets tx_errs tx_drop ..."
-    counters = []
-    for line in lines[2:]:
-        if ":" not in line:
-            continue
-        name, _, rest = line.partition(":")
-        fields = rest.split()
-        try:
-            counters.append(
-                {
-                    "interface": name.strip(),
-                    "rx_bytes": int(fields[0]),
-                    "rx_packets": int(fields[1]),
-                    "rx_errs": int(fields[2]),
-                    "rx_drop": int(fields[3]),
-                    "tx_bytes": int(fields[8]),
-                    "tx_packets": int(fields[9]),
-                    "tx_errs": int(fields[10]),
-                    "tx_drop": int(fields[11]),
-                }
-            )
-        except (IndexError, ValueError):
-            continue
-    return counters
-
-
-def _parse_hardware_network_output(output: str) -> dict[str, Any]:
-    sections: dict[str, list[str]] = {}
-    current = None
-    for line in output.splitlines():
-        if line.startswith("---") and line.endswith("---"):
-            current = line.strip("-")
-            sections[current] = []
-        elif current is not None:
-            sections[current].append(line)
-
-    return {
-        "cpu": _parse_cpu_section(sections.get("CPU", [])),
-        "memory": _parse_memory_section(sections.get("MEMORY", [])),
-        "disk_root": _parse_disk_section(sections.get("DISK", [])),
-        "network_addrs": _parse_network_addr_section(sections.get("NETWORK-ADDR", [])),
-        "network_counters": _parse_network_counters_section(sections.get("NETWORK-COUNTERS", [])),
-        "kernel": "\n".join(sections.get("KERNEL", [])).strip(),
-    }
-
-
-def _hardware_network_probe(ssh_user: str, key_path: Path, address: str) -> dict[str, Any]:
-    """Live CPU/memory/disk/network facts for one machine (worker or
-    observer host), via a single SSH call modeled directly on
-    infra.registry_status()'s pattern (same ssh options, same
-    unreachable-host guard). Never raises -- returns {"error": ...} for the
-    whole probe, or for just the malformed section, on any failure."""
-    if not address or not key_path.exists():
-        return {"error": "host unreachable (no address or missing SSH key)"}
-    try:
-        result = subprocess.run(
-            ["ssh", *_SSH_OPTS, "-i", str(key_path), f"{ssh_user}@{address}", _HARDWARE_NETWORK_REMOTE_CMD],
-            capture_output=True,
-            text=True,
-            timeout=20,
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        return {"error": str(exc)}
-
-    if result.returncode != 0:
-        return {"error": result.stderr.strip() or f"ssh exited {result.returncode}"}
-    return _parse_hardware_network_output(result.stdout)
+def _instance_filter(address: str) -> str:
+    """PromQL label matcher narrowing a query to one host's series, matched
+    on the dashed public IP the same way cli.observer.metrics_infra does --
+    the node_exporter/worker_key prefix Prometheus's `instance` label
+    actually starts with isn't independently known to callers here (not
+    part of topology.toml), so substring match on the IP is what works."""
+    return f'instance=~".*{address.replace(".", "-")}.*"'
 
 
 def _worker_snapshot(worker: dict[str, Any]) -> dict[str, Any]:
-    """One worker's full detail: every topology field plus a live registry
-    check, a live hardware/network probe, and (bot workers only) live
-    bot/room session state. Each network call is wrapped independently so
-    one bad host never blanks the rest of this worker's data, let alone the
-    whole snapshot."""
+    """One worker's full detail: every topology field plus a Prometheus-
+    sourced registration check, a Prometheus-sourced hardware/network
+    reading, and (bot workers only) a Prometheus-sourced active-session
+    count -- all through the observation system, no direct SSH/HTTP to the
+    host. Each call is wrapped independently so one bad host never blanks
+    the rest of this worker's data, let alone the whole snapshot."""
     host = str(worker.get("host"))
     snapshot = dict(worker)
 
     address = ""
     try:
         address = infra.host_address(host)
-        snapshot["registry_status"] = infra.registry_status(host, _worker_key(worker), address)
-    except Exception as exc:  # noqa: BLE001 - one host's SSH probe must not sink the snapshot
+        snapshot["registry_status"] = metrics_worker.registration_status(_instance_filter(address))
+    except Exception as exc:  # noqa: BLE001 - one host's probe must not sink the snapshot
         snapshot["registry_status"] = {"error": str(exc)}
 
     try:
-        key_path = infra.SSH_KEY_ROOT / host / "id_ed25519"
-        snapshot["hardware_network"] = _hardware_network_probe("root", key_path, address)
+        snapshot["hardware_network"] = metrics_infra.collect_infra_evaluation(address, _SNAPSHOT_INTERVAL_SECONDS)
     except Exception as exc:  # noqa: BLE001
         snapshot["hardware_network"] = {"error": str(exc)}
 
     if worker.get("service") == "bot":
         try:
-            sessions = bot_client.list_sessions(host)
-            snapshot["bot_sessions"] = sessions if sessions is not None else {"error": "no response"}
+            application = metrics_worker.collect_worker_application("bot", _instance_filter(address))
+            snapshot["bot_sessions"] = (
+                application if application is not None else {"error": "no matching bot metrics"}
+            )
         except Exception as exc:  # noqa: BLE001
             snapshot["bot_sessions"] = {"error": str(exc)}
 
@@ -204,10 +90,8 @@ def _workers_snapshot(env: str) -> list[dict[str, Any]]:
 def _observer_host_snapshot(host: dict[str, Any]) -> dict[str, Any]:
     snapshot = dict(host)
     try:
-        key_path = Path(str(host.get("ssh_key", "")))
-        snapshot["hardware_network"] = _hardware_network_probe(
-            str(host.get("ssh_user") or "root"), key_path, str(host.get("address") or "")
-        )
+        address = str(host.get("address") or "")
+        snapshot["hardware_network"] = metrics_infra.collect_infra_evaluation(address, _SNAPSHOT_INTERVAL_SECONDS)
     except Exception as exc:  # noqa: BLE001
         snapshot["hardware_network"] = {"error": str(exc)}
     return snapshot
@@ -280,18 +164,29 @@ def _lock_snapshot() -> dict[str, Any] | None:
 
 def capture_system_snapshot(env: str) -> dict[str, Any]:
     """Best-effort, maximum-detail snapshot of the whole system at this
-    instant: the active scenario lock, every worker the system knows about
-    across every env and desired_state (with live registry status, a live
-    hardware/network probe, and for bot workers, live room/bot session
-    state), every registered observer/monitoring host (with the same
-    hardware/network probe), client-reported and server-observed per-peer
-    WebRTC quality metrics from Prometheus (dvconf_relay_peer_*/dvconf_rtc_*),
-    and on-chain contract/wallet-pool state for `env`. Every section fails
-    independently (an {"error": ...} dict in its
-    place) rather than raising, matching this CLI's existing warn-and-continue
-    convention (see apply.py's observer refresh/push helpers) -- this makes
-    it safe to call repeatedly from a background sampler thread without
-    extra guarding."""
+    instant, sourced entirely through the observation system (Prometheus) --
+    no direct SSH/HTTP to any host: the active scenario lock, every worker
+    the system knows about across every env and desired_state (with a
+    Prometheus-sourced registration check via cli.observer.metrics_worker's
+    dvconf_registered gauge, a node_exporter-sourced hardware/network
+    reading via cli.observer.metrics_infra, and for bot workers, a
+    Prometheus-sourced active-session count), every registered
+    observer/monitoring host (with the same hardware/network reading),
+    client-reported and server-observed per-peer WebRTC quality metrics
+    from Prometheus (dvconf_relay_peer_*/dvconf_rtc_*), and on-chain
+    contract/wallet-pool state for `env`. Note the shapes differ from the
+    old SSH probes': `registry_status` is a plain `bool | None` now (None
+    until relay/signaling/cp-daemon/validator-daemon are redeployed with the
+    gauge -- no data, not stale/wrong data), not a human-readable string;
+    hardware/network has no raw `kernel` (uname) string, no per-interface IP
+    addresses (node_exporter carries neither), disk is a `partitions[]` list
+    of byte counts rather than a single human-readable `df` row, and
+    network/CPU figures are rates/percentages rather than raw cumulative
+    counters. Every section fails independently (an {"error": ...} dict in
+    its place) rather than raising, matching this CLI's existing
+    warn-and-continue convention (see apply.py's observer refresh/push
+    helpers) -- this makes it safe to call repeatedly from a background
+    sampler thread without extra guarding."""
     return {
         "captured_at": infra.timestamp(),
         "env": env,

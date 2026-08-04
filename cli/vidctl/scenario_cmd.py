@@ -16,7 +16,15 @@ def add_scenario_parser(subparsers: argparse._SubParsersAction[argparse.Argument
         "apply",
         help="Publish contract+images and reconcile workers to match a scenario file.",
     )
-    apply_parser.add_argument("path", help="Path to a scenario TOML file (e.g. scenario/example.toml).")
+    apply_parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help=(
+            "Path to a scenario TOML file (e.g. scenario/example.toml). If omitted, reuses the "
+            "previously applied scenario's path."
+        ),
+    )
     apply_parser.add_argument(
         "--yes",
         action="store_true",
@@ -48,13 +56,29 @@ def add_scenario_parser(subparsers: argparse._SubParsersAction[argparse.Argument
         "run",
         help="Run a scenario's [[actions]] timeline (bot room lifecycle, worker join/leave) against the active scenario.",
     )
-    run_parser.add_argument("path", help="Path to a scenario TOML file (e.g. scenario/example.toml).")
+    run_parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help=(
+            "Path to a scenario TOML file (e.g. scenario/example.toml). If omitted, uses the "
+            "currently active scenario."
+        ),
+    )
     run_parser.add_argument(
         "--yes",
         action="store_true",
         help="Confirm running the scenario's actions timeline.",
     )
-    run_parser.set_defaults(handler=lambda args: scenario.run(args.path, args.yes))
+    run_parser.add_argument(
+        "--fast",
+        action="store_true",
+        help=(
+            "Skip per-action system-wide snapshots (SSH/on-chain/Prometheus probes) to run close to the "
+            "scenario's own scripted pace. Room/user quality metrics are unaffected."
+        ),
+    )
+    run_parser.set_defaults(handler=lambda args: scenario.run(args.path, args.yes, args.fast))
 
     status_parser = actions.add_parser("status", help="Show the active scenario lock and its workers' current state.")
     status_parser.set_defaults(handler=lambda args: scenario.status(args))
