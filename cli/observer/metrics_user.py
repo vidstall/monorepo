@@ -7,7 +7,7 @@ from typing import Any
 # shadowing of the `query` attribute.
 from .query import query
 
-# Exactly the 16 fields relay's metrics-server.ts stores per (roomId,
+# Exactly the 17 fields relay's metrics-server.ts stores per (roomId,
 # peerId) -- see services/worker/apps/relay/src/metrics-server.ts
 # REQUIRED_SAMPLE_FIELDS/PeerQualitySample, confirmed against the client's
 # real POST /stats/report payload (services/client/client/src/pages/
@@ -29,6 +29,7 @@ _SAMPLE_FIELD_METRICS = {
     "connectionSetupMs": "dvconf_relay_peer_connection_setup_ms",
     "iceSuccess": "dvconf_relay_peer_ice_success",
     "reconnectMs": "dvconf_relay_peer_reconnect_ms",
+    "avSyncDriftMs": "dvconf_relay_peer_av_sync_drift_ms",
 }
 
 
