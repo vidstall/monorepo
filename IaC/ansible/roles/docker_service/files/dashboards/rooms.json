@@ -221,8 +221,8 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Packet Loss & Reordering (All Users)",
-      "description": "dvconf_relay_peer_packet_loss / dvconf_relay_peer_packet_reordering_rate{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room.",
+      "title": "Packet Loss (All Users)",
+      "description": "dvconf_relay_peer_packet_loss{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room. Already a 0-100 percentage.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -260,35 +260,13 @@
           "expr": "max(dvconf_relay_peer_packet_loss{roomId=~\"$room\"}) by (roomId)",
           "legendFormat": "loss max {{roomId}}",
           "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "avg(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\"}) by (roomId)",
-          "legendFormat": "reordering avg {{roomId}}",
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "min(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\"}) by (roomId)",
-          "legendFormat": "reordering min {{roomId}}",
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "max(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\"}) by (roomId)",
-          "legendFormat": "reordering max {{roomId}}",
-          "refId": "F"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      }
     },
     {
       "id": 7,
@@ -798,6 +776,56 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Packet Reordering Rate (All Users)",
+      "description": "dvconf_relay_peer_packet_reordering_rate{roomId,peerId} -- apps/relay/src/metrics-server.ts, aggregated (avg/min/max) across all peers currently in the room. A jitterBufferDelay-per-emitted-frame ratio, in ms -- not a percentage, split out from the old combined Packet Loss & Reordering panel so it no longer shares an axis with the 0-100 packet-loss percentage.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 62
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "reordering avg {{roomId}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "min(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "reordering min {{roomId}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "max(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\"}) by (roomId)",
+          "legendFormat": "reordering max {{roomId}}",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
         }
       }
     }

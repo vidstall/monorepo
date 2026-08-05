@@ -193,8 +193,8 @@
     {
       "id": 4,
       "type": "timeseries",
-      "title": "Packet Loss & Reordering (Live)",
-      "description": "dvconf_relay_peer_packet_loss / dvconf_relay_peer_packet_reordering_rate{roomId,peerId} -- apps/relay/src/metrics-server.ts.",
+      "title": "Packet Loss (Live)",
+      "description": "dvconf_relay_peer_packet_loss{roomId,peerId} -- apps/relay/src/metrics-server.ts, per live peer. Already a 0-100 percentage.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -214,17 +214,13 @@
           "expr": "avg(dvconf_relay_peer_packet_loss{roomId=~\"$room\", peerId=~\"$peer\"}) by (roomId, peerId)",
           "legendFormat": "loss {{roomId}}/{{peerId}}",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "expr": "avg(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\", peerId=~\"$peer\"}) by (roomId, peerId)",
-          "legendFormat": "reordering {{roomId}}/{{peerId}}",
-          "refId": "B"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      }
     },
     {
       "id": 5,
@@ -664,7 +660,12 @@
           "legendFormat": "max {{roomId}}/{{peerId}}",
           "refId": "C"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        }
+      }
     },
     {
       "id": 17,
@@ -752,7 +753,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 68
+        "y": 76
       },
       "panels": [
         {
@@ -768,7 +769,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 69
+            "y": 77
           },
           "targets": [
             {
@@ -795,7 +796,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 77
+            "y": 85
           },
           "targets": [
             {
@@ -827,7 +828,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 77
+            "y": 85
           },
           "targets": [
             {
@@ -862,7 +863,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 85
+            "y": 93
           },
           "targets": [
             {
@@ -890,8 +891,16 @@
             },
             "overrides": [
               {
-                "matcher": { "id": "byFrameRefID", "options": "B" },
-                "properties": [{ "id": "unit", "value": "bytes" }]
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "B"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  }
+                ]
               }
             ]
           }
@@ -909,7 +918,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 93
+            "y": 101
           },
           "targets": [
             {
@@ -945,7 +954,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 93
+            "y": 101
           },
           "targets": [
             {
@@ -981,7 +990,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 101
+            "y": 109
           },
           "targets": [
             {
@@ -1001,6 +1010,38 @@
           }
         }
       ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Packet Reordering Rate (Live)",
+      "description": "dvconf_relay_peer_packet_reordering_rate{roomId,peerId} -- apps/relay/src/metrics-server.ts, per live peer. A jitterBufferDelay-per-emitted-frame ratio, in ms -- not a percentage, split out from the old combined Packet Loss & Reordering panel so it no longer shares an axis with the 0-100 packet-loss percentage.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 68
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "avg(dvconf_relay_peer_packet_reordering_rate{roomId=~\"$room\", peerId=~\"$peer\"}) by (roomId, peerId)",
+          "legendFormat": "reordering {{roomId}}/{{peerId}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        }
+      }
     }
   ]
 }
