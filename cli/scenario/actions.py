@@ -2,10 +2,21 @@ from __future__ import annotations
 
 import sys
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from .. import bot_client, infra
+from .fast_health_poller import FastHealthPoller, worker_healthz_url
 from .system_log import DuringActionSampler, SystemLog, record_action_marker
+
+# How long to keep polling after the docker stop/start SSH call returns,
+# looking for the /healthz transition -- bounds how long a worker.leave/
+# worker.join action can block beyond its own dispatch time waiting for a
+# fast_health_poller.FastHealthPoller sample to flip. 5s comfortably covers
+# every existing fast-path detector this is meant to be compared against
+# (the 1000ms relay-heartbeat.ts poll, the 200ms flap-gate probe) without
+# meaningfully lengthening a scripted scenario timeline.
+_HEALTH_POLL_GRACE_SECONDS = 5.0
 
 
 def find_pooled_worker(
@@ -100,31 +111,34 @@ def _worker_join(
     reserved: set[tuple[str, int]],
     deferred_by_key: dict[tuple[str, str, str, int], dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """Both infra.control() calls below pass detach=True: the actual
-    container start/restart is quick, but getting there means an Ansible
-    SSH-reconnect wait plus a reconcile loop over every OTHER service
-    colocated on this host (see docker_service/tasks/main.yml) -- minutes
-    of overhead a scripted scenario timeline shouldn't have to block on.
-    detach=True fires that off in the background (see control.py's
-    `detach` param) and returns as soon as pulumi/inventory succeed, before
-    Ansible itself finishes -- this action's result (host/worker_index) is
-    known synchronously regardless, so there's nothing later actions need
-    to wait on it for.
-
-    The pooled-reuse ("restart") call below also passes docker_only=True:
-    a pooled worker was already fully provisioned once (by `vidctl scenario
+    """The pooled-reuse ("restart") call below passes docker_only=True: a
+    pooled worker was already fully provisioned once (by `vidctl scenario
     apply`) and is only ever paused/resumed by churn, never reconfigured --
     so control() skips the whole Ansible reconcile entirely and just fires
     a bare `docker start <container>` (see control.py's `docker_only`
-    param). Not passed on the fresh-provision ("start") call just below --
-    that container doesn't exist yet, so it still needs the full reconcile
-    regardless (control() ignores docker_only for a fresh "start" anyway)."""
+    param, and IaC/ansible/playbooks/toggle_container.yml). It also passes
+    detach=False (blocking) -- that one-command playbook is fast, and
+    running it synchronously lets this function bracket a real
+    "container_action_confirmed_at" ground-truth timestamp around it (see
+    fast_health_poller.py / run_actions()'s detection-latency measurement),
+    which a detached/backgrounded dispatch could never give an accurate
+    value for. The fresh-provision ("start") call just below still passes
+    detach=True: that path pays the full Ansible reconcile (SSH-reconnect
+    wait plus every OTHER colocated service on the host, see
+    docker_service/tasks/main.yml) -- minutes of overhead a scripted
+    scenario timeline shouldn't have to block on, and it isn't the churn
+    path this latency measurement targets anyway."""
     service = action["service"]
     provider = action["provider"]
     pooled = find_pooled_worker(env, service, provider, reserved)
     if pooled is not None:
         host = str(pooled.get("host"))
         worker_index = int(pooled.get("worker_index", 1) or 1)
+        health_url = worker_healthz_url(host, service, provider, worker_index)
+        poller = FastHealthPoller(health_url) if health_url else None
+        if poller is not None:
+            poller.start()
+        dispatched_at = time.time()
         code = infra.control(
             "restart",
             host,
@@ -132,13 +146,26 @@ def _worker_join(
             provider,
             yes=True,
             worker_index=worker_index,
-            detach=True,
+            detach=False,
             docker_only=True,
         )
+        confirmed_at = time.time()
+        health_poll = None
+        if poller is not None:
+            poller.wait_for_transition(_HEALTH_POLL_GRACE_SECONDS)
+            poller.stop()
+            health_poll = poller.result()
         if code != 0:
             return None
         reserved.add((host, worker_index))
-        return {"host": host, "worker_index": worker_index, "reused": True}
+        return {
+            "host": host,
+            "worker_index": worker_index,
+            "reused": True,
+            "container_action_dispatched_at": datetime.fromtimestamp(dispatched_at, tz=timezone.utc).isoformat(),
+            "container_action_confirmed_at": datetime.fromtimestamp(confirmed_at, tz=timezone.utc).isoformat(),
+            "health_poll": health_poll,
+        }
 
     declared = _find_declared_await_worker(action, service, provider, reserved, deferred_by_key)
     if declared is None and not action.get("host"):
@@ -189,23 +216,57 @@ def _worker_leave(action: dict[str, Any]) -> dict[str, Any] | None:
     VM-power-state check) -- see control.py's docker_only pause branch for
     why this action now also fires a targeted `docker stop <container>`
     (skipped when this is the last active worker on the host, since the
-    whole VM is powering off anyway). detach=True so the scripted timeline
-    doesn't block on it, same rationale as _worker_join above."""
+    whole VM is powering off anyway, via IaC/ansible/playbooks/
+    toggle_container.yml's single `docker stop` task). detach=False
+    (blocking) rather than the fire-and-forget dispatch _worker_join's
+    fresh-provision path uses: that one-command playbook is fast, and
+    running it synchronously lets this function bracket a real
+    "container_action_confirmed_at" ground-truth timestamp (time.time()
+    immediately before/after the blocking infra.control() call) for the
+    scenario's detection-latency measurement -- an async/detached dispatch
+    would only tell us when the SSH command was *launched*, not when
+    `docker stop` actually finished on the host.
+
+    A fast_health_poller.FastHealthPoller is started (relay only -- see
+    SUPPORTED_SERVICES) right before dispatch and kept running for
+    _HEALTH_POLL_GRACE_SECONDS after confirmed_at, so its first observed
+    /healthz transition ("health_poll"["observed_at"] in the returned
+    dict) can be diffed against container_action_confirmed_at to get a
+    real detection-latency number (see report.py)."""
     host = action["host"]
+    service = action["service"]
+    provider = action["provider"]
     worker_index = int(action.get("worker_index") or 1)
+    health_url = worker_healthz_url(host, service, provider, worker_index)
+    poller = FastHealthPoller(health_url) if health_url else None
+    if poller is not None:
+        poller.start()
+    dispatched_at = time.time()
     code = infra.control(
         "pause",
         host,
-        action["service"],
-        action["provider"],
+        service,
+        provider,
         yes=True,
         worker_index=worker_index,
-        detach=True,
+        detach=False,
         docker_only=True,
     )
+    confirmed_at = time.time()
+    health_poll = None
+    if poller is not None:
+        poller.wait_for_transition(_HEALTH_POLL_GRACE_SECONDS)
+        poller.stop()
+        health_poll = poller.result()
     if code != 0:
         return None
-    return {"host": host, "worker_index": worker_index}
+    return {
+        "host": host,
+        "worker_index": worker_index,
+        "container_action_dispatched_at": datetime.fromtimestamp(dispatched_at, tz=timezone.utc).isoformat(),
+        "container_action_confirmed_at": datetime.fromtimestamp(confirmed_at, tz=timezone.utc).isoformat(),
+        "health_poll": health_poll,
+    }
 
 
 def run_actions(scenario: dict[str, Any], env: str, system_log: SystemLog | None = None) -> int:

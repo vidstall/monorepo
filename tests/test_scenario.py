@@ -908,7 +908,7 @@ class ActionsExecutionTests(ScenarioTestCase):
             code = scenario.run_actions(parsed, "devnet")
         self.assertEqual(code, 0)
         control.assert_called_once_with(
-            "pause", "001", "relay", "akamai", yes=True, worker_index=1, detach=True, docker_only=True
+            "pause", "001", "relay", "akamai", yes=True, worker_index=1, detach=False, docker_only=True
         )
 
     def test_worker_join_matches_declared_await_worker_and_inherits_size_region(self) -> None:
@@ -993,7 +993,7 @@ class ActionsExecutionTests(ScenarioTestCase):
             code = scenario.run_actions(parsed, "devnet")
         self.assertEqual(code, 0)
         control.assert_called_once_with(
-            "restart", "001", "relay", "akamai", yes=True, worker_index=1, detach=True, docker_only=True
+            "restart", "001", "relay", "akamai", yes=True, worker_index=1, detach=False, docker_only=True
         )
 
 

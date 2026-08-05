@@ -245,6 +245,26 @@ def _write_csv(path: Path, header: list[str], rows: list[list[Any]]) -> None:
         writer.writerows(rows)
 
 
+def _detection_latency(after: dict[str, Any] | None) -> tuple[str | None, str | None, float | None]:
+    """(container_action_confirmed_at, health_observed_at, latency_seconds)
+    for a worker.leave/worker.join after_action event -- see actions.py's
+    FastHealthPoller wiring. confirmed_at is the ground-truth SSH-bracketed
+    "docker stop/start finished" timestamp; observed_at is the fast
+    /healthz poller's first observed state transition. Either or both can
+    be None (e.g. the target service isn't relay -- fast_health_poller
+    only supports that today -- or the transition never landed within the
+    poller's grace window), in which case latency_seconds is None too."""
+    result = (after or {}).get("result") or {}
+    confirmed_at = result.get("container_action_confirmed_at")
+    observed_at = (result.get("health_poll") or {}).get("observed_at")
+    latency_seconds = None
+    confirmed_ts = _parse_ts(confirmed_at)
+    observed_ts = _parse_ts(observed_at)
+    if confirmed_ts is not None and observed_ts is not None:
+        latency_seconds = observed_ts - confirmed_ts
+    return confirmed_at, observed_at, latency_seconds
+
+
 def _build_actions_csv(action_records: list[dict[str, Any]], dest: Path) -> None:
     rows = []
     for record in action_records:
@@ -253,6 +273,7 @@ def _build_actions_csv(action_records: list[dict[str, Any]], dest: Path) -> None
         before = record["before"]
         action = (after or before or {}).get("action") or {}
         success = bool(after) and "error" not in after
+        confirmed_at, observed_at, latency_seconds = _detection_latency(after)
         rows.append(
             [
                 identity.get("action_index"),
@@ -263,11 +284,26 @@ def _build_actions_csv(action_records: list[dict[str, Any]], dest: Path) -> None
                 after.get("duration_seconds") if after else None,
                 "ok" if success else ("error" if after else "no_after_event"),
                 after.get("error") if after else None,
+                confirmed_at,
+                observed_at,
+                latency_seconds,
             ]
         )
     _write_csv(
         dest,
-        ["action_index", "action_id", "action_type", "host", "timestamp", "duration_seconds", "status", "error"],
+        [
+            "action_index",
+            "action_id",
+            "action_type",
+            "host",
+            "timestamp",
+            "duration_seconds",
+            "status",
+            "error",
+            "container_action_confirmed_at",
+            "health_observed_at",
+            "detection_latency_seconds",
+        ],
         rows,
     )
 
@@ -496,6 +532,38 @@ def _chart_quality_by_step(step_summaries: list[dict[str, Any]], dest: Path) -> 
     plt.close(fig)
 
 
+_WORKER_ACTION_TYPES = {"worker.leave", "worker.join"}
+
+
+def _detection_latency_rows(action_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per worker.leave/worker.join action that has an after_action
+    event, regardless of whether a latency value could be computed (a
+    missing confirmed_at/observed_at is itself worth surfacing, not hidden
+    -- e.g. a non-relay target, or the /healthz transition never landing
+    within the poller's grace window)."""
+    rows = []
+    for record in action_records:
+        identity = record["identity"]
+        if identity.get("action_type") not in _WORKER_ACTION_TYPES:
+            continue
+        after = record["after"]
+        if not after:
+            continue
+        action = after.get("action") or {}
+        confirmed_at, observed_at, latency_seconds = _detection_latency(after)
+        rows.append(
+            {
+                "action_id": identity.get("action_id"),
+                "action_type": identity.get("action_type"),
+                "host": action.get("host"),
+                "confirmed_at": confirmed_at,
+                "observed_at": observed_at,
+                "latency_seconds": latency_seconds,
+            }
+        )
+    return rows
+
+
 def _action_outcome_counts(action_records: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
     counts: dict[str, dict[str, int]] = {}
     for record in action_records:
@@ -527,6 +595,7 @@ def _build_summary_text(
     run_end_ts: float,
     action_outcomes: dict[str, dict[str, int]],
     step_summaries: list[dict[str, Any]],
+    latency_rows: list[dict[str, Any]],
 ) -> str:
     lines = [
         f"Scenario:  {scenario_name}",
@@ -540,6 +609,16 @@ def _build_summary_text(
     ]
     for action_type, bucket in sorted(action_outcomes.items()):
         lines.append(f"  {action_type}: ok={bucket['ok']} error={bucket['error']} no_after_event={bucket['no_after_event']}")
+
+    if latency_rows:
+        lines.append("")
+        lines.append("Detection latency (worker down/up, /healthz first observed transition):")
+        for row in latency_rows:
+            latency = _fmt(row["latency_seconds"], 3) if row["latency_seconds"] is not None else "n/a"
+            lines.append(
+                f"  {row['action_type']:<12} id={row['action_id']!s:<10} host={row['host']!s:<6} "
+                f"latency={latency}s"
+            )
 
     lines.append("")
     lines.append("Steps (concurrent clients -> room quality avg/p95/max):")
@@ -567,6 +646,7 @@ def _build_markdown_report(
     run_end_ts: float,
     action_outcomes: dict[str, dict[str, int]],
     step_summaries: list[dict[str, Any]],
+    latency_rows: list[dict[str, Any]],
     chart_paths: list[Path],
     grafana_images: list[Path],
     report_dir: Path,
@@ -588,7 +668,30 @@ def _build_markdown_report(
     for action_type, bucket in sorted(action_outcomes.items()):
         lines.append(f"| {action_type} | {bucket['ok']} | {bucket['error']} | {bucket['no_after_event']} |")
 
-    lines += ["", "Full detail: [csv/actions.csv](csv/actions.csv)", "", "## Steps", ""]
+    lines += ["", "Full detail: [csv/actions.csv](csv/actions.csv)", ""]
+
+    if latency_rows:
+        lines += [
+            "## Detection latency",
+            "",
+            "Ground truth is `container_action_confirmed_at` -- the control node's own "
+            "SSH-bracketed timestamp for when `docker stop`/`docker start` actually finished "
+            "(see actions.py). Observed is the fast `/healthz` poller's first sampled state "
+            "transition (relay only today -- see fast_health_poller.py). Only meaningful when "
+            "both are present.",
+            "",
+            "| action | id | host | confirmed_at | observed_at | latency (s) |",
+            "|---|---|---|---|---|---|",
+        ]
+        for row in latency_rows:
+            latency = _fmt(row["latency_seconds"], 3) if row["latency_seconds"] is not None else "-"
+            lines.append(
+                f"| {row['action_type']} | {row['action_id']} | {row['host']} | "
+                f"{row['confirmed_at'] or '-'} | {row['observed_at'] or '-'} | {latency} |"
+            )
+        lines.append("")
+
+    lines += ["## Steps", ""]
     lines.append(
         "| step | concurrency | duration (s) | ticks | avg latency (ms) | avg jitter (ms) | avg packet loss | avg down bitrate (kbps) |"
     )
@@ -681,9 +784,10 @@ def generate_report(
     _chart_quality_by_step(step_summaries, quality_by_step_chart)
 
     action_outcomes = _action_outcome_counts(action_records)
+    latency_rows = _detection_latency_rows(action_records)
 
     summary_text = _build_summary_text(
-        scenario_name, env, run_timestamp, run_start_ts, run_end_ts, action_outcomes, step_summaries
+        scenario_name, env, run_timestamp, run_start_ts, run_end_ts, action_outcomes, step_summaries, latency_rows
     )
     print(summary_text)
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -699,6 +803,7 @@ def generate_report(
         run_end_ts,
         action_outcomes,
         step_summaries,
+        latency_rows,
         [concurrency_chart, quality_over_time_chart, quality_by_step_chart],
         grafana_images,
         report_dir,
