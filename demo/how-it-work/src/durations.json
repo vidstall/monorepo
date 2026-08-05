@@ -1,0 +1,11 @@
+{
+  "intro": 7.616,
+  "topology": 9.429333,
+  "worker-registration": 11.050667,
+  "client-room": 9.984,
+  "control-plane": 10.666667,
+  "validator": 11.136,
+  "bot": 10.837333,
+  "evaluation": 16.170667,
+  "closing": 5.333333
+}

@@ -203,6 +203,19 @@ temp/
 .cache/
 
 ################################################################################
+# Demo videos (Remotion) -- demo/*/node_modules, demo/*/out, and
+# demo/*/public/audio are already covered by each project's own scaffolded
+# .gitignore (node_modules/out redundantly with the rules above too); listed
+# here as well so the root file stays the single visible source of truth.
+# public/images/ (curated screenshots, e.g. demo/how-it-work/public/images/
+# evaluation/*.png) is deliberately NOT ignored -- committed result assets,
+# not regenerable build output like the TTS audio.
+################################################################################
+demo/*/node_modules/
+demo/*/out/
+demo/*/public/audio/
+
+################################################################################
 # Local tooling & Configurations
 ################################################################################
 .direnv/
