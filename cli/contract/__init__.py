@@ -25,6 +25,7 @@ from .deployment import (
     sync_frontend_env,
     write_runtime_pubfile,
 )
+from .package import CONTRACT_A, CONTRACT_B, ContractPackage
 from .publish import publish, upgrade_existing
 from .publish_ops import (
     REGISTRY_CREATE_SPECS,
@@ -34,9 +35,12 @@ from .publish_ops import (
     test_publish,
     test_upgrade,
 )
-from .rooms import ROOM_STATUS_NAMES, list_active_rooms
+from .rooms import ROOM_STATUS_NAMES, get_room_chain_detail, list_active_rooms
 
 __all__ = [
+    "ContractPackage",
+    "CONTRACT_A",
+    "CONTRACT_B",
     "build",
     "test",
     "check",
@@ -65,6 +69,7 @@ __all__ = [
     "run_sui_json_list",
     "run_sui_devinspect",
     "list_active_rooms",
+    "get_room_chain_detail",
     "ROOM_STATUS_NAMES",
     "parse_json_payload",
     "fetch_object",

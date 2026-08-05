@@ -111,9 +111,11 @@ def _capture_worker_entry(worker: dict[str, Any], run_timestamp: str, registry: 
     write_metrics_entry(registry, path, identity, "logging", entry)
 
 
-def _capture_room_entry(room_id: str, run_timestamp: str, room_provider_key: str, registry: MetricsFileRegistry) -> None:
+def _capture_room_entry(
+    env: str, room_id: str, run_timestamp: str, room_provider_key: str, registry: MetricsFileRegistry
+) -> None:
     path = context.METRICS_ROOT / room_provider_key / run_timestamp / "room" / f"{room_id}.json"
-    identity = metrics_room.collect_room_identity(room_id)
+    identity = metrics_room.collect_room_identity(room_id, env)
     quality = metrics_room.collect_room_peer_quality(room_id)
     entry = {
         "timestamp": infra.timestamp(),
@@ -162,7 +164,7 @@ def capture_metrics_tick(
 
     active_peers = observer.discover_active_peers() or {}
     for room_id, peer_ids in active_peers.items():
-        _capture_room_entry(room_id, run_timestamp, room_provider_key, registry)
+        _capture_room_entry(env, room_id, run_timestamp, room_provider_key, registry)
         for peer_id in peer_ids:
             _capture_user_entry(room_id, peer_id, run_timestamp, room_provider_key, registry)
 

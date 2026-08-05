@@ -86,29 +86,21 @@ def collect_room_peer_quality(room_id: str) -> dict[str, Any]:
     }
 
 
-def collect_room_identity(room_id: str) -> dict[str, Any]:
-    """RoomInfo/RoomEscrow on-chain identity fields, via the same
-    contract_cli.fetch_object() path cli.observer.contract_exporter uses
-    for MinerStore. `room_id` must be the room's on-chain Sui object ID --
-    if the scenario/bot layer's app-level room ID string differs from the
-    object ID, this needs a lookup step not yet wired (flagged in the plan
-    as needing verification); until then this best-effort call returns
-    {"error": ...} the same way any other unreachable/invalid object ID
-    would, rather than raising."""
+def collect_room_identity(room_id: str, network: str) -> dict[str, Any]:
+    """This room's on-chain relay/signaling assignment, via
+    contract_cli.get_room_chain_detail() -- NOT contract_cli.fetch_object()
+    (a prior version of this function used that path, mirroring
+    cli.observer.contract_exporter's MinerStore read, but it can never work
+    for a room: RoomInfo has no `key` ability, so `room_id` is never a
+    directly Sui-object-fetchable ID -- it only exists as a
+    Table<ID, RoomInfo> value inside the shared RoomManager object. See
+    get_room_chain_detail()'s docstring. `network` is required because,
+    unlike a plain object fetch, reading a RoomManager table entry is a
+    devInspect call scoped to one env's deployed RoomManager (same as
+    list_active_rooms(network))."""
     from .. import contract as contract_cli
 
-    fields = contract_cli.fetch_object(room_id)
-    if fields is None:
-        return {"error": f"could not fetch on-chain RoomInfo for {room_id}"}
-    return {
-        "room_id": room_id,
-        "creator": fields.get("creator"),
-        "status": fields.get("status"),
-        "relay_mode": fields.get("relay_mode"),
-        "created_at": fields.get("created_at"),
-        "closed_at": fields.get("closed_at"),
-        "expected_participants": fields.get("expected_participants"),
-        "verified_score": fields.get("verified_score"),
-        "consensus_reached": fields.get("consensus_reached"),
-        "standby_relay_id": fields.get("standby_relay_id"),
-    }
+    detail = contract_cli.get_room_chain_detail(network, room_id)
+    if detail is None:
+        return {"error": f"could not read on-chain room assignment for {room_id}"}
+    return detail

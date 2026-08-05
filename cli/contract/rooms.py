@@ -10,20 +10,19 @@ from .chain_io import run_sui_devinspect
 ROOM_STATUS_NAMES = {0: "pending", 1: "ready", 2: "active", 3: "closed"}
 
 
-def _devinspect_view(package_id: str, room_manager_id: str, function: str) -> Any:
+def _devinspect_call(package_id: str, function: str, args: list[str]) -> list[Any] | None:
     """One `sui client call --dev-inspect --json` read of a RoomManager view
-    function that takes only `&RoomManager` (get_active_room_ids/
-    get_active_rooms) -- returns the decoded JSON of its single return
-    value, or None on any failure. No real gas is spent (dev-inspect never
-    executes on-chain), but the Sui CLI still needs an active address/env
-    configured to build the simulated transaction."""
+    function, returning the decoded JSON of every one of its return values
+    (in order) -- or None on any failure. No real gas is spent (dev-inspect
+    never executes on-chain), but the Sui CLI still needs an active
+    address/env configured to build the simulated transaction."""
     code, payload, _ = run_sui_devinspect(
         [
             "sui", "client", "call",
             "--package", package_id,
             "--module", "room_manager",
             "--function", function,
-            "--args", room_manager_id,
+            "--args", *args,
             "--dev-inspect",
             "--json",
         ]
@@ -36,7 +35,26 @@ def _devinspect_view(package_id: str, room_manager_id: str, function: str) -> An
     return_values = outputs[0].get("returnValues") or []
     if not return_values:
         return None
-    return return_values[0].get("json")
+    return [value.get("json") for value in return_values]
+
+
+def _devinspect_view(package_id: str, room_manager_id: str, function: str) -> Any:
+    """Same as _devinspect_call(), for a view function that takes only
+    `&RoomManager` (get_active_room_ids/get_active_rooms) and returns a
+    single value."""
+    values = _devinspect_call(package_id, function, [room_manager_id])
+    return values[0] if values else None
+
+
+def _unwrap_option(value: Any) -> Any:
+    """Sui devInspect decodes a Move `Option<T>` as `{"vec": [...]}` (an
+    empty or single-element vector, mirroring Option's actual on-chain BCS
+    representation) rather than a plain nullable value -- unwrap that shape
+    to None/T so callers don't need to know Move's Option encoding."""
+    if isinstance(value, dict) and "vec" in value:
+        vec = value["vec"]
+        return vec[0] if vec else None
+    return value
 
 
 def list_active_rooms(network: str) -> list[dict[str, Any]] | None:
@@ -79,3 +97,41 @@ def list_active_rooms(network: str) -> list[dict[str, Any]] | None:
         }
         for room_id, info in zip(room_ids, rooms)
     ]
+
+
+def get_room_chain_detail(network: str, room_id: str) -> dict[str, Any] | None:
+    """Per-room on-chain relay/signaling assignment, via RoomManager's
+    get_room_assignment/get_room_status_info view functions -- these are
+    keyed by a single room_id, unlike list_active_rooms()'s batch
+    get_active_rooms() read. This is the ONLY way to read a specific room's
+    assignment: RoomInfo has `store, copy, drop` but no `key` ability (see
+    room_manager.move's create_room(), which mints a UID just to derive
+    room_id and immediately deletes it) -- it lives purely as a
+    Table<ID, RoomInfo> value inside the shared RoomManager object, so
+    `sui client object <room_id>` (chain_io.fetch_object) can never resolve
+    it; devInspect through RoomManager is the only read path. Returns None
+    if the deployment isn't configured or either devInspect call fails
+    (including "room_id not found" -- table::contains aborts the same way
+    for both a closed/nonexistent room and a bad env)."""
+    from .. import contract
+
+    deployment = contract.load_deployment(network)
+    package_id = deployment.get("CONTRACT_PACKAGE_ID")
+    room_manager_id = deployment.get("ROOM_MANAGER_ID")
+    if not package_id or not room_manager_id:
+        return None
+
+    assignment = _devinspect_call(package_id, "get_room_assignment", [room_manager_id, room_id])
+    status_info = _devinspect_call(package_id, "get_room_status_info", [room_manager_id, room_id])
+    if assignment is None or status_info is None:
+        return None
+
+    assigned_relays, assigned_signaling = assignment
+    status_value, created_at = status_info
+    return {
+        "room_id": room_id,
+        "status": ROOM_STATUS_NAMES.get(int(status_value or 0), "unknown"),
+        "created_at": int(created_at or 0),
+        "assigned_relays": assigned_relays or [],
+        "assigned_signaling": _unwrap_option(assigned_signaling),
+    }

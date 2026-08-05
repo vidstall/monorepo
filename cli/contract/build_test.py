@@ -7,28 +7,29 @@ import sys
 
 from ..context import CONTRACT_DIR, run
 from .deployment import MOVE_TOML
+from .package import CONTRACT_A, ContractPackage
 
 
-def build(env: str) -> int:
+def build(env: str, pkg: ContractPackage = CONTRACT_A) -> int:
     if env == "devnet":
-        sync_devnet_chain_id()
-    return run(["sui", "move", "--build-env", env, "build", "--path", CONTRACT_DIR])
+        sync_devnet_chain_id(pkg)
+    return run(["sui", "move", "--build-env", env, "build", "--path", pkg.dir])
 
 
-def test(env: str) -> int:
+def test(env: str, pkg: ContractPackage = CONTRACT_A) -> int:
     if env == "devnet":
-        sync_devnet_chain_id()
-    return run(["sui", "move", "--build-env", env, "test", "--path", CONTRACT_DIR])
+        sync_devnet_chain_id(pkg)
+    return run(["sui", "move", "--build-env", env, "test", "--path", pkg.dir])
 
 
-def check(env: str) -> int:
-    code = build(env)
+def check(env: str, pkg: ContractPackage = CONTRACT_A) -> int:
+    code = build(env, pkg)
     if code != 0:
         return code
-    return test(env)
+    return test(env, pkg)
 
 
-def sync_devnet_chain_id() -> str | None:
+def sync_devnet_chain_id(pkg: ContractPackage = CONTRACT_A) -> str | None:
     """Best-effort: refresh Move.toml's `devnet` chain identifier from the
     live network before a devnet build, since devnet resets its genesis
     (and therefore its chain identifier) periodically and vidctl has no
@@ -76,9 +77,10 @@ def sync_devnet_chain_id() -> str | None:
         )
         return None
 
-    if not MOVE_TOML.exists():
+    move_toml = MOVE_TOML if pkg is CONTRACT_A else pkg.dir / "Move.toml"
+    if not move_toml.exists():
         return chain_id
-    text = MOVE_TOML.read_text()
+    text = move_toml.read_text()
     new_line = f'devnet = "{chain_id}"'
     if re.search(r'(?m)^devnet\s*=\s*".*"$', text):
         updated = re.sub(r'(?m)^devnet\s*=\s*".*"$', new_line, text)
@@ -87,8 +89,8 @@ def sync_devnet_chain_id() -> str | None:
     else:
         return chain_id
     if updated != text:
-        MOVE_TOML.write_text(updated)
-        print(f"Move.toml: devnet chain-id refreshed -> {chain_id}")
+        move_toml.write_text(updated)
+        print(f"{move_toml}: devnet chain-id refreshed -> {chain_id}")
     return chain_id
 
 

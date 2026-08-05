@@ -1,0 +1,132 @@
+# Relay-failover test: minimal topology (2 relay, 4 validator-daemon,
+# 1 cp-daemon, 1 signaling, 1 bot) on a single DigitalOcean host. A bot
+# creates a room and streams for 5 minutes, then one of the two relays is
+# stopped, then 5 minutes after that the bot's room is torn down.
+#
+# NOTE: which of the 2 relays actually serves the room is chosen
+# dynamically by cp-daemon at room-creation time (see
+# room-assignment.ts) -- it is NOT knowable when this file is authored.
+# This scenario statically targets worker_index = 1, so there is
+# roughly a 50/50 chance the stopped relay is the one actually carrying
+# the bot's stream vs. the idle standby. If it's the serving relay, the
+# client-side standby cutover (RTP-silence watcher) and cp-daemon's
+# on-chain promote_relay should both fire; if it's the idle one, there
+# should be no visible effect on the call.
+name = "relay-failover-2relay"
+env = "devnet"
+
+[contract]
+gas_budget = ""
+create_registry_if_missing = false
+force = false
+
+[registry]
+provider = "digitalocean"
+tag = ""
+
+# Republish the existing frontend site so it picks up this scenario's
+# freshly-published contract IDs -- needed to open the bot's joinUrl in a
+# real browser and watch the call live. Reusing name+provider updates it
+# in place; never deleted by apply/destroy (see scenario/README.md).
+[[frontends]]
+name = "site-2-bucket"
+object = "frontend"
+provider = "alibaba"
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 4
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+# Bot control server -- singleton, test/demo tool only.
+[[workers]]
+host = "001"
+service = "bot"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+# --- Actions timeline (run separately via `vidctl scenario run`, only
+# against an already-`apply`'d + active scenario -- `apply` never
+# executes these) --------------------------------------------------------
+#
+# `timestamp` is a "+<duration>" offset from when `scenario run` starts
+# (NOT chained off the previous action). Offsets below are anchored to
+# the room's +10s creation time: +5m10s = 5 minutes after the room
+# started, +10m10s = 5 minutes after the relay was stopped.
+
+# 10s in: bot spins up and creates a fresh room, streaming both video
+# and audio into it.
+[[actions]]
+id = "room1"
+type = "bot.create_room"
+timestamp = "+10s"
+host = "001"
+media_mode = "both"
+
+# +5m10s (5 min after the room started): stop relay worker_index = 1.
+[[actions]]
+type = "worker.leave"
+timestamp = "+5m10s"
+host = "001"
+service = "relay"
+provider = "digitalocean"
+worker_index = 1
+
+# +10m10s (5 min after the relay was stopped): tear down the bot's room.
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+10m10s"
+host = "001"
+bot_id = "$room1.botId"

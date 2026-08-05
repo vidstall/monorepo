@@ -18,6 +18,7 @@ SHARED_OBJECTS = [
     ("MINER_STORE_ID", "MinerStore", ft.Icons.STORAGE),
     ("ROLE_VOTE_BOX_ID", "RoleVoteBox", ft.Icons.HOW_TO_VOTE),
     ("LIVENESS_VOTE_BOX_ID", "LivenessVoteBox", ft.Icons.FAVORITE_BORDER),
+    ("ROOM_HEALTH_ALERT_BOX_ID", "RoomHealthAlertBox", ft.Icons.MONITOR_HEART),
     ("CP_REGISTRY_ID", "ControlPlaneRegistry", ft.Icons.SETTINGS_ETHERNET),
     ("RELAY_REGISTRY_ID", "RelayRegistry", ft.Icons.SWAP_HORIZ),
     ("SIGNALING_REGISTRY_ID", "SignalingRegistry", ft.Icons.CELL_TOWER),

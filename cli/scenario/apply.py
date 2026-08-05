@@ -203,6 +203,26 @@ def apply(path_str: str | None, yes: bool, rebake: bool = False, force_contract:
         _print_timings(timings)
         return code
 
+    # dvconf_role_voting (package B, see services/contract-role-voting) must
+    # publish AFTER package A: its Move.toml resolves package A's on-chain
+    # address via a local dependency, which only exists once A's Move.lock
+    # records a real publish for this env. Never has registries to backfill.
+    with _timed(timings, "contract publish (role-voting)"):
+        code = contract.publish(
+            env,
+            False,
+            True,
+            contract_opts["gas_budget"],
+            False,
+            contract_opts["force"] or force_contract,
+            pkg=contract.CONTRACT_B,
+        )
+    if code != 0:
+        write_lock(scenario_path_display, scenario_hash, env, "failed")
+        print(f"Scenario apply failed at contract publish for role-voting package (exit {code}).", file=sys.stderr)
+        _print_timings(timings)
+        return code
+
     missing = infra.missing_contract_keys(scenario_pkg.contract_env_path(env))
     if missing:
         write_lock(scenario_path_display, scenario_hash, env, "failed")

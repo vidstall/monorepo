@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import sys
 
-from ..context import CONTRACT_DIR
 from .chain_io import parse_created_object_id
 from .deployment import runtime_pubfile_path
+from .package import CONTRACT_A, ContractPackage
 
 
-def real_publish_command(env: str, gas_budget: str | None) -> list[str]:
+def real_publish_command(
+    env: str,
+    gas_budget: str | None,
+    pkg: ContractPackage = CONTRACT_A,
+    pubfile_path: str | None = None,
+) -> list[str]:
     """The real (non-dry-run) publish transaction command for `env`.
 
     devnet is ephemeral (Sui wipes it periodically) and the persistent
@@ -21,19 +26,25 @@ def real_publish_command(env: str, gas_budget: str | None) -> list[str]:
     """
     if env == "devnet":
         return [
-            "sui", "client", "test-publish", CONTRACT_DIR,
+            "sui", "client", "test-publish", pkg.dir,
             "--build-env", env,
-            "--pubfile-path", runtime_pubfile_path(env),
+            "--pubfile-path", pubfile_path or runtime_pubfile_path(env, pkg),
             "--json",
             *(["--gas-budget", gas_budget] if gas_budget else []),
         ]
     return [
-        "sui", "client", "publish", CONTRACT_DIR, "--json",
+        "sui", "client", "publish", pkg.dir, "--json",
         *(["--gas-budget", gas_budget] if gas_budget else []),
     ]
 
 
-def real_upgrade_command(env: str, upgrade_cap_id: str, gas_budget: str | None, pubfile_path: str) -> list[str]:
+def real_upgrade_command(
+    env: str,
+    upgrade_cap_id: str,
+    gas_budget: str | None,
+    pubfile_path: str,
+    pkg: ContractPackage = CONTRACT_A,
+) -> list[str]:
     """The real (non-dry-run) upgrade transaction command for `env`.
 
     Same devnet special-case as real_publish_command(): the persistent
@@ -54,30 +65,35 @@ def real_upgrade_command(env: str, upgrade_cap_id: str, gas_budget: str | None, 
             "--pubfile-path", pubfile_path,
             "--json",
             *(["--gas-budget", gas_budget] if gas_budget else []),
-            CONTRACT_DIR,
+            pkg.dir,
         ]
     return [
         "sui", "client", "upgrade",
         "--upgrade-capability", upgrade_cap_id,
         "--json",
         *(["--gas-budget", gas_budget] if gas_budget else []),
-        CONTRACT_DIR,
+        pkg.dir,
     ]
 
 
-def test_publish(env: str, gas_budget: str | None) -> dict | None:
+def test_publish(
+    env: str,
+    gas_budget: str | None,
+    pkg: ContractPackage = CONTRACT_A,
+    pubfile_path: str | None = None,
+) -> dict | None:
     # Deferred self-import: run_sui_json is patched by tests as a flat
     # cli.contract attribute -- looking it up through the package at call
     # time is what makes that patch take effect here.
     from .. import contract
 
-    pubfile_path = runtime_pubfile_path(env)
+    pubfile_path = pubfile_path or runtime_pubfile_path(env, pkg)
     _code, result, error = contract.run_sui_json(
         [
             "sui",
             "client",
             "test-publish",
-            CONTRACT_DIR,
+            pkg.dir,
             "--build-env",
             env,
             "--pubfile-path",
@@ -97,6 +113,7 @@ def test_upgrade(
     upgrade_cap_id: str,
     gas_budget: str | None,
     pubfile_path: str,
+    pkg: ContractPackage = CONTRACT_A,
 ) -> dict | None:
     from .. import contract
 
@@ -114,7 +131,7 @@ def test_upgrade(
             "--dry-run",
             "--json",
             *(["--gas-budget", gas_budget] if gas_budget else []),
-            CONTRACT_DIR,
+            pkg.dir,
         ]
     )
     if result is None and error:
