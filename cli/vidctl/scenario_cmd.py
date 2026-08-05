@@ -81,7 +81,16 @@ def add_scenario_parser(subparsers: argparse._SubParsersAction[argparse.Argument
             "overhead. Room/user quality metrics are unaffected."
         ),
     )
-    run_parser.set_defaults(handler=lambda args: scenario.run(args.path, args.yes, args.fast))
+    run_parser.add_argument(
+        "--no-report",
+        action="store_true",
+        help=(
+            "Skip generating the post-run report (summary.txt, CSV export, matplotlib diagrams, and "
+            "report.md under logs/<scenario_name>/<run_timestamp>/report/) that's produced by default "
+            "once the run finishes."
+        ),
+    )
+    run_parser.set_defaults(handler=lambda args: scenario.run(args.path, args.yes, args.fast, not args.no_report))
 
     status_parser = actions.add_parser("status", help="Show the active scenario lock and its workers' current state.")
     status_parser.set_defaults(handler=lambda args: scenario.status(args))

@@ -8,11 +8,12 @@ from ..observer.grafana_render import capture_dashboard_images
 from .actions import run_actions
 from .lock import read_lock
 from .metrics_sampler import INTERVAL_SECONDS, MetricsSampler
+from .report import generate_report
 from .spec import load_scenario
 from .system_log import SystemLog, backfill_action_snapshots, record_snapshot_event
 
 
-def run(path_str: str | None, yes: bool, fast: bool = False) -> int:
+def run(path_str: str | None, yes: bool, fast: bool = False, report: bool = True) -> int:
     if not yes:
         print("Refusing to run a scenario's actions without --yes.", file=sys.stderr)
         return 2
@@ -96,3 +97,9 @@ def run(path_str: str | None, yes: bool, fast: bool = False) -> int:
             print(f"Warning: Grafana panel capture failed: {exc}", file=sys.stderr)
         else:
             print(f"Captured {captured} Grafana panel image(s) to {img_dir}")
+
+        if report:
+            try:
+                generate_report(system_log, env, run_start_ms, run_end_ms, img_dir)
+            except Exception as exc:  # noqa: BLE001 - report generation must never fail the run
+                print(f"Warning: report generation failed: {exc}", file=sys.stderr)
