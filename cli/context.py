@@ -25,6 +25,8 @@ RUNTIME_WALLET_TOML = RUNTIME_DIR / "wallet.toml"
 RUNTIME_SCENARIO_LOCK = RUNTIME_DIR / "scenario.lock"
 RUNTIME_IMAGES_TOML = RUNTIME_DIR / "images.toml"
 RUNTIME_OBSERVER_TOML = RUNTIME_DIR / "observer.toml"
+RUNTIME_LOCAL_BOTS_TOML = RUNTIME_DIR / "local_bots.toml"
+RUNTIME_LOCAL_BOTS_LOG_DIR = RUNTIME_DIR / "local_bots"
 # logs/<provider>/<run-timestamp>/{infra,worker,room,user}/*.json --
 # the live per-entity metrics schema, distinct from LOGS_ROOT (system_log.py's
 # scenario-run event trail). Promoted here because multiple
@@ -205,20 +207,24 @@ def run_detached(
     cwd: Path = ROOT,
     env: dict[str, str] | None = None,
     log_path: Path | None = None,
-) -> None:
+) -> int:
     """Starts args as an independent background process (the `nohup ... &`
     pattern) and returns immediately -- no exit code, since nothing waits
     for it. start_new_session=True detaches it from this process's session
     so it keeps running even after this process exits, not just while this
     call is on the stack. Output has nowhere to stream to once this
     returns, so it's redirected to log_path (parent directory created if
-    needed) instead of inheriting this process's stdout/stderr."""
+    needed) instead of inheriting this process's stdout/stderr.
+
+    Returns the child's pid -- callers that need to track/stop it later
+    (e.g. cli/local_bot.py's start()) can persist this; existing callers
+    that don't need it (e.g. cli/infra/ansible.py) just ignore it."""
     stdout = subprocess.DEVNULL
     if log_path is not None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         stdout = open(log_path, "a")
     try:
-        subprocess.Popen(
+        process = subprocess.Popen(
             [str(arg) for arg in args],
             cwd=cwd,
             env=env or command_env(),
@@ -227,6 +233,7 @@ def run_detached(
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
+        return process.pid
     finally:
         if stdout is not subprocess.DEVNULL:
             stdout.close()
