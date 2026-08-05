@@ -1,0 +1,277 @@
+# Single-provider, 3-bot call-quality scenario. One room, 3 bots join near
+# the start and hold a steady 3-way call for ~10 minutes (no ramp, no
+# churn), then all 3 leave near the end. Meant to measure baseline call
+# quality (latency/jitter/packet loss/bitrate) rather than stress load --
+# see scenario/evaluation/single-room-multicloud-client-ramp.toml for the
+# load-ramp counterpart.
+#
+# Each of the 3 DigitalOcean instances runs the same 8-worker set (3x
+# validator-daemon, 3x cp-daemon, 1x relay, 1x signaling) PLUS one bot, so
+# "3 bots on 3 instances" is 1 bot colocated with each instance's worker
+# set rather than needing separate bot-only hosts.
+name = "three-bot-call-quality"
+env = "devnet"
+
+[contract]
+gas_budget = ""
+create_registry_if_missing = false
+force = false
+
+[registry]
+provider = "digitalocean"
+tag = ""
+
+# Republish the existing frontend site (same name/provider as the currently
+# deployed bucket in runtime/topology.toml) so it picks up THIS scenario's
+# freshly-published contract IDs -- needed for a real browser to open a
+# bot's joinUrl and watch the call live. Reusing name+provider updates it in
+# place; never deleted by apply/destroy (see scenario/README.md).
+[[frontends]]
+name = "site-2-bucket"
+object = "frontend"
+provider = "alibaba"
+
+# host 001 -- 3x validator-daemon, 3x cp-daemon, 1x relay, 1x signaling, 1x bot
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "bot"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+# host 002 -- same 9-worker set
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "002"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "bot"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+# host 003 -- same 9-worker set
+
+[[workers]]
+host = "003"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "003"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "003"
+service = "validator-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "003"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "003"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 2
+
+[[workers]]
+host = "003"
+service = "cp-daemon"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 3
+
+[[workers]]
+host = "003"
+service = "relay"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "003"
+service = "signaling"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+[[workers]]
+host = "003"
+service = "bot"
+provider = "digitalocean"
+size = "s-4vcpu-8gb"
+worker_index = 1
+
+# --- Actions timeline (run separately via `vidctl scenario run`, only
+# against an already-`apply`'d + active scenario) -----------------------
+#
+# All 3 bots join within the first 30s, hold a steady 3-way call for
+# ~9.5 minutes, then all 3 leave within the last 10s -- a flat
+# join/hold/leave shape (no ramp, no churn), meant to give the post-run
+# report's step-plateau detection one long, clean count=3 window to
+# aggregate quality stats over.
+
+[[actions]]
+id = "room1"
+type = "bot.create_room"
+timestamp = "+10s"
+host = "001"
+media_mode = "both"
+
+[[actions]]
+id = "bot2"
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+20s"
+host = "002"
+media_mode = "both"
+
+[[actions]]
+id = "bot3"
+type = "bot.join_room"
+room_id = "$room1.roomId"
+timestamp = "+30s"
+host = "003"
+media_mode = "both"
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+600s"
+host = "003"
+bot_id = "$bot3.botId"
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+605s"
+host = "002"
+bot_id = "$bot2.botId"
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+610s"
+host = "001"
+bot_id = "$room1.botId"
