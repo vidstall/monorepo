@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .. import bot_client, infra
+from ..observer.grafana_render import post_annotation
 from .fast_health_poller import FastHealthPoller, worker_healthz_url
 from .system_log import DuringActionSampler, SystemLog, record_action_marker
 
@@ -150,6 +151,12 @@ def _worker_join(
             docker_only=True,
         )
         confirmed_at = time.time()
+        if code == 0:
+            post_annotation(
+                int(confirmed_at * 1000),
+                ["worker-churn", "worker.join", service],
+                f"worker.join: {service} on {host} (worker_index={worker_index}) started",
+            )
         health_poll = None
         if poller is not None:
             poller.wait_for_transition(_HEALTH_POLL_GRACE_SECONDS)
@@ -253,6 +260,12 @@ def _worker_leave(action: dict[str, Any]) -> dict[str, Any] | None:
         docker_only=True,
     )
     confirmed_at = time.time()
+    if code == 0:
+        post_annotation(
+            int(confirmed_at * 1000),
+            ["worker-churn", "worker.leave", service],
+            f"worker.leave: {service} on {host} (worker_index={worker_index}) stopped",
+        )
     health_poll = None
     if poller is not None:
         poller.wait_for_transition(_HEALTH_POLL_GRACE_SECONDS)

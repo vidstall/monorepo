@@ -386,7 +386,7 @@ class InfraTopologyTests(unittest.TestCase):
         with (
             patch("cli.wallet.checkout_wallet", return_value=({"secret_key": "k", "node_id": None, "x25519_secret": "x", "cap_id": None}, False)),
             patch.object(infra, "command_env", return_value={"LINODE_TOKEN": "token"}),
-            patch.object(infra, "pulumi_up", return_value=0),
+            patch.object(infra, "pulumi_up", return_value=0) as pulumi_up,
             patch.object(infra, "inventory") as inventory,
             patch.object(infra, "configure") as configure,
             patch.object(infra, "toggle_container", return_value=0) as toggle_container,
@@ -394,6 +394,7 @@ class InfraTopologyTests(unittest.TestCase):
             code = infra.control("restart", "node-1", "signaling", "akamai", detach=True, docker_only=True)
 
         self.assertEqual(code, 0)
+        pulumi_up.assert_not_called()
         inventory.assert_not_called()
         configure.assert_not_called()
         toggle_container.assert_called_once_with(
@@ -434,12 +435,13 @@ class InfraTopologyTests(unittest.TestCase):
 
         with (
             patch.object(infra, "command_env", return_value={"LINODE_TOKEN": "token"}),
-            patch.object(infra, "pulumi_up", return_value=0),
+            patch.object(infra, "pulumi_up", return_value=0) as pulumi_up,
             patch.object(infra, "toggle_container", return_value=0) as toggle_container,
         ):
             code = infra.control("pause", "node-1", "signaling", "akamai", docker_only=True)
 
         self.assertEqual(code, 0)
+        pulumi_up.assert_not_called()
         toggle_container.assert_called_once_with(
             host_limit="node-1",
             container_name="xaisen-akamai-node-1-signaling-1",
@@ -449,7 +451,13 @@ class InfraTopologyTests(unittest.TestCase):
         )
         self.assertEqual(self.read_topology()["workers"][0]["last_status"], "stopped")
 
-    def test_docker_only_pause_skips_toggle_when_last_active_worker_on_host(self) -> None:
+    def test_docker_only_pause_stops_container_even_as_last_active_worker_on_host(self) -> None:
+        # Pause is always a plain SSH `docker stop` against one container --
+        # it never falls back to letting pulumi_up power off the whole VM,
+        # even when this is the only worker left running on the host (see
+        # cli/infra/control.py's `skip_pulumi` -- pulumi_up is skipped
+        # entirely for docker_only pause/restart, so there's nothing for it
+        # to fall back to).
         infra.write_topology(
             {
                 "active_env": "devnet",
@@ -469,13 +477,60 @@ class InfraTopologyTests(unittest.TestCase):
 
         with (
             patch.object(infra, "command_env", return_value={"LINODE_TOKEN": "token"}),
-            patch.object(infra, "pulumi_up", return_value=0),
+            patch.object(infra, "pulumi_up", return_value=0) as pulumi_up,
             patch.object(infra, "toggle_container", return_value=0) as toggle_container,
         ):
             code = infra.control("pause", "node-1", "signaling", "akamai", docker_only=True)
 
         self.assertEqual(code, 0)
-        toggle_container.assert_not_called()
+        pulumi_up.assert_not_called()
+        toggle_container.assert_called_once_with(
+            host_limit="node-1",
+            container_name="xaisen-akamai-node-1-signaling-1",
+            action="stop",
+            detach=False,
+            log_path=None,
+        )
+        self.assertEqual(self.read_topology()["workers"][0]["last_status"], "stopped")
+
+    def test_docker_only_pause_restart_works_for_non_alibaba_akamai_provider(self) -> None:
+        # Regression test: docker_only pause/restart (scenario worker.leave/
+        # worker.join churn) must work for ANY provider, since it's pure SSH
+        # + a single docker command -- never routed through the per-provider
+        # VM power-lifecycle guard that only applies outside docker_only.
+        infra.write_topology(
+            {
+                "active_env": "devnet",
+                "contract_env": "runtime/contract/devnet.env",
+                "providers": {},
+                "workers": [
+                    {
+                        "host": "node-1",
+                        "service": "relay",
+                        "provider": "digitalocean",
+                        "backend": "vm",
+                        "desired_state": "running",
+                        "worker_index": 1,
+                    }
+                ],
+            }
+        )
+
+        with (
+            patch.object(infra, "pulumi_up", return_value=0) as pulumi_up,
+            patch.object(infra, "toggle_container", return_value=0) as toggle_container,
+        ):
+            code = infra.control("pause", "node-1", "relay", "digitalocean", worker_index=1, docker_only=True)
+
+        self.assertEqual(code, 0)
+        pulumi_up.assert_not_called()
+        toggle_container.assert_called_once_with(
+            host_limit="node-1",
+            container_name="xaisen-digitalocean-node-1-relay-1",
+            action="stop",
+            detach=False,
+            log_path=None,
+        )
         self.assertEqual(self.read_topology()["workers"][0]["last_status"], "stopped")
 
     def test_docker_only_ignored_for_fresh_start(self) -> None:

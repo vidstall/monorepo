@@ -143,6 +143,41 @@ def _render_panel_png(
         return response.read()
 
 
+def post_annotation(time_ms: int, tags: list[str], text: str) -> bool:
+    """Posts a native Grafana annotation (a point-in-time vertical marker +
+    hover text, rendered on every panel of any dashboard whose `annotations`
+    list has a matching tag-filtered query -- see overview.json) via
+    Grafana's own /api/annotations, reusing the same Basic-Auth admin
+    credential capture_dashboard_images() already uses for the render API.
+    No `dashboardUID`/`panelId` -- a plain tag-filtered global annotation,
+    so any dashboard can pick it up by tag without re-posting.
+
+    Best-effort/non-fatal, matching this module's convention: no registered
+    grafana host, an unreachable API, or a non-2xx response all just print a
+    warning to stderr and return False -- callers (scenario actions) must
+    never fail or slow down because Grafana happened to be unreachable."""
+    host = _grafana_host()
+    if host is None:
+        print("grafana_render: no observer host currently runs grafana, skipping annotation.", file=sys.stderr)
+        return False
+
+    base_url = _grafana_base_url(host)
+    auth_header = "Basic " + base64.b64encode(f"admin:{grafana_admin_password()}".encode()).decode()
+    body = json.dumps({"time": time_ms, "tags": tags, "text": text}).encode("utf-8")
+    request = urllib.request.Request(
+        f"{base_url}/api/annotations",
+        data=body,
+        headers={"Authorization": auth_header, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return 200 <= response.status < 300
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
+        print(f"grafana_render: failed to post annotation {text!r}: {exc}", file=sys.stderr)
+        return False
+
+
 def capture_dashboard_images(from_ms: int, to_ms: int, dest_dir: Path) -> int:
     """Renders one PNG per panel (across every dashboard under
     files/dashboards/, including panels nested in collapsed rows) via

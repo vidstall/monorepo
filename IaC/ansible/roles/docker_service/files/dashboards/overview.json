@@ -8,6 +8,21 @@
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
+  "annotations": {
+    "list": [
+      {
+        "name": "Worker start/stop",
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "iconColor": "red",
+        "tags": ["worker-churn"],
+        "type": "tags"
+      }
+    ]
+  },
   "time": {
     "from": "now-1h",
     "to": "now"

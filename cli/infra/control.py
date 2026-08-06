@@ -77,7 +77,15 @@ def control(
     # target the one already-provisioned container directly.
     container_name = f"xaisen-{worker_key}"
 
-    if backend == "vm" and action in {"pause", "restart"} and provider not in {"alibaba", "akamai"}:
+    if backend == "vm" and action in {"pause", "restart"} and not docker_only and provider not in {"alibaba", "akamai"}:
+        # Only guards the REAL VM power-lifecycle path (pulumi_up below
+        # translating desired_state into an actual cloud stop/start via the
+        # alibaba/akamai adapters -- see IaC/pulumi/app/compute/alibaba.py's
+        # `status=` and akamai.py's `booted=`). docker_only=True (scenario
+        # worker.leave/join churn -- see actions.py) never reaches pulumi_up
+        # at all (skipped below) and only ever runs a plain SSH `docker
+        # stop`/`docker start` against one already-provisioned container, so
+        # it isn't subject to this per-provider restriction.
         message = (
             f"{action} is not yet supported for {provider} VM services; "
             "powered lifecycle support currently requires --provider alibaba or --provider akamai."
@@ -184,7 +192,15 @@ def control(
 
     code = 0
     failed_stage = "pulumi"
-    if code == 0:
+    # docker_only pause/restart (scenario worker.leave/join churn) never
+    # needs Pulumi reconciliation -- the VM/container was already fully
+    # provisioned by an earlier `vidctl scenario apply`, and skipping this
+    # also guarantees desired_state can never cascade into a real cloud VM
+    # power change via the alibaba/akamai adapters (see the provider guard
+    # above). The docker_only branches further down (toggle_container over
+    # SSH) run unconditionally regardless, since `code` stays 0 here.
+    skip_pulumi = docker_only and backend == "vm" and action in {"pause", "restart"}
+    if code == 0 and not skip_pulumi:
         failed_stage = "pulumi"
         if backend == "vm" and provider == "alibaba":
             # An --all-region search may create ad-hoc region-probe provider
@@ -290,38 +306,21 @@ def control(
                 )
         elif backend == "vm" and action == "pause" and docker_only:
             # Fast path for scenario worker.leave churn (see actions.py's
-            # _worker_leave). Today, `pause` alone runs no Ansible at all
-            # (just the pulumi_up VM-power-state reconciliation above) --
-            # the container only actually stops as an incidental side
-            # effect of some OTHER colocated sibling's next `configure()`
-            # run. Once worker.join stops running that full reconcile (see
-            # the docker_only restart branch above), that side effect
-            # disappears -- so this explicitly stops the one container
-            # itself, UNLESS pulumi_up (above) is already powering the
-            # whole VM off because this was the last active worker on the
-            # host (checked via the same "stays up if any active sibling
-            # wants running" rule as IaC/pulumi/app/program.py's
-            # _group_vm_workers) -- in that case there's nothing to SSH
-            # into.
-            other_running = any(
-                item.get("host") == host
-                and item.get("provider") == provider
-                and item.get("env", env_name) == env_name
-                and item.get("backend") == "vm"
-                and item.get("desired_state") == "running"
-                and not (item.get("service") == service and item.get("worker_index", 1) == worker_index)
-                for item in topology.get("workers", [])
+            # _worker_leave): always just SSH in and stop the one named
+            # container, regardless of whether any sibling worker is still
+            # active on this host -- pulumi_up is skipped entirely for
+            # docker_only pause/restart now (see the `skip_pulumi` check
+            # above), so there's no cloud VM power-off this could ever fall
+            # back to.
+            failed_stage = "toggle_container"
+            log_path = infra.ANSIBLE_DETACHED_LOG_ROOT / f"{worker_key}-{timestamp()}.log" if detach else None
+            code = infra.toggle_container(
+                host_limit=host,
+                container_name=container_name,
+                action="stop",
+                detach=detach,
+                log_path=log_path,
             )
-            if other_running:
-                failed_stage = "toggle_container"
-                log_path = infra.ANSIBLE_DETACHED_LOG_ROOT / f"{worker_key}-{timestamp()}.log" if detach else None
-                code = infra.toggle_container(
-                    host_limit=host,
-                    container_name=container_name,
-                    action="stop",
-                    detach=detach,
-                    log_path=log_path,
-                )
 
         if code == 0 and action != "kill":
             worker["last_status"] = next_state

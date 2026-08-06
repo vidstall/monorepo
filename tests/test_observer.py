@@ -432,6 +432,72 @@ class QueryAtTimeTests(unittest.TestCase):
         self.assertIn("time=1700000000.0", request.full_url)
 
 
+class GrafanaAnnotationTests(unittest.TestCase):
+    """cli.observer.grafana_render.post_annotation() -- the time-event
+    marker scenario worker.leave/worker.join actions post so the Grafana
+    overview dashboard shows exactly when a worker was stopped/started
+    (see cli.scenario.actions.py)."""
+
+    def _fake_response(self, status: int = 200) -> MagicMock:
+        response = MagicMock()
+        response.status = status
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+        return response
+
+    def test_posts_annotation_with_expected_body_and_auth(self) -> None:
+        from cli.observer.grafana_render import post_annotation
+
+        with (
+            patch(
+                "cli.observer.grafana_render.read_hosts",
+                return_value=[{"address": "1.2.3.4", "services": ["grafana"]}],
+            ),
+            patch("cli.observer.grafana_render.grafana_admin_password", return_value="secret"),
+            patch("urllib.request.urlopen", return_value=self._fake_response()) as mock_urlopen,
+        ):
+            ok = post_annotation(1700000000000, ["worker-churn", "worker.leave"], "worker.leave: relay stopped")
+
+        self.assertTrue(ok)
+        request = mock_urlopen.call_args[0][0]
+        self.assertEqual(request.full_url, "https://grafana.1-2-3-4.sslip.io/api/annotations")
+        self.assertEqual(request.get_header("Authorization"), "Basic YWRtaW46c2VjcmV0")
+        body = json.loads(request.data)
+        self.assertEqual(
+            body,
+            {
+                "time": 1700000000000,
+                "tags": ["worker-churn", "worker.leave"],
+                "text": "worker.leave: relay stopped",
+            },
+        )
+
+    def test_returns_false_without_raising_when_no_grafana_host_registered(self) -> None:
+        from cli.observer.grafana_render import post_annotation
+
+        with patch("cli.observer.grafana_render.read_hosts", return_value=[]):
+            ok = post_annotation(1700000000000, ["worker-churn"], "text")
+
+        self.assertFalse(ok)
+
+    def test_returns_false_without_raising_on_unreachable_grafana(self) -> None:
+        import urllib.error
+
+        from cli.observer.grafana_render import post_annotation
+
+        with (
+            patch(
+                "cli.observer.grafana_render.read_hosts",
+                return_value=[{"address": "1.2.3.4", "services": ["grafana"]}],
+            ),
+            patch("cli.observer.grafana_render.grafana_admin_password", return_value="secret"),
+            patch("urllib.request.urlopen", side_effect=urllib.error.URLError("unreachable")),
+        ):
+            ok = post_annotation(1700000000000, ["worker-churn"], "text")
+
+        self.assertFalse(ok)
+
+
 class RoomOccupancyCountsTests(unittest.TestCase):
     def test_counts_distinct_peers_per_room_including_bots(self) -> None:
         # discover_active_peers() is built on dvconf_relay_peer_*/
