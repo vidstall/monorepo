@@ -243,7 +243,7 @@
       "id": 6,
       "type": "table",
       "title": "Liveness",
-      "description": "Fault-tolerance experiment table: `vidctl utils worker stop/start` ground-truth timestamps joined against relay client-awareness (dvconf_relay_down_hint_*) and validator worker-awareness (dvconf_worker_down_vote_total) -- see cli/observer/worker_liveness.py (the correlator that computes and pushes these xaisen_worker_liveness_* rows; run `vidctl observer worker-liveness` or `--watch` to keep it fresh). Columns 3+ are seconds elapsed since column 1 (Stop time), not absolute timestamps.",
+      "description": "Fault-tolerance experiment table: `vidctl utils worker stop/start` ground-truth timestamps joined against validator worker-awareness (dvconf_worker_down_vote_total) -- see cli/observer/worker_liveness.py (the correlator that computes and pushes these xaisen_worker_liveness_* rows; run `vidctl observer worker-liveness` or `--watch` to keep it fresh). Columns 3+ are seconds elapsed since column 1 (Stop time), not absolute timestamps. Per-relay client-awareness detail is a SEPARATE panel below (\"Client awareness by relay\") -- joinByField groups by distinct event_id, so a query with multiple rows per event (one per relay) can't share this join with the rest of this table's one-row-per-event queries without silently collapsing down to one row.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -293,17 +293,6 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "xaisen_worker_liveness_client_awareness_count",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
           "expr": "xaisen_worker_liveness_worker_awareness_count",
           "format": "table",
           "instant": true,
@@ -329,16 +318,28 @@
               "Time 2": true,
               "Time 3": true,
               "Time 4": true,
-              "Time 5": true
+              "job 1": true,
+              "job 2": true,
+              "job 3": true,
+              "job 4": true,
+              "instance 1": true,
+              "instance 2": true,
+              "instance 3": true,
+              "instance 4": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "__name__ 3": true,
+              "__name__ 4": true,
+              "worker 2": true,
+              "worker 3": true,
+              "worker 4": true
             },
             "indexByName": {},
             "renameByName": {
-              "worker": "Worker",
-              "relay": "Relay Instance",
+              "worker 1": "Worker",
               "Value #A": "Stop Time",
               "Value #B": "Downtime (s)",
               "Value #C": "First Client Awareness (s)",
-              "Value #D": "Client Awareness Count",
               "Value #E": "Worker Awareness Count"
             }
           }
@@ -397,6 +398,64 @@
         "sortBy": [
           {
             "displayName": "Stop Time",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Client awareness by relay",
+      "description": "xaisen_worker_liveness_client_awareness_count{event_id,worker,relay} -- one row PER RELAY INSTANCE per Liveness experiment (see cli/observer/worker_liveness.py's _client_awareness_by_relay()), deliberately a separate panel from \"Liveness\" above: this is the only one of the derived metrics with more than one row per event_id, and Grafana's joinByField join groups by distinct event_id values, so mixing it into that table's join silently collapsed every relay's row down to one.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "xaisen_worker_liveness_client_awareness_count",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "event_id": true,
+              "instance": true,
+              "job": true,
+              "__name__": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "worker": "Worker",
+              "relay": "Relay Instance",
+              "Value #A": "Client Awareness Count"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Client Awareness Count",
             "desc": true
           }
         ]
