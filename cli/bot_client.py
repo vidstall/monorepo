@@ -162,3 +162,19 @@ def delete_room_local(port: int, bot_id: str) -> dict | None:
     """delete_room(), but against a local dev bot process (see
     create_room_local())."""
     return _request_at(f"local:{port}", f"http://127.0.0.1:{port}", "DELETE", f"/bots/{bot_id}")
+
+
+def join_room_local(port: int, room_id: str, media_mode: str) -> dict | None:
+    """join_room(), but against a local dev bot process (see
+    create_room_local()) -- used by `vidctl utils bot refresh <id>` to
+    rejoin a session's previously-recorded room_id after its process
+    crashed, instead of creating (and paying escrow gas for) a new room."""
+    result = _request_at(
+        f"local:{port}",
+        f"http://127.0.0.1:{port}",
+        "POST",
+        "/bots",
+        {"roomMode": "join", "roomId": room_id, "mediaMode": media_mode},
+        timeout=ROOM_ACTION_TIMEOUT_SECONDS,
+    )
+    return result if isinstance(result, dict) else None

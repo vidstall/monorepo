@@ -152,6 +152,95 @@ class StartTests(unittest.TestCase):
         self.assertEqual(sessions[1].room_id, "")
 
 
+class RefreshTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.toml_path = Path(self.temp.name) / "local_bots.toml"
+        self.env_path = Path(self.temp.name) / ".env"
+        self.env_path.write_text("PRIVATE_KEY=suiprivkey1x\n", encoding="utf-8")
+        self.patches = [
+            patch.object(context, "RUNTIME_LOCAL_BOTS_TOML", self.toml_path),
+            patch.object(local_bot, "BOT_APP_DIR", Path(self.temp.name)),
+            patch.object(context, "run_detached", return_value=4242),
+            patch.object(local_bot, "_wait_for_healthz", return_value=True),
+        ]
+        for p in self.patches:
+            p.start()
+        self.crashed = local_bot.LocalBotSession(
+            1, 1111, local_bot.BASE_PORT, "old-bot", "0xroom", "https://example/rooms/0xroom", "t", "log"
+        )
+        local_bot._write_sessions({1: self.crashed})
+
+    def tearDown(self) -> None:
+        for p in self.patches:
+            p.stop()
+        self.temp.cleanup()
+
+    def test_refresh_unknown_id_errors(self) -> None:
+        local_bot._write_sessions({})
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = local_bot.refresh(99)
+        self.assertEqual(code, 1)
+
+    def test_refresh_already_running_is_a_no_op(self) -> None:
+        with patch.object(local_bot, "_pid_alive", return_value=True):
+            with patch.object(context, "run_detached") as run_detached:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    code = local_bot.refresh(1)
+        self.assertEqual(code, 1)
+        run_detached.assert_not_called()
+
+    def test_refresh_with_no_recorded_room_errors_without_spawning(self) -> None:
+        local_bot._write_sessions({1: local_bot.LocalBotSession(1, 1111, local_bot.BASE_PORT, "", "", "", "t", "log")})
+        with patch.object(local_bot, "_pid_alive", return_value=False):
+            with patch.object(context, "run_detached") as run_detached:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    code = local_bot.refresh(1)
+        self.assertEqual(code, 1)
+        run_detached.assert_not_called()
+
+    def test_refresh_rejoins_the_old_room_not_a_new_one(self) -> None:
+        with patch.object(local_bot, "_pid_alive", return_value=False):
+            with patch.object(
+                bot_client,
+                "join_room_local",
+                return_value={"botId": "new-bot", "roomId": "0xroom", "joinUrl": "https://example/rooms/0xroom"},
+            ) as join_room_local:
+                with patch.object(bot_client, "create_room_local") as create_room_local:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        code = local_bot.refresh(1)
+        self.assertEqual(code, 0)
+        join_room_local.assert_called_once_with(local_bot.BASE_PORT, "0xroom", media_mode="both")
+        create_room_local.assert_not_called()
+        sessions = local_bot.read_sessions()
+        self.assertEqual(sessions[1].pid, 4242)
+        self.assertEqual(sessions[1].bot_id, "new-bot")
+        self.assertEqual(sessions[1].room_id, "0xroom")
+
+    def test_refresh_records_process_and_keeps_old_room_if_rejoin_fails(self) -> None:
+        with patch.object(local_bot, "_pid_alive", return_value=False):
+            with patch.object(bot_client, "join_room_local", return_value=None):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    code = local_bot.refresh(1)
+        self.assertEqual(code, 1)
+        sessions = local_bot.read_sessions()
+        self.assertEqual(sessions[1].pid, 4242)
+        self.assertEqual(sessions[1].bot_id, "")
+        self.assertEqual(sessions[1].room_id, "0xroom")
+
+    def test_refresh_unhealthy_process_does_not_join_and_keeps_old_room(self) -> None:
+        with patch.object(local_bot, "_pid_alive", return_value=False):
+            with patch.object(local_bot, "_wait_for_healthz", return_value=False):
+                with patch.object(bot_client, "join_room_local") as join_room_local:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        code = local_bot.refresh(1)
+        self.assertEqual(code, 1)
+        join_room_local.assert_not_called()
+        sessions = local_bot.read_sessions()
+        self.assertEqual(sessions[1].pid, 4242)
+        self.assertEqual(sessions[1].room_id, "0xroom")
+
+
 class StopTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()

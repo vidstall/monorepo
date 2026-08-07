@@ -51,6 +51,16 @@ def add_utils_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     bot_stop_parser.add_argument("id", type=int, help="Local session id, counting from 1.")
     bot_stop_parser.set_defaults(handler=lambda args: local_bot.stop(args.id))
 
+    bot_refresh_parser = bot_actions.add_parser(
+        "refresh",
+        help=(
+            "Revive a crashed local bot session -- restarts the process and rejoins its "
+            "existing room instead of creating a new one. No-op if already running."
+        ),
+    )
+    bot_refresh_parser.add_argument("id", type=int, help="Local session id, counting from 1.")
+    bot_refresh_parser.set_defaults(handler=lambda args: local_bot.refresh(args.id))
+
     bot_list_parser = bot_actions.add_parser("list", help="List local bot sessions.")
     bot_list_parser.set_defaults(handler=lambda _args: local_bot.list_bots())
 
