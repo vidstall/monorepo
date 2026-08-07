@@ -5,11 +5,11 @@ from pathlib import Path
 
 import tomllib
 
-from ..context import CONTRACT_DIR, read_env_file, sync_env_keys
+from ..context import CONTRACT_CORE_DIR, read_env_file, sync_env_keys
 from .package import CONTRACT_A, ContractPackage
 
-PUBLISHED_TOML = CONTRACT_DIR / "Published.toml"
-MOVE_TOML = CONTRACT_DIR / "Move.toml"
+PUBLISHED_TOML = CONTRACT_CORE_DIR / "Published.toml"
+MOVE_TOML = CONTRACT_CORE_DIR / "Move.toml"
 
 # Maps runtime/contract/<env>.env keys to the VITE_* keys read by
 # services/client/client/src/config.ts. Only keys the frontend app

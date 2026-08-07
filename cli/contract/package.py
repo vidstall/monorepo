@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..context import CONTRACT_DIR, CONTRACT_ROLE_VOTING_DIR
+from ..context import CONTRACT_CORE_DIR, CONTRACT_ROLE_VOTING_DIR
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,7 @@ class ContractPackage:
     env_prefix: str
 
 
-CONTRACT_A = ContractPackage(slug="contract", dir=CONTRACT_DIR, env_prefix="CONTRACT")
+CONTRACT_A = ContractPackage(slug="contract", dir=CONTRACT_CORE_DIR, env_prefix="CONTRACT")
 CONTRACT_B = ContractPackage(slug="role-voting", dir=CONTRACT_ROLE_VOTING_DIR, env_prefix="CONTRACT_B")
 
 # Local Move.toml `{ local = ... }` dependencies, keyed by dependent package.

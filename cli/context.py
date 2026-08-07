@@ -15,7 +15,11 @@ VENV_DIR = IAC_DIR / ".venv"
 PULUMI_DIR = IAC_DIR / "pulumi"
 ANSIBLE_DIR = IAC_DIR / "ansible"
 CONTRACT_DIR = ROOT / "services" / "contract"
-CONTRACT_ROLE_VOTING_DIR = ROOT / "services" / "contract-role-voting"
+# Both Move packages now nest under the services/contract submodule root
+# (see that submodule's "nest core and role-voting Move packages" commit) --
+# CONTRACT_DIR is just the submodule root, not a package dir itself.
+CONTRACT_CORE_DIR = CONTRACT_DIR / "core"
+CONTRACT_ROLE_VOTING_DIR = CONTRACT_DIR / "role-voting"
 CLIENT_WEBUI_DIR = ROOT / "services" / "client"
 CLIENT_ENV_PATH = CLIENT_WEBUI_DIR / "client" / ".env"
 RUNTIME_DIR = ROOT / "runtime"
