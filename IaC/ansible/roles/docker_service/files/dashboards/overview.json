@@ -334,6 +334,7 @@
             "indexByName": {},
             "renameByName": {
               "worker": "Worker",
+              "relay": "Relay Instance",
               "Value #A": "Stop Time",
               "Value #B": "Downtime (s)",
               "Value #C": "First Client Awareness (s)",
