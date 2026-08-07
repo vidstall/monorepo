@@ -75,10 +75,19 @@ grafana.{{ ansible_host | replace('.', '-') }}.sslip.io {
    directly over the internal xaisen-net bridge (see prometheus.yml.j2). #}
 {% if xaisen_observer_pushgateway_service | length > 0 %}
 pushgateway.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, OPTIONS"
+        Access-Control-Allow-Headers "Authorization, Content-Type"
+    }
+    @cors_preflight {
+        method OPTIONS
+    }
     @authorized {
         header Authorization "Bearer {{ xaisen_metrics_auth_token }}"
     }
     route {
+        respond @cors_preflight 204
         reverse_proxy @authorized xaisen-pushgateway:9091
         respond 401
     }
@@ -100,10 +109,19 @@ pushgateway.{{ ansible_host | replace('.', '-') }}.sslip.io {
    shipping. #}
 {% if xaisen_observer_loki_service | length > 0 %}
 loki.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, OPTIONS"
+        Access-Control-Allow-Headers "Authorization, Content-Type"
+    }
+    @cors_preflight {
+        method OPTIONS
+    }
     @authorized {
         header Authorization "Basic {{ ('xaisen:' ~ xaisen_loki_auth_token) | b64encode }}"
     }
     route {
+        respond @cors_preflight 204
         reverse_proxy @authorized xaisen-loki:3100
         respond 401
     }

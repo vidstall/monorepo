@@ -46,6 +46,20 @@ def find_host(name: str) -> dict[str, Any] | None:
     return None
 
 
+def find_host_running(service: str) -> dict[str, Any] | None:
+    """First registered host whose `services` list includes `service`, or
+    that has no `services` key at all (meaning "all 5", same fallback
+    inventory.py's _host_entry() and add_host()'s docstring already use).
+    None if no registered host runs it. Used to locate whichever static host
+    a browser-facing route (pushgateway, loki) actually lives on, since
+    `runtime/observer.toml` can split the stack across multiple hosts."""
+    for entry in read_hosts():
+        services = entry.get("services")
+        if services is None or service in services:
+            return entry
+    return None
+
+
 def add_host(
     name: str,
     address: str,

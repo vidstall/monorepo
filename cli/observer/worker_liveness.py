@@ -2,8 +2,9 @@
 worker-liveness` (one-shot or --watch, mirrors contract_exporter.py's
 export_contract_state() shape). Reads the local ground-truth stop/start
 events `cli/worker_status.py` wrote to runtime/worker_liveness.toml, joins
-them against the relay's client-awareness metrics
-(dvconf_relay_down_hint_total / _last_at_seconds) and the validator-daemon's
+them against the browser's directly-pushed client-awareness metrics
+(dvconf_client_relay_down_hint_total / _last_at_seconds -- see
+services/client/client/src/lib/relay-down-hint.ts) and the validator-daemon's
 worker-awareness metric (dvconf_worker_down_vote_total{target_miner_id}),
 and pushes the derived per-event table rows to the observer Pushgateway as
 xaisen_worker_liveness_*{event_id,worker}.
@@ -68,43 +69,30 @@ def _numeric_values(result: list[dict] | None) -> list[float]:
     return values
 
 
-def _relay_worker_key(instance_label: str) -> str:
-    """Prometheus's `instance` label is `<hostname>:<port>` (e.g.
-    'akamai-001-relay-1.96-126-106-95.sslip.io:443') -- strip down to the
-    worker_key portion (everything before the first '.') to match the
-    "Worker" column's naming elsewhere in this table."""
-    return instance_label.split(".", 1)[0]
+def _client_awareness_count(worker: str) -> int:
+    """Distinct client-pushed dvconf_client_relay_down_hint_total series for
+    this worker -- one series per (roomId, peerId, report-timestamp) report
+    (see relay-down-hint.ts's unique-instance-key pattern), so len(result) IS
+    the report count, same `len(result)`-as-distinct-count convention as
+    _worker_awareness_count(). Properly worker-scoped from the client side
+    (derived from the actual primary relay URL at report time), so no
+    per-relay breakout is needed here anymore."""
+    result = query(f'dvconf_client_relay_down_hint_total{{worker="{worker}"}}')
+    return len(result) if result else 0
 
 
-def _client_awareness_by_relay() -> list[tuple[str, int]]:
-    """Per-relay dvconf_relay_down_hint_total, one (worker_key, count) pair
-    per relay instance -- NOT summed into a single fleet-wide total. Each
-    relay only counts hints it personally received (there is no global
-    counter), and the user wants each instance visible as its own row
-    rather than consolidated away."""
-    result = query("dvconf_relay_down_hint_total")
-    if not result:
-        return []
-    out: list[tuple[str, int]] = []
-    for entry in result:
-        instance_label = str((entry.get("metric") or {}).get("instance", ""))
-        value = entry.get("value")
-        if not instance_label or not isinstance(value, list) or len(value) != 2:
-            continue
-        try:
-            count = int(float(value[1]))
-        except (TypeError, ValueError):
-            continue
-        out.append((_relay_worker_key(instance_label), count))
-    return out
-
-
-def _first_client_awareness_seconds(stopped_at_seconds: float) -> float | None:
-    """Earliest dvconf_relay_down_hint_last_at_seconds sample (across every
-    relay) that is at-or-after this event's stop time, offset from
+def _first_client_awareness_seconds(worker: str, stopped_at_seconds: float) -> float | None:
+    """Earliest dvconf_client_relay_down_hint_last_at_seconds sample for THIS
+    worker (not fleet-wide -- an unfiltered query could pick up an unrelated
+    relay's hint) that is at-or-after this event's stop time, offset from
     stopped_at_seconds -- i.e. how long after the kill the first client
-    noticed. None if no relay has reported a hint since the stop."""
-    candidates = [v for v in _numeric_values(query("dvconf_relay_down_hint_last_at_seconds")) if v >= stopped_at_seconds]
+    noticed. None if no client has reported a hint for this worker since the
+    stop."""
+    candidates = [
+        v
+        for v in _numeric_values(query(f'dvconf_client_relay_down_hint_last_at_seconds{{worker="{worker}"}}'))
+        if v >= stopped_at_seconds
+    ]
     if not candidates:
         return None
     return min(candidates) - stopped_at_seconds
@@ -141,20 +129,15 @@ def correlate_event(event: worker_status.LivenessEvent, env: str, host: str = "b
         except ValueError:
             pass
 
-    first_awareness = _first_client_awareness_seconds(stopped_at_seconds)
+    first_awareness = _first_client_awareness_seconds(event.worker, stopped_at_seconds)
     if first_awareness is not None:
         samples.append(("xaisen_worker_liveness_first_client_awareness_seconds", labels, first_awareness))
 
-    # One sample PER relay instance, not summed into a fleet-wide total --
-    # the "relay" label is what the joinByField transform's outer join fans
-    # out on, giving each relay its own row for this event instead of
-    # consolidating every relay's count into one.
-    for relay_worker_key, count in _client_awareness_by_relay():
-        samples.append((
-            "xaisen_worker_liveness_client_awareness_count",
-            {**labels, "relay": relay_worker_key},
-            float(count),
-        ))
+    samples.append((
+        "xaisen_worker_liveness_client_awareness_count",
+        labels,
+        float(_client_awareness_count(event.worker)),
+    ))
 
     ref = worker_status.parse_worker_hostname(event.worker)
     if ref is not None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from .config import DEFAULT_HOST_PORT, add_host, find_host, read_hosts, remove_host, set_desired_state
+from .client_env import sync_client_observability_env
+from .config import DEFAULT_HOST_PORT, add_host, find_host, find_host_running, read_hosts, remove_host, set_desired_state
 from .contract_exporter import export_contract_state
 from .deploy import deploy
 from .inventory import ALL_SERVICE_NAMES, build_inventory, write_inventory
@@ -15,6 +16,8 @@ __all__ = [
     "ALL_SERVICE_NAMES",
     "add_host",
     "find_host",
+    "find_host_running",
+    "sync_client_observability_env",
     "read_hosts",
     "remove_host",
     "set_desired_state",
