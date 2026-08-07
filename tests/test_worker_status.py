@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cli import context, worker_status
+from cli import context, infra, worker_status
 
 
 class ParseWorkerHostnameTests(unittest.TestCase):
@@ -84,24 +84,26 @@ class RecordLivenessEventTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_stop_opens_a_new_unresolved_event(self) -> None:
-        worker_status._record_liveness_event("akamai-003-relay-1", "stop")
+        at_iso = infra.timestamp()
+        worker_status._record_liveness_event("akamai-003-relay-1", "stop", at_iso)
         events = worker_status._read_liveness_events()
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].worker, "akamai-003-relay-1")
         self.assertFalse(events[0].resolved)
-        self.assertTrue(events[0].stopped_at)
+        self.assertEqual(events[0].stopped_at, at_iso)
         self.push_mock.assert_called_once()
 
     def test_start_resolves_the_matching_open_event(self) -> None:
-        worker_status._record_liveness_event("akamai-003-relay-1", "stop")
-        worker_status._record_liveness_event("akamai-003-relay-1", "start")
+        worker_status._record_liveness_event("akamai-003-relay-1", "stop", infra.timestamp())
+        started_at_iso = infra.timestamp()
+        worker_status._record_liveness_event("akamai-003-relay-1", "start", started_at_iso)
         [event] = worker_status._read_liveness_events()
         self.assertTrue(event.resolved)
-        self.assertTrue(event.started_at)
+        self.assertEqual(event.started_at, started_at_iso)
         self.assertEqual(self.push_mock.call_count, 2)
 
     def test_start_with_no_open_event_is_a_no_op(self) -> None:
-        worker_status._record_liveness_event("akamai-003-relay-1", "start")
+        worker_status._record_liveness_event("akamai-003-relay-1", "start", infra.timestamp())
         self.assertEqual(worker_status._read_liveness_events(), [])
         self.push_mock.assert_not_called()
 

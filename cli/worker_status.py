@@ -307,27 +307,37 @@ def _toggle(hostname: str, action: str) -> int:
         return 2
 
     print(f"{ref.container_name} @ {ref.provider} host {ref.host}: docker {action}...")
+    # Captured BEFORE the ansible run, not after -- toggle_container()'s SSH
+    # connect + docker stop/start task together routinely take 30+ seconds,
+    # and timestamping only once it returns would record "stop time" as
+    # whenever ansible finished bookkeeping, not when the operator actually
+    # issued the kill (the ground truth this Liveness experiment table is
+    # supposed to measure everything else's reaction time against).
+    at_iso = infra.timestamp()
     # toggle_container() already calls infra.record_history() itself -- no
     # separate call needed here (unlike status(), which does its own raw SSH
     # and has no such built-in bookkeeping).
     code = infra.toggle_container(host_limit=ref.host, container_name=ref.container_name, action=action)
     if code == 0:
         print(f"{ref.container_name}: {action} succeeded.")
-        _record_liveness_event(ref.worker_key, action)
+        _record_liveness_event(ref.worker_key, action, at_iso)
     else:
         print(f"{ref.container_name}: {action} failed (exit {code}) -- see ansible output above.", file=sys.stderr)
     return code
 
 
-def _record_liveness_event(worker_key: str, action: str) -> None:
+def _record_liveness_event(worker_key: str, action: str, at_iso: str) -> None:
     """Ground-truth stop/start timestamps for the Liveness experiment table
     -- called only after `_toggle()` confirms the docker action succeeded.
+    `at_iso` is captured by the caller BEFORE the docker action ran (see
+    _toggle()), not after, so it reflects when the operator issued the
+    stop/start rather than when the ansible playbook happened to finish.
     A `stop` opens a new event; a `start` resolves the most recent open
     event for this worker (if any -- a `start` with no matching open `stop`
     is a no-op here, since there is nothing to correlate it against)."""
     events = _read_liveness_events()
     if action == "stop":
-        event = LivenessEvent(event_id=uuid.uuid4().hex, worker=worker_key, stopped_at=infra.timestamp())
+        event = LivenessEvent(event_id=uuid.uuid4().hex, worker=worker_key, stopped_at=at_iso)
         events.append(event)
         _write_liveness_events(events)
         _push_liveness_action(worker_key, event.event_id, "stop", event.stopped_at)
@@ -337,7 +347,7 @@ def _record_liveness_event(worker_key: str, action: str) -> None:
     event = _open_liveness_event(events, worker_key)
     if event is None:
         return
-    event.started_at = infra.timestamp()
+    event.started_at = at_iso
     event.resolved = True
     _write_liveness_events(events)
     _push_liveness_action(worker_key, event.event_id, "start", event.started_at)
