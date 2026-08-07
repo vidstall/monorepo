@@ -321,6 +321,7 @@ def _record_liveness_event(worker_key: str, action: str) -> None:
         events.append(event)
         _write_liveness_events(events)
         _push_liveness_action(worker_key, event.event_id, "stop", event.stopped_at)
+        _correlate_liveness_event(event)
         return
 
     event = _open_liveness_event(events, worker_key)
@@ -330,3 +331,32 @@ def _record_liveness_event(worker_key: str, action: str) -> None:
     event.resolved = True
     _write_liveness_events(events)
     _push_liveness_action(worker_key, event.event_id, "start", event.started_at)
+    _correlate_liveness_event(event)
+
+
+# Env/host the Grafana Liveness table's correlator resolves against when
+# triggered inline from `vidctl utils worker start/stop` -- matches
+# cli/vidctl/observer_cmd.py's own defaults for `worker-liveness`/
+# `export-contract-state` (devnet is this repo's default contract network;
+# bourbon is the static host running Pushgateway/Prometheus, NOT
+# observer_cmd.DEFAULT_HOST, which only runs grafana).
+_LIVENESS_CORRELATE_ENV = "devnet"
+_LIVENESS_CORRELATE_HOST = "bourbon"
+
+
+def _correlate_liveness_event(event: LivenessEvent) -> None:
+    """Immediately push this event's derived xaisen_worker_liveness_* rows
+    (see cli/observer/worker_liveness.py's correlate_event()) so the Grafana
+    "Liveness" table updates right after this stop/start command finishes,
+    instead of requiring a separate `vidctl observer worker-liveness` run.
+    Best-effort: correlate_event() already swallows its own transient
+    failures (Prometheus/Pushgateway unreachable) and returns non-zero,
+    which we just report -- never fails the stop/start action itself."""
+    # Deferred import: avoids a hard dependency on cli.observer (and its
+    # transitive imports, including this same module) for every `vidctl
+    # utils worker` invocation that never touches liveness tracking.
+    from .observer import worker_liveness as observer_worker_liveness
+
+    code = observer_worker_liveness.correlate_event(event, _LIVENESS_CORRELATE_ENV, host=_LIVENESS_CORRELATE_HOST)
+    if code != 0:
+        print(f"{event.worker}: Liveness dashboard correlation push failed (non-fatal).", file=sys.stderr)
