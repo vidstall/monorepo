@@ -10,6 +10,12 @@ from .. import observer
 # it out (`vidctl observer deploy` just works), while --host stays available
 # for anyone who registers additional static hosts later.
 DEFAULT_HOST = "baileys"
+# Pushgateway/Prometheus specifically live on "bourbon" (see runtime/observer.toml's
+# per-host `services` split), NOT the DEFAULT_HOST above -- that's baileys, which
+# only runs grafana. Any subcommand that PUTs to the Pushgateway or queries
+# Prometheus needs THIS default, or it silently hits a host with no matching
+# Caddy site block for that route (TLS handshake fails outright, not a clean 404).
+PUSHGATEWAY_HOST = "bourbon"
 
 
 def _parse_services(raw: str | None) -> list[str] | None:
@@ -57,8 +63,8 @@ def _remove_host(args: argparse.Namespace) -> int:
     return 0
 
 
-def _add_host_arg(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--host", default=DEFAULT_HOST, help=f"Observer host name. Default: {DEFAULT_HOST!r}.")
+def _add_host_arg(p: argparse.ArgumentParser, default: str = DEFAULT_HOST) -> None:
+    p.add_argument("--host", default=default, help=f"Observer host name. Default: {default!r}.")
 
 
 def add_observer_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -156,7 +162,7 @@ def add_observer_parser(subparsers: argparse._SubParsersAction[argparse.Argument
             "(Contract & Chain dashboard). One-shot by default; only as fresh as the last run."
         ),
     )
-    _add_host_arg(export_parser)
+    _add_host_arg(export_parser, default=PUSHGATEWAY_HOST)
     export_parser.add_argument("--env", default="devnet", help="Contract network to read. Default: devnet.")
     export_parser.add_argument(
         "--watch",
@@ -181,7 +187,7 @@ def add_observer_parser(subparsers: argparse._SubParsersAction[argparse.Argument
             "Pushgateway (Grafana 'Liveness' table). One-shot by default."
         ),
     )
-    _add_host_arg(liveness_parser)
+    _add_host_arg(liveness_parser, default=PUSHGATEWAY_HOST)
     liveness_parser.add_argument("--env", default="devnet", help="Contract network to read. Default: devnet.")
     liveness_parser.add_argument(
         "--watch",
