@@ -91,6 +91,16 @@ def _write_liveness_events(events: list[LivenessEvent]) -> None:
     context.RUNTIME_WORKER_LIVENESS_TOML.write_text("\n".join(lines), encoding="utf-8")
 
 
+def clear_liveness_events() -> None:
+    """Reset the local Liveness-experiment event log to empty -- called by
+    `vidctl scenario destroy` (see cli/scenario/apply.py's destroy()),
+    alongside its existing Pushgateway/Prometheus wipe (_clean_observer_stack()),
+    so the NEXT `scenario apply` starts observing a genuinely fresh scenario
+    instead of the correlator replaying stop/start events for workers that
+    no longer exist."""
+    _write_liveness_events([])
+
+
 def _open_liveness_event(events: list[LivenessEvent], worker_key: str) -> LivenessEvent | None:
     # Most-recent-first: a worker can be stopped/started more than once
     # across separate experiments, and only the latest unresolved stop is

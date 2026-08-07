@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from .. import contract, image_bake, infra, observer, registry
+from .. import contract, image_bake, infra, observer, registry, worker_status
 from .. import object as object_cmd
 from .lock import clear_lock, read_lock, write_lock
 from .spec import WorkerKey, load_scenario, scenario_hash_of
@@ -113,7 +113,11 @@ def _clean_observer_stack() -> None:
     registered host, so the NEXT `apply()` (via _refresh_observer_stack())
     starts observing a genuinely fresh scenario instead of mixing in dead
     workers' old metrics/traces. Grafana's own data (dashboards, logins)
-    is left alone -- see observer_clean.yml."""
+    is left alone -- see observer_clean.yml. This wipes remote Prometheus/
+    Pushgateway state (Pushgateway's container is removed too -- its pushed
+    metrics are in-memory only); the corresponding LOCAL ground-truth file
+    (runtime/worker_liveness.toml) is cleared separately, right after this
+    call, by worker_status.clear_liveness_events()."""
     try:
         hosts = observer.read_hosts()
     except Exception as exc:
@@ -436,6 +440,7 @@ def destroy(_args: Any) -> int:
             return code
 
     _clean_observer_stack()
+    worker_status.clear_liveness_events()
     clear_lock()
     print(f"Scenario '{scenario_path_display}' destroyed; lock released.")
     return 0
