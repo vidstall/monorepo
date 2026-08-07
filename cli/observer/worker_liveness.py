@@ -9,10 +9,12 @@ worker-awareness metric (dvconf_worker_down_vote_total{target_miner_id}),
 and pushes the derived per-event table rows to the observer Pushgateway as
 xaisen_worker_liveness_*{event_id,worker}.
 
-Column mapping (see the approved Liveness plan): every value from column 3
-onward is pushed as SECONDS SINCE COLUMN 1 (the stop time), not an absolute
-timestamp -- so the Grafana panel needs no further math, just field
-renames.
+Column mapping (see the approved Liveness plan): Stop Time and Revival Time
+are absolute Unix timestamps (like column 1); Downtime and First Client
+Awareness are SECONDS SINCE the stop time; the two Awareness Count columns
+are raw counts. The Grafana panel applies `*1000` + a `dateTimeAsIso` unit to
+the two absolute-timestamp columns and a plain `s` unit to the two
+elapsed-seconds columns.
 """
 
 from __future__ import annotations
@@ -126,6 +128,7 @@ def correlate_event(event: worker_status.LivenessEvent, env: str, host: str = "b
         try:
             started_at_seconds = datetime.fromisoformat(event.started_at).timestamp()
             samples.append(("xaisen_worker_liveness_downtime_seconds", labels, started_at_seconds - stopped_at_seconds))
+            samples.append(("xaisen_worker_liveness_started_at_seconds", labels, started_at_seconds))
         except ValueError:
             pass
 

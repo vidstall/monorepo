@@ -243,7 +243,7 @@
       "id": 6,
       "type": "table",
       "title": "Liveness",
-      "description": "Fault-tolerance experiment table: `vidctl utils worker stop/start` ground-truth timestamps joined against client awareness (dvconf_client_relay_down_hint_total/_last_at_seconds, pushed directly by the browser -- see services/client/client/src/lib/relay-down-hint.ts) and validator worker-awareness (dvconf_worker_down_vote_total) -- see cli/observer/worker_liveness.py (the correlator that computes and pushes these xaisen_worker_liveness_* rows; run `vidctl observer worker-liveness` or `--watch` to keep it fresh). Columns 3+ are seconds elapsed since column 1 (Stop time), not absolute timestamps.",
+      "description": "Fault-tolerance experiment table: `vidctl utils worker stop/start` ground-truth timestamps joined against client awareness (dvconf_client_relay_down_hint_total/_last_at_seconds, pushed directly by the browser -- see services/client/client/src/lib/relay-down-hint.ts) and validator worker-awareness (dvconf_worker_down_vote_total) -- see cli/observer/worker_liveness.py (the correlator that computes and pushes these xaisen_worker_liveness_* rows; run `vidctl observer worker-liveness` or `--watch` to keep it fresh). One row PER stop/revive cycle (a worker dying and reviving multiple times produces multiple rows, not one overwritten row). Stop Time and Revival Time are absolute timestamps; Revival Time shows `-` for a still-down (unresolved) event. Downtime (s) and First Client Awareness (s) are seconds elapsed since Stop Time.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -309,6 +309,17 @@
           "instant": true,
           "legendFormat": "__auto",
           "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "expr": "xaisen_worker_liveness_started_at_seconds * 1000",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "refId": "F"
         }
       ],
       "transformations": [
@@ -341,14 +352,28 @@
               "__name__ 2": true,
               "__name__ 3": true,
               "__name__ 4": true,
+              "__name__ 5": true,
               "worker 2": true,
               "worker 3": true,
-              "worker 4": true
+              "worker 4": true,
+              "worker 5": true,
+              "Time 5": true,
+              "job 5": true,
+              "instance 5": true
             },
-            "indexByName": {},
+            "indexByName": {
+              "worker 1": 0,
+              "Value #A": 1,
+              "Value #F": 2,
+              "Value #B": 3,
+              "Value #C": 4,
+              "Value #D": 5,
+              "Value #E": 6
+            },
             "renameByName": {
-              "worker 1": "Worker",
+              "worker 1": "Hostname",
               "Value #A": "Stop Time",
+              "Value #F": "Revival Time",
               "Value #B": "Downtime (s)",
               "Value #C": "First Client Awareness (s)",
               "Value #D": "Client Awareness Count",
@@ -376,6 +401,22 @@
               {
                 "id": "unit",
                 "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Revival Time"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              },
+              {
+                "id": "noValue",
+                "value": "-"
               }
             ]
           },
