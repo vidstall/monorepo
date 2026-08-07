@@ -55,6 +55,17 @@ apt-get install -y docker.io
 systemctl enable --now docker
 docker --version || true
 
+# Clock sync -- fleet-wide log/metric timestamps (Prometheus/Loki, the
+# Liveness experiment table) are compared across independently-clocked
+# hosts, so every VM cloned from this image needs a real NTP client
+# running from first boot, not just whatever the base image happens to
+# ship. chrony replaces systemd-timesyncd (stopped first so the two don't
+# fight over clock control); `|| true` since not every base image ships
+# timesyncd as a unit.
+apt-get install -y chrony
+systemctl disable --now systemd-timesyncd || true
+systemctl enable --now chrony
+
 # Golden-image cleanup -- without this every VM cloned from the resulting
 # image would share this bake VM's machine-id, SSH host keys, and cached
 # cloud-init first-boot state, which is a real correctness/security problem

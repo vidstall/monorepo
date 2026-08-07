@@ -1,4 +1,4 @@
-from ..context import CLIENT_ENV_PATH, RUNTIME_DIR, contract_env_path
+from ..context import BOT_ENV_PATH, CLIENT_ENV_PATH, RUNTIME_DIR, contract_env_path
 from .build_test import build, check, ensure_active_sui_env, sync_devnet_chain_id, test
 from .chain_io import (
     fetch_object,
@@ -13,6 +13,7 @@ from .chain_io import (
     run_sui_json_list,
 )
 from .deployment import (
+    BOT_ENV_KEY_MAP,
     FRONTEND_ENV_KEY_MAP,
     MOVE_TOML,
     PUBLISHED_TOML,
@@ -22,6 +23,7 @@ from .deployment import (
     load_move_environment_chain_id,
     load_published_metadata,
     runtime_pubfile_path,
+    sync_bot_env,
     sync_frontend_env,
     write_runtime_pubfile,
 )
@@ -56,6 +58,8 @@ __all__ = [
     "create_registries",
     "sync_frontend_env",
     "FRONTEND_ENV_KEY_MAP",
+    "sync_bot_env",
+    "BOT_ENV_KEY_MAP",
     "load_deployment",
     "load_published_metadata",
     "clear_published_entry",
@@ -79,6 +83,7 @@ __all__ = [
     "parse_sender",
     "parse_transaction_digest",
     "CLIENT_ENV_PATH",
+    "BOT_ENV_PATH",
     "RUNTIME_DIR",
     "contract_env_path",
 ]

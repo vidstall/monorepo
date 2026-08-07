@@ -41,6 +41,60 @@ FRONTEND_ENV_KEY_MAP: dict[str, str] = {
 }
 
 
+# Maps runtime/contract/<env>.env keys to the keys read by the bot's shared
+# chain-config loader (services/worker/packages/shared/src/chain/client.ts's
+# loadNetworkConfig()). Unlike the frontend, almost every key here is the
+# SAME name as runtime/contract/<env>.env -- only CONTRACT_PACKAGE_ID and
+# CONTRACT_NETWORK get renamed (mirroring the exact alias convention
+# cli/infra/ansible.py's docker_deploy_extra_vars() already uses for the
+# remote-container path, so local and remote deploys agree on names).
+#
+# The bot is the only worker app vidctl ever runs LOCALLY (`vidctl utils bot
+# start`) -- relay/signaling/cp-daemon/validator-daemon only run in Docker
+# containers on remote VMs, which already get correct env injected fresh on
+# every deploy, so they carry no staleness risk this sync needs to cover.
+BOT_ENV_KEY_MAP: dict[str, str] = {
+    "CONTRACT_NETWORK": "SUI_NETWORK",
+    "CONTRACT_PACKAGE_ID": "PACKAGE_ID",
+    "CONTRACT_ORIGINAL_PACKAGE_ID": "CONTRACT_ORIGINAL_PACKAGE_ID",
+    "CONTRACT_B_PACKAGE_ID": "CONTRACT_B_PACKAGE_ID",
+    "NETWORK_REGISTRY_ID": "NETWORK_REGISTRY_ID",
+    "MINER_STORE_ID": "MINER_STORE_ID",
+    "CP_REGISTRY_ID": "CP_REGISTRY_ID",
+    "RELAY_REGISTRY_ID": "RELAY_REGISTRY_ID",
+    "VALIDATOR_REGISTRY_ID": "VALIDATOR_REGISTRY_ID",
+    "USER_REGISTRY_ID": "USER_REGISTRY_ID",
+    "ROOM_MANAGER_ID": "ROOM_MANAGER_ID",
+    "SIGNALING_REGISTRY_ID": "SIGNALING_REGISTRY_ID",
+    "ROLE_VOTE_BOX_ID": "ROLE_VOTE_BOX_ID",
+    "LIVENESS_VOTE_BOX_ID": "LIVENESS_VOTE_BOX_ID",
+    "ROOM_HEALTH_ALERT_BOX_ID": "ROOM_HEALTH_ALERT_BOX_ID",
+}
+
+
+def sync_bot_env(deployment: dict[str, str]) -> None:
+    """Push the just-published contract's package/registry object IDs into
+    services/worker/apps/bot/.env, leaving every other line (PRIVATE_KEY,
+    CLIENT_URL, ...) untouched. Mirrors sync_frontend_env exactly -- see its
+    docstring; this exists because the bot is the one worker app that runs
+    locally off a checked-out .env file instead of getting fresh env
+    injected per-deploy (see BOT_ENV_KEY_MAP's comment)."""
+    from .. import contract
+
+    mapping = {bot_key: deployment.get(key, "") for key, bot_key in BOT_ENV_KEY_MAP.items()}
+    mapping = {key: value for key, value in mapping.items() if value}
+    if not mapping:
+        return
+    if sync_env_keys(contract.BOT_ENV_PATH, mapping):
+        print(f"Synced contract object IDs -> {contract.BOT_ENV_PATH}")
+    else:
+        print(
+            f"Note: {contract.BOT_ENV_PATH} not found; skipping bot env sync "
+            f"(copy {contract.BOT_ENV_PATH.name}.example to {contract.BOT_ENV_PATH.name} first).",
+            file=sys.stderr,
+        )
+
+
 def sync_frontend_env(deployment: dict[str, str]) -> None:
     """Push the just-published contract's package/registry object IDs into
     services/client/client/.env as VITE_* vars, leaving every other line

@@ -28,6 +28,7 @@ RUNTIME_IMAGES_TOML = RUNTIME_DIR / "images.toml"
 RUNTIME_OBSERVER_TOML = RUNTIME_DIR / "observer.toml"
 RUNTIME_LOCAL_BOTS_TOML = RUNTIME_DIR / "local_bots.toml"
 RUNTIME_LOCAL_BOTS_LOG_DIR = RUNTIME_DIR / "local_bots"
+RUNTIME_WORKER_LIVENESS_TOML = RUNTIME_DIR / "worker_liveness.toml"
 # logs/<provider>/<run-timestamp>/{infra,worker,room,user}/*.json --
 # the live per-entity metrics schema, distinct from LOGS_ROOT (system_log.py's
 # scenario-run event trail). Promoted here because multiple
@@ -73,6 +74,13 @@ GENERATED_INVENTORY = ANSIBLE_DIR / "inventory" / "hosts.generated.yml"
 GENERATED_OBSERVER_INVENTORY = ANSIBLE_DIR / "inventory" / "observer.generated.yml"
 
 WORKER_DIR = ROOT / "services" / "worker"
+# The only worker app ever run LOCALLY by vidctl (`vidctl utils bot start`,
+# see local_bot.py) -- relay/signaling/cp-daemon/validator-daemon only ever
+# run inside Docker containers on remote VMs, which get fresh env injection
+# per-deploy via ansible.py's docker_deploy_extra_vars(), so they carry no
+# staleness risk. This one does, since it's a checked-out .env file nothing
+# else re-templates.
+BOT_ENV_PATH = WORKER_DIR / "apps" / "bot" / ".env"
 
 # Every worker role's Dockerfile lives at services/worker/apps/<name>/Dockerfile,
 # but the Docker build *context* for all of them is the pnpm workspace root

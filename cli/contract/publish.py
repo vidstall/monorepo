@@ -14,6 +14,7 @@ from .chain_io import (
 from .deployment import (
     clear_published_entry,
     load_deployment,
+    sync_bot_env,
     sync_frontend_env,
     write_dependency_pubfile,
     write_runtime_pubfile,
@@ -217,6 +218,7 @@ def publish(
     merged = {**deployment, **{key: value for key, value in new_deployment.items() if value}}
     write_kv_env_file(contract.contract_env_path(env), merged)
     sync_frontend_env(merged)
+    sync_bot_env(merged)
     return 0
 
 
@@ -352,4 +354,5 @@ def upgrade_existing(
     merged = {**deployment, **{key: value for key, value in new_deployment.items() if value}}
     write_kv_env_file(contract.contract_env_path(env), merged)
     sync_frontend_env(merged)
+    sync_bot_env(merged)
     return 0

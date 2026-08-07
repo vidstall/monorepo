@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from .. import image_bake, local_bot
+from .. import image_bake, local_bot, worker_status
 
 
 def add_utils_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -53,3 +53,29 @@ def add_utils_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
 
     bot_list_parser = bot_actions.add_parser("list", help="List local bot sessions.")
     bot_list_parser.set_defaults(handler=lambda _args: local_bot.list_bots())
+
+    worker_parser = actions.add_parser("worker", help="Inspect a deployed fleet worker.")
+    worker_actions = worker_parser.add_subparsers(dest="worker_action", required=True)
+
+    worker_status_parser = worker_actions.add_parser(
+        "status", help="SSH into a worker's host and show its Docker container status, resource usage, and recent logs."
+    )
+    worker_status_parser.add_argument(
+        "hostname",
+        help="The worker's public hostname, e.g. akamai-003-signaling-1.96-126-106-95.sslip.io.",
+    )
+    worker_status_parser.set_defaults(handler=lambda args: worker_status.status(args.hostname))
+
+    worker_start_parser = worker_actions.add_parser("start", help="docker start a worker's container.")
+    worker_start_parser.add_argument(
+        "hostname",
+        help="The worker's public hostname, e.g. akamai-003-signaling-1.96-126-106-95.sslip.io.",
+    )
+    worker_start_parser.set_defaults(handler=lambda args: worker_status.start(args.hostname))
+
+    worker_stop_parser = worker_actions.add_parser("stop", help="docker stop a worker's container.")
+    worker_stop_parser.add_argument(
+        "hostname",
+        help="The worker's public hostname, e.g. akamai-003-signaling-1.96-126-106-95.sslip.io.",
+    )
+    worker_stop_parser.set_defaults(handler=lambda args: worker_status.stop(args.hostname))

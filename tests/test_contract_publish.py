@@ -69,14 +69,19 @@ class ContractPublishTests(unittest.TestCase):
         # services/client/client/.env file with fake test fixture values
         # (e.g. "0xupgraded").
         self.client_env_patch = patch.object(contract, "CLIENT_ENV_PATH", self.root / "client.env")
+        # Same hazard as CLIENT_ENV_PATH above, for sync_bot_env() ->
+        # services/worker/apps/bot/.env.
+        self.bot_env_patch = patch.object(contract, "BOT_ENV_PATH", self.root / "bot.env")
         self.path_patch.start()
         self.pubfile_patch.start()
         self.runtime_patch.start()
         self.client_env_patch.start()
+        self.bot_env_patch.start()
         self.addCleanup(self.path_patch.stop)
         self.addCleanup(self.pubfile_patch.stop)
         self.addCleanup(self.runtime_patch.stop)
         self.addCleanup(self.client_env_patch.stop)
+        self.addCleanup(self.bot_env_patch.stop)
 
     def fake_sui(self, args: list[object], cwd: Path | None = None) -> tuple[int, dict | None, str]:
         command = [str(arg) for arg in args]

@@ -172,3 +172,32 @@ def add_observer_parser(subparsers: argparse._SubParsersAction[argparse.Argument
     export_parser.set_defaults(
         handler=lambda args: observer.export_contract_state(args.env, args.host, args.watch, args.interval)
     )
+
+    liveness_parser = actions.add_parser(
+        "worker-liveness",
+        help=(
+            "Correlate `vidctl utils worker stop/start` events against relay client-awareness "
+            "and validator worker-awareness metrics, and push the derived rows to the "
+            "Pushgateway (Grafana 'Liveness' table). One-shot by default."
+        ),
+    )
+    _add_host_arg(liveness_parser)
+    liveness_parser.add_argument("--env", default="devnet", help="Contract network to read. Default: devnet.")
+    liveness_parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Keep re-correlating every --interval seconds instead of exiting after one run.",
+    )
+    liveness_parser.add_argument(
+        "--interval",
+        type=int,
+        default=60,
+        help="Seconds between runs when --watch is set. Default: 60.",
+    )
+    liveness_parser.set_defaults(
+        handler=lambda args: (
+            observer.watch_worker_liveness(args.env, args.host, args.interval)
+            if args.watch
+            else observer.export_worker_liveness(args.env, args.host)
+        )
+    )
