@@ -32,10 +32,20 @@
    reachable ONLY by path-routing a slice of this SAME public hostname to
    that internal port, which is what xaisen_metrics_ports + the handle
    blocks below do. Prometheus's scrape targets go through this same
-   public :443 hostname. /healthz* rides the same metrics-port handle
-   (relay/signaling's metrics-server.ts serves /healthz alongside /metrics,
-   see RO-020) -- this is what lets cp-daemon's relay-assignment liveness
-   probe (room-assignment.ts) reach ANY candidate relay's health endpoint
+   public :443 hostname. /healthz* is NOT always on the same port as
+   /metrics* -- only relay unifies both onto its metrics port (its own
+   metrics-server.ts serves /healthz alongside /metrics, see RO-020).
+   signaling/cp-daemon/validator-daemon each run startHealthzServer (see
+   packages/shared/src/healthz.ts) as a SEPARATE node:http listener on its
+   own *_HEALTHZ_PORT, distinct from its *_METRICS_PORT prom-metrics
+   listener (which 404s on anything but /metrics) -- xaisen_healthz_ports
+   below is that real per-service port, NOT a duplicate of
+   xaisen_metrics_ports. bot has no healthz server at all, so it's absent
+   from xaisen_healthz_ports and gets no /healthz* handle (confirmed via a
+   live 404 from signaling's public hostname, caused by routing /healthz*
+   at signaling's metrics port instead of its healthz port -- fixed here).
+   This is what lets cp-daemon's relay-assignment liveness probe
+   (room-assignment.ts) reach ANY candidate relay's health endpoint
    over the public hostname, regardless of whether cp-daemon happens to be
    colocated with that relay or on a different host entirely. /stats/*
    (the client's POST /stats/report), /logs/* (POST /logs/report), and
@@ -49,6 +59,7 @@
    /relay-down-hint* before this comment was added. #}
 {% set xaisen_internal_ports = {'relay': 4000, 'signaling': 8080, 'bot': 8095} %}
 {% set xaisen_metrics_ports = {'relay': 4001, 'signaling': 8083, 'bot': 8096, 'cp-daemon': 8092, 'validator-daemon': 8103} %}
+{% set xaisen_healthz_ports = {'relay': 4001, 'signaling': 8082, 'cp-daemon': 8091, 'validator-daemon': 8101} %}
 {% set xaisen_stats_report_services = ['relay', 'signaling'] %}
 {% for svc in xaisen_public_services %}
 {{ svc.worker_key | default(svc.service) }}.{{ ansible_host | replace('.', '-') }}.sslip.io {
@@ -56,9 +67,11 @@
     handle /metrics* {
         reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
     }
+{% if svc.service in xaisen_healthz_ports %}
     handle /healthz* {
-        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
+        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_healthz_ports[svc.service] }}
     }
+{% endif %}
 {% if svc.service in xaisen_stats_report_services %}
     handle /stats/* {
         reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
