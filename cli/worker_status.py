@@ -3,7 +3,7 @@ and show the Docker state of one worker's container: ps/inspect summary,
 a resource snapshot, and recent logs.
 
 Takes the same public hostname a browser/relay client would use (e.g.
-`akamai-003-signaling-1.96-126-106-95.sslip.io`, built by
+`akamai-003-relay-1.96-126-106-95.sslip.io`, built by
 worker_env.yml/Caddyfile.j2 as `<worker_key>.<ip-with-dashes>.sslip.io`) so
 an operator can paste a URL straight out of Grafana/logs without having to
 separately know the host id or SSH details. `<worker_key>` is
@@ -130,7 +130,7 @@ def status(hostname: str) -> int:
         print(
             f"Could not parse '{hostname}' as a worker hostname. Expected "
             "<provider>-<host>-<service>-<index>[.<ip-with-dashes>.sslip.io], "
-            "e.g. akamai-003-signaling-1.96-126-106-95.sslip.io.",
+            "e.g. akamai-003-relay-1.96-126-106-95.sslip.io.",
             file=sys.stderr,
         )
         return 2
@@ -203,7 +203,7 @@ def _toggle(hostname: str, action: str) -> int:
         print(
             f"Could not parse '{hostname}' as a worker hostname. Expected "
             "<provider>-<host>-<service>-<index>[.<ip-with-dashes>.sslip.io], "
-            "e.g. akamai-003-signaling-1.96-126-106-95.sslip.io.",
+            "e.g. akamai-003-relay-1.96-126-106-95.sslip.io.",
             file=sys.stderr,
         )
         return 2

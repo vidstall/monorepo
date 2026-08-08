@@ -72,20 +72,20 @@ def add_utils_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     )
     worker_status_parser.add_argument(
         "hostname",
-        help="The worker's public hostname, e.g. akamai-003-signaling-1.96-126-106-95.sslip.io.",
+        help="The worker's public hostname, e.g. akamai-003-relay-1.96-126-106-95.sslip.io.",
     )
     worker_status_parser.set_defaults(handler=lambda args: worker_status.status(args.hostname))
 
     worker_start_parser = worker_actions.add_parser("start", help="docker start a worker's container.")
     worker_start_parser.add_argument(
         "hostname",
-        help="The worker's public hostname, e.g. akamai-003-signaling-1.96-126-106-95.sslip.io.",
+        help="The worker's public hostname, e.g. akamai-003-relay-1.96-126-106-95.sslip.io.",
     )
     worker_start_parser.set_defaults(handler=lambda args: worker_status.start(args.hostname))
 
     worker_stop_parser = worker_actions.add_parser("stop", help="docker stop a worker's container.")
     worker_stop_parser.add_argument(
         "hostname",
-        help="The worker's public hostname, e.g. akamai-003-signaling-1.96-126-106-95.sslip.io.",
+        help="The worker's public hostname, e.g. akamai-003-relay-1.96-126-106-95.sslip.io.",
     )
     worker_stop_parser.set_defaults(handler=lambda args: worker_status.stop(args.hostname))

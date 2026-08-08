@@ -25,7 +25,7 @@
 # generic fallback route, since they have nothing else to proxy to).
 - name: Determine which colocated services need the shared Caddy TLS proxy
   ansible.builtin.set_fact:
-    xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'signaling', 'bot', 'cp-daemon', 'validator-daemon']) | list }}"
+    xaisen_public_services: "{{ xaisen_services | selectattr('service', 'in', ['relay', 'bot', 'cp-daemon', 'validator-daemon']) | list }}"
 
 - name: Ensure Caddy config directory exists
   ansible.builtin.file:

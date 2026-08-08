@@ -20,7 +20,7 @@ REQUIRED_CONTRACT_KEYS = ("CONTRACT_PACKAGE_ID", "NETWORK_REGISTRY_ID")
 # droplet, not on the same host as Prometheus, so Prometheus can only reach
 # it over the public sslip.io endpoint (same reasoning as relay/signaling's
 # public ports), never over loopback.
-SERVICE_PORTS = {"signaling": 8080, "relay": 4000, "bot": 8095, "node_exporter": 9100}
+SERVICE_PORTS = {"relay": 4000, "bot": 8095, "node_exporter": 9100}
 VM_INSTANCE_SIZES = {
     "aws": "t3.micro",
     "gcp": "e2-micro",

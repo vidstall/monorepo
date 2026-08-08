@@ -20,7 +20,6 @@ FAUCET_NETWORKS = ("devnet", "testnet")
 CAP_ENV_VARS = {
     "cp-daemon": "CP_CAP_ID",
     "relay": "MINER_CAP_ID",
-    "signaling": "MINER_CAP_ID",
     "validator-daemon": "VALIDATOR_CAP_ID",
 }
 CAP_STRUCT_NAMES = {

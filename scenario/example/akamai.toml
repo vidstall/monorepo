@@ -21,13 +21,6 @@ provider = "alibaba"
 
 [[workers]]
 host = "001"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-[[workers]]
-host = "001"
 service = "relay"
 provider = "akamai"
 size = "g6-standard-4"
@@ -56,13 +49,6 @@ worker_index = 1
 
 [[workers]]
 host = "002"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-[[workers]]
-host = "002"
 service = "relay"
 provider = "akamai"
 size = "g6-standard-4"
@@ -85,13 +71,6 @@ worker_index = 2
 [[workers]]
 host = "002"
 service = "validator-daemon"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-[[workers]]
-host = "003"
-service = "signaling"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
@@ -166,3 +145,17 @@ service = "validator-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 5
+
+[[workers]]
+host = "004"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "004"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2

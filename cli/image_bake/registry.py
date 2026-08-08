@@ -16,7 +16,7 @@ class BakedImage:
     base_image: str
     docker_version: str = ""
     # service -> tag (e.g. git short SHA) of every app image (relay,
-    # signaling, cp-daemon, ...) pre-pulled into this golden image at bake
+    # cp-daemon, ...) pre-pulled into this golden image at bake
     # time -- see bake.py's _prefetch_app_images(). Empty when the bake ran
     # before this existed, or when no registry was configured/logged into
     # at bake time (best-effort: Docker itself is still baked in either

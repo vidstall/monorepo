@@ -7,7 +7,7 @@ from typing import Any
 # `cli.observer.query` as an attribute resolves to that function, not the
 # module. Importing names directly from the submodule's own dotted path
 # sidesteps that shadowing.
-from .query import query, room_participant_counts
+from .query import query
 
 
 def _reshape(result: list[dict] | None) -> dict[str, dict[str, Any]]:
@@ -147,29 +147,11 @@ def _validator_daemon_application() -> dict[str, Any]:
     }
 
 
-def _signaling_application() -> dict[str, Any]:
-    # Only dvconf_room_participants is confirmed real for signaling as of
-    # this pass. Everything else the hand-written worker/signaling-001.json
-    # fixture carries (sessions_active/max/utilization_percent/per_sec/
-    # created_total/terminated_total, call_setup_time_ms/p95,
-    # call_drop_rate_percent, sdp_negotiation_time_ms, ice_candidate_pairs,
-    # reconnect_count) has no confirmed dvconf_* metric backing it -- do
-    # not invent PromQL for those, omit rather than fabricate. See
-    # services/worker/apps/signaling's actual metrics registration for a
-    # follow-up verification pass before adding them here.
-    counts = room_participant_counts()
-    return {
-        "rooms_with_participants": len(counts) if counts is not None else None,
-        "total_participants_across_rooms": sum(counts.values()) if counts else None,
-    }
-
-
 _ROLE_COLLECTORS = {
     "relay": _relay_application,
     "bot": _bot_application,
     "cp-daemon": _cp_daemon_application,
     "validator-daemon": _validator_daemon_application,
-    "signaling": _signaling_application,
 }
 
 

@@ -9,7 +9,7 @@
 # next): 2 -> 5 -> 10 -> 20 -> 15 -> 25 -> 30 -> 40.
 #
 # Topology: 11 instances total -- 7 run the "worker" role set (1x
-# validator-daemon, 1x relay, 2x cp-daemon, 1x signaling), 4 run a
+# validator-daemon, 1x relay, 2x cp-daemon), 4 run a
 # singleton `bot` control server used to drive the client ramp above.
 #   - digitalocean: 3 worker instances (001-003)
 #   - akamai: 2 worker instances (004-005) + 3 bot instances (006-008)
@@ -47,7 +47,7 @@ name = "site-2-bucket"
 object = "frontend"
 provider = "alibaba"
 
-# host 001 (digitalocean) -- 5-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon, 1x signaling
+# host 001 (digitalocean) -- 4-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon
 
 [[workers]]
 host = "001"
@@ -56,14 +56,12 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
-
 [[workers]]
 host = "001"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
-
 
 [[workers]]
 host = "001"
@@ -72,7 +70,6 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
-
 [[workers]]
 host = "001"
 service = "cp-daemon"
@@ -80,16 +77,7 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
-
-[[workers]]
-host = "001"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-
-# host 002 (digitalocean) -- 5-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon, 1x signaling
+# host 002 (digitalocean) -- 4-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon
 
 [[workers]]
 host = "002"
@@ -98,14 +86,12 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
-
 [[workers]]
 host = "002"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
-
 
 [[workers]]
 host = "002"
@@ -114,7 +100,6 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
-
 [[workers]]
 host = "002"
 service = "cp-daemon"
@@ -122,16 +107,7 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
-
-[[workers]]
-host = "002"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-
-# host 003 (digitalocean) -- 5-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon, 1x signaling
+# host 003 (digitalocean) -- 4-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon
 
 [[workers]]
 host = "003"
@@ -140,7 +116,6 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
-
 [[workers]]
 host = "003"
 service = "relay"
@@ -148,14 +123,12 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
 
-
 [[workers]]
 host = "003"
 service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
-
 
 [[workers]]
 host = "003"
@@ -164,16 +137,7 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
 
-
-[[workers]]
-host = "003"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-
-# host 004 (akamai) -- 5-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon, 1x signaling
+# host 004 (akamai) -- 4-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon
 
 [[workers]]
 host = "004"
@@ -182,7 +146,6 @@ provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
-
 [[workers]]
 host = "004"
 service = "relay"
@@ -190,14 +153,12 @@ provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
-
 [[workers]]
 host = "004"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
-
 
 [[workers]]
 host = "004"
@@ -206,16 +167,7 @@ provider = "akamai"
 size = "g6-standard-4"
 worker_index = 2
 
-
-[[workers]]
-host = "004"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-
-# host 005 (akamai) -- 5-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon, 1x signaling
+# host 005 (akamai) -- 4-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon
 
 [[workers]]
 host = "005"
@@ -224,7 +176,6 @@ provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
-
 [[workers]]
 host = "005"
 service = "relay"
@@ -232,14 +183,12 @@ provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
-
 [[workers]]
 host = "005"
 service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
-
 
 [[workers]]
 host = "005"
@@ -248,16 +197,7 @@ provider = "akamai"
 size = "g6-standard-4"
 worker_index = 2
 
-
-[[workers]]
-host = "005"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-
-# host 009 (azure) -- 5-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon, 1x signaling
+# host 009 (azure) -- 4-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon
 
 [[workers]]
 host = "009"
@@ -266,7 +206,6 @@ provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 
-
 [[workers]]
 host = "009"
 service = "relay"
@@ -274,14 +213,12 @@ provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 
-
 [[workers]]
 host = "009"
 service = "cp-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
-
 
 [[workers]]
 host = "009"
@@ -290,16 +227,7 @@ provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 2
 
-
-[[workers]]
-host = "009"
-service = "signaling"
-provider = "azure"
-size = "Standard_D2als_v7"
-worker_index = 1
-
-
-# host 010 (azure) -- 5-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon, 1x signaling
+# host 010 (azure) -- 4-worker set: 1x validator-daemon, 1x relay, 2x cp-daemon
 
 [[workers]]
 host = "010"
@@ -309,7 +237,6 @@ size = "Standard_D2als_v7"
 worker_index = 1
 region = "westus2"
 
-
 [[workers]]
 host = "010"
 service = "relay"
@@ -318,7 +245,6 @@ size = "Standard_D2als_v7"
 worker_index = 1
 region = "westus2"
 
-
 [[workers]]
 host = "010"
 service = "cp-daemon"
@@ -326,7 +252,6 @@ provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 region = "westus2"
-
 
 [[workers]]
 host = "010"
@@ -335,16 +260,6 @@ provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 2
 region = "westus2"
-
-
-[[workers]]
-host = "010"
-service = "signaling"
-provider = "azure"
-size = "Standard_D2als_v7"
-worker_index = 1
-region = "westus2"
-
 
 # --- Bot-hosting instances (4 of 11) -- singleton bot worker per host, never colocate a second ---
 
@@ -357,7 +272,6 @@ provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
-
 # host 007 (akamai) -- bot
 
 [[workers]]
@@ -366,7 +280,6 @@ service = "bot"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
-
 
 # host 008 (akamai) -- bot
 
@@ -377,7 +290,6 @@ provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
 
-
 # host 011 (azure) -- bot
 
 [[workers]]
@@ -387,8 +299,6 @@ provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
 region = "centralus"
-
-
 
 # --- Actions timeline (run separately via `vidctl scenario run`, only
 # against an already-`apply`'d + active scenario) ------------------------

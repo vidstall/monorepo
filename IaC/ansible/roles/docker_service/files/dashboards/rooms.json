@@ -40,7 +40,7 @@
       "id": 1,
       "type": "stat",
       "title": "Active rooms",
-      "description": "sum(dvconf_rooms_active) -- one cluster-wide number. dvconf_rooms_active is a PER-SIGNALING-REPLICA local gauge (apps/signaling/src/index.ts); querying it bare returns one series per replica (12 in a 2-signaling-per-host x 6-host topology), all sharing the same hardcoded legendFormat, rendering as indistinguishable duplicate tiles.",
+      "description": "sum(dvconf_rooms_active) -- one cluster-wide number. dvconf_rooms_active is now emitted by cp-daemon's chain-observed room lifecycle (apps/cp-daemon/src/room-expiry-sweep.ts), a single source of truth rather than fragmented per-relay-replica gauges; sum() is kept as a safe no-op wrapper in case cp-daemon ever runs redundantly.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -67,7 +67,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "Participants per room",
-      "description": "count by (roomId) (dvconf_relay_peer_latency_ms{roomId}) -- apps/relay/src/metrics-server.ts, one series per peerId reporting via POST /stats/report. dvconf_room_participants (apps/signaling/src/rooms.ts) was signaling-only and never counted bots, which connect straight to the relay's WS and never touch signaling at all; this metric is populated by both bots (apps/bot/src/stats-reporter.ts) and browser clients (useConnectionStats.ts) alike.",
+      "description": "count by (roomId) (dvconf_relay_peer_latency_ms{roomId}) -- apps/relay/src/metrics-server.ts, one series per peerId reporting via POST /stats/report. dvconf_room_participants (formerly apps/signaling/src/rooms.ts, now apps/relay/src/signaling/index.ts) never counted bots, which connect straight to the relay's WS and never touch the old standalone signaling service at all; this metric is populated by both bots (apps/bot/src/stats-reporter.ts) and browser clients (useConnectionStats.ts) alike.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -94,7 +94,7 @@
       "id": 3,
       "type": "heatmap",
       "title": "Room duration distribution",
-      "description": "dvconf_room_duration_seconds -- observed on room close, apps/signaling/src/rooms.ts.",
+      "description": "dvconf_room_duration_seconds -- observed on room close, apps/cp-daemon/src/room-expiry-sweep.ts.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"

@@ -29,7 +29,7 @@
     path: "{{ xaisen_services_root }}/runtime/{{ xaisen_service_item.worker_key | default(xaisen_service_item.service) }}/cursor-data"
     state: directory
     mode: "0777"
-  when: xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon']
+  when: xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon']
 
 # Each worker app expects its own differently-named keypair env var
 # (CP_KEYPAIR, SIGNALING_KEYPAIR, PRIVATE_KEY for relay, SUI_PRIVATE_KEY for
@@ -74,7 +74,6 @@
   vars:
     xaisen_keypair_env_names:
       relay: PRIVATE_KEY
-      signaling: SIGNALING_KEYPAIR
       cp-daemon: CP_KEYPAIR
       validator-daemon: SUI_PRIVATE_KEY
       bot: PRIVATE_KEY
@@ -84,10 +83,9 @@
     # retrying it and hitting registration::E_ALREADY_REGISTERED forever.
     xaisen_cap_env_names:
       relay: MINER_CAP_ID
-      signaling: MINER_CAP_ID
       cp-daemon: CP_CAP_ID
       validator-daemon: VALIDATOR_CAP_ID
-  when: xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon', 'bot']
+  when: xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon', 'bot']
   no_log: true
 
 # Skip the (40-100s, measured) network pull when the image already cached on
@@ -141,5 +139,4 @@
   vars:
     xaisen_public_endpoint_env_names:
       relay: RELAY_ENDPOINT_URL
-      signaling: ENDPOINT_URL
-  when: xaisen_service_item.service in ['relay', 'signaling']
+  when: xaisen_service_item.service in ['relay']

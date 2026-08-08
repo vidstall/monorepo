@@ -33,7 +33,7 @@ env = "devnet"
 
 [[workers]]
 host = "001"
-service = "signaling"
+service = "cp-daemon"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
 
@@ -50,7 +50,7 @@ env = "devnet"
 
 [[workers]]
 host = "001"
-service = "signaling"
+service = "cp-daemon"
 provider = "digitalocean"
 size = "s-1vcpu-1gb"
 """
@@ -315,13 +315,13 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario(
             "s.toml",
             'env = "devnet"\nname = "await-test"\n'
-            '[[workers]]\nhost = "002"\nservice = "signaling"\nprovider = "digitalocean"\nawait = true\n'
+            '[[workers]]\nhost = "002"\nservice = "cp-daemon"\nprovider = "digitalocean"\nawait = true\n'
             '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
-            'host = "002"\nservice = "signaling"\nprovider = "digitalocean"\n',
+            'host = "002"\nservice = "cp-daemon"\nprovider = "digitalocean"\n',
         )
         parsed = scenario.load_scenario(path)
         by_service = {row["service"]: row for row in parsed["workers"]}
-        self.assertTrue(by_service["signaling"]["await"])
+        self.assertTrue(by_service["cp-daemon"]["await"])
         # Sole worker on host "002" is deferred, so its auto-injected
         # node_exporter is deferred too.
         self.assertTrue(by_service["node_exporter"]["await"])
@@ -330,14 +330,14 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario(
             "s.toml",
             'env = "devnet"\nname = "await-test"\n'
-            '[[workers]]\nhost = "002"\nservice = "signaling"\nprovider = "digitalocean"\n'
+            '[[workers]]\nhost = "002"\nservice = "cp-daemon"\nprovider = "digitalocean"\n'
             '[[workers]]\nhost = "002"\nservice = "relay"\nprovider = "digitalocean"\nawait = true\n'
             '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
             'host = "002"\nservice = "relay"\nprovider = "digitalocean"\n',
         )
         parsed = scenario.load_scenario(path)
         by_service = {row["service"]: row for row in parsed["workers"]}
-        self.assertFalse(by_service["signaling"]["await"])
+        self.assertFalse(by_service["cp-daemon"]["await"])
         self.assertTrue(by_service["relay"]["await"])
         self.assertFalse(by_service["node_exporter"]["await"])
 
@@ -345,7 +345,7 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario(
             "s.toml",
             'env = "devnet"\nname = "await-test"\n'
-            '[[workers]]\nhost = "002"\nservice = "signaling"\nprovider = "digitalocean"\nawait = true\n',
+            '[[workers]]\nhost = "002"\nservice = "cp-daemon"\nprovider = "digitalocean"\nawait = true\n',
         )
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
@@ -356,31 +356,31 @@ class LoadScenarioTests(ScenarioTestCase):
         path = self.write_scenario(
             "s.toml",
             'env = "devnet"\nname = "await-test"\n'
-            '[[workers]]\nhost = "002"\nservice = "signaling"\nprovider = "digitalocean"\nawait = true\n'
+            '[[workers]]\nhost = "002"\nservice = "cp-daemon"\nprovider = "digitalocean"\nawait = true\n'
             '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
-            'host = "002"\nservice = "signaling"\nprovider = "digitalocean"\n',
+            'host = "002"\nservice = "cp-daemon"\nprovider = "digitalocean"\n',
         )
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
             scenario.load_scenario(path)
-        # The declared signaling worker itself has a matching join action,
+        # The declared cp-daemon worker itself has a matching join action,
         # so it must not be the one warned about (its co-located
         # node_exporter is a separate, expected warning of its own -- see
         # test_await_field_parses_and_flags_solo_node_exporter).
-        self.assertNotIn("service=signaling", buf.getvalue())
+        self.assertNotIn("service=cp-daemon", buf.getvalue())
 
     def test_await_worker_auto_match_unambiguous_no_warning(self) -> None:
         path = self.write_scenario(
             "s.toml",
             'env = "devnet"\nname = "await-test"\n'
-            '[[workers]]\nhost = "002"\nservice = "signaling"\nprovider = "digitalocean"\nawait = true\n'
+            '[[workers]]\nhost = "002"\nservice = "cp-daemon"\nprovider = "digitalocean"\nawait = true\n'
             '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
-            'service = "signaling"\nprovider = "digitalocean"\n',
+            'service = "cp-daemon"\nprovider = "digitalocean"\n',
         )
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
             scenario.load_scenario(path)
-        self.assertNotIn("service=signaling", buf.getvalue())
+        self.assertNotIn("service=cp-daemon", buf.getvalue())
 
     def test_out_of_order_timestamps_warn_not_error(self) -> None:
         path = self.write_scenario(
@@ -430,15 +430,15 @@ class LockTests(ScenarioTestCase):
 class DiffWorkersTests(unittest.TestCase):
     def test_kill_and_start_sets(self) -> None:
         wanted = {
-            ("node-1", "signaling", "digitalocean", "devnet", 1): {},
+            ("node-1", "cp-daemon", "digitalocean", "devnet", 1): {},
         }
         current = {
-            ("node-1", "signaling", "digitalocean", "devnet", 1): {},
+            ("node-1", "cp-daemon", "digitalocean", "devnet", 1): {},
             ("node-2", "relay", "digitalocean", "devnet", 1): {},
         }
         to_kill, to_start = scenario.diff_workers(wanted, current)
         self.assertEqual(to_kill, [("node-2", "relay", "digitalocean", "devnet", 1)])
-        self.assertEqual(to_start, [("node-1", "signaling", "digitalocean", "devnet", 1)])
+        self.assertEqual(to_start, [("node-1", "cp-daemon", "digitalocean", "devnet", 1)])
 
 
 class ApplyTests(ScenarioTestCase):
@@ -484,8 +484,8 @@ class ApplyTests(ScenarioTestCase):
         path = self.write_scenario(
             "s.toml",
             SCENARIO_TOML.replace(
-                '[[workers]]\nhost = "001"\nservice = "signaling"',
-                '[[workers]]\nhost = "001"\nservice = "signaling"\nregion = "sfo3"',
+                '[[workers]]\nhost = "001"\nservice = "cp-daemon"',
+                '[[workers]]\nhost = "001"\nservice = "cp-daemon"\nregion = "sfo3"',
             ),
         )
         with (
@@ -500,8 +500,8 @@ class ApplyTests(ScenarioTestCase):
         call_args, _call_kwargs = control_many_hosts_spy.call_args
         groups = call_args[1]
         workers = groups[0][2]
-        signaling_row = next(r for r in workers if r["service"] == "signaling")
-        self.assertEqual(signaling_row.get("region"), "sfo3")
+        cp_daemon_row = next(r for r in workers if r["service"] == "cp-daemon")
+        self.assertEqual(cp_daemon_row.get("region"), "sfo3")
 
 
     def test_apply_excludes_await_worker_from_provisioning(self) -> None:
@@ -524,19 +524,19 @@ class ApplyTests(ScenarioTestCase):
         code = scenario.apply(str(path), True)
         self.assertEqual(code, 0)
 
-        # Re-declare the already-running host "001" signaling worker as
+        # Re-declare the already-running host "001" cp-daemon worker as
         # await=true (simulating a scenario file edited after the worker
         # was separately brought up e.g. via worker.join) and re-apply --
         # it must not be treated as drift and killed.
         v2 = self.write_scenario(
             "s.toml",
             SCENARIO_TOML_ONE_INSTANCE.replace(
-                '[[workers]]\nhost = "001"\nservice = "signaling"\nprovider = "digitalocean"\nsize = "s-1vcpu-1gb"\n',
-                '[[workers]]\nhost = "001"\nservice = "signaling"\nprovider = "digitalocean"\n'
+                '[[workers]]\nhost = "001"\nservice = "cp-daemon"\nprovider = "digitalocean"\nsize = "s-1vcpu-1gb"\n',
+                '[[workers]]\nhost = "001"\nservice = "cp-daemon"\nprovider = "digitalocean"\n'
                 'size = "s-1vcpu-1gb"\nawait = true\n',
             )
             + '\n[[actions]]\ntype = "worker.join"\ntimestamp = "+1s"\n'
-            + 'host = "001"\nservice = "signaling"\nprovider = "digitalocean"\n',
+            + 'host = "001"\nservice = "cp-daemon"\nprovider = "digitalocean"\n',
         )
         code = scenario.apply(str(v2), True)
         self.assertEqual(code, 0)
@@ -729,12 +729,12 @@ class ApplyTests(ScenarioTestCase):
 
         topology = self.read_topology()
         active = [i for i in topology["workers"] if i["desired_state"] != "deleted"]
-        # signaling (still declared) + its auto-injected node_exporter --
+        # cp-daemon (still declared) + its auto-injected node_exporter --
         # relay was dropped, along with relay's OWN auto-injected instance
         # (SCENARIO_TOML_ONE_INSTANCE only declares one host, so there's
         # only ever one node_exporter for it either way).
         self.assertEqual(len(active), 2)
-        self.assertEqual({i["service"] for i in active}, {"signaling", "node_exporter"})
+        self.assertEqual({i["service"] for i in active}, {"cp-daemon", "node_exporter"})
         self.assertEqual(len(topology["objects"]), 1)
         self.assertEqual(topology["objects"][0]["name"], "site-1-bucket")
 

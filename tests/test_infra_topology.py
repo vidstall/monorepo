@@ -130,7 +130,7 @@ class InfraTopologyTests(unittest.TestCase):
             patch.object(infra, "inventory", return_value=0) as inventory,
             patch.object(infra, "configure", return_value=0) as configure,
         ):
-            code = infra.control("start", "node-1", "signaling", "upcloud")
+            code = infra.control("start", "node-1", "cp-daemon", "upcloud")
 
         self.assertEqual(code, 0)
         pulumi_up.assert_called_once_with("devnet")
@@ -154,7 +154,7 @@ class InfraTopologyTests(unittest.TestCase):
                 "workers": [
                     {
                         "host": "node-1",
-                        "service": "signaling",
+                        "service": "cp-daemon",
                         "provider": "upcloud",
                         "backend": "vm",
                         "worker_index": 1,
@@ -199,7 +199,7 @@ class InfraTopologyTests(unittest.TestCase):
             patch.object(infra, "inventory", return_value=0) as inventory,
             patch.object(infra, "configure", return_value=0) as configure,
         ):
-            code = infra.control("start", "node-1", "signaling", "akamai")
+            code = infra.control("start", "node-1", "cp-daemon", "akamai")
 
         self.assertEqual(code, 0)
         pulumi_up.assert_called_once_with("devnet")
@@ -223,7 +223,7 @@ class InfraTopologyTests(unittest.TestCase):
                 "workers": [
                     {
                         "host": "node-1",
-                        "service": "signaling",
+                        "service": "cp-daemon",
                         "provider": "akamai",
                         "backend": "vm",
                         "worker_index": 1,
@@ -256,7 +256,7 @@ class InfraTopologyTests(unittest.TestCase):
                 "workers": [
                     {
                         "host": "node-1",
-                        "service": "signaling",
+                        "service": "cp-daemon",
                         "provider": "akamai",
                         "backend": "vm",
                         "desired_state": "running",
@@ -271,7 +271,7 @@ class InfraTopologyTests(unittest.TestCase):
             patch.object(infra, "inventory", return_value=0) as inventory,
             patch.object(infra, "configure", return_value=0) as configure,
         ):
-            code = infra.control("pause", "node-1", "signaling", "akamai")
+            code = infra.control("pause", "node-1", "cp-daemon", "akamai")
 
         self.assertEqual(code, 0)
         # Unlike alibaba, akamai has no targeted-apply machinery -- pause
@@ -296,7 +296,7 @@ class InfraTopologyTests(unittest.TestCase):
                 "workers": [
                     {
                         "host": "node-1",
-                        "service": "signaling",
+                        "service": "cp-daemon",
                         "provider": "akamai",
                         "backend": "vm",
                         "desired_state": "stopped",
@@ -312,7 +312,7 @@ class InfraTopologyTests(unittest.TestCase):
             patch.object(infra, "inventory", return_value=0),
             patch.object(infra, "configure", return_value=0) as configure,
         ):
-            code = infra.control("restart", "node-1", "signaling", "akamai")
+            code = infra.control("restart", "node-1", "cp-daemon", "akamai")
 
         self.assertEqual(code, 0)
         self.assertEqual(configure.call_args.kwargs["host_limit"], "node-1")
@@ -332,7 +332,7 @@ class InfraTopologyTests(unittest.TestCase):
                 "workers": [
                     {
                         "host": "node-1",
-                        "service": "signaling",
+                        "service": "cp-daemon",
                         "provider": "akamai",
                         "backend": "vm",
                         "desired_state": "stopped",
@@ -354,7 +354,7 @@ class InfraTopologyTests(unittest.TestCase):
             # "did it actually finish" check.
             patch.object(infra, "configure", return_value=0) as configure,
         ):
-            code = infra.control("restart", "node-1", "signaling", "akamai", detach=True)
+            code = infra.control("restart", "node-1", "cp-daemon", "akamai", detach=True)
 
         self.assertEqual(code, 0)
         self.assertTrue(configure.call_args.kwargs["detach"])
@@ -374,7 +374,7 @@ class InfraTopologyTests(unittest.TestCase):
                 "workers": [
                     {
                         "host": "node-1",
-                        "service": "signaling",
+                        "service": "cp-daemon",
                         "provider": "akamai",
                         "backend": "vm",
                         "desired_state": "stopped",
@@ -391,7 +391,7 @@ class InfraTopologyTests(unittest.TestCase):
             patch.object(infra, "configure") as configure,
             patch.object(infra, "toggle_container", return_value=0) as toggle_container,
         ):
-            code = infra.control("restart", "node-1", "signaling", "akamai", detach=True, docker_only=True)
+            code = infra.control("restart", "node-1", "cp-daemon", "akamai", detach=True, docker_only=True)
 
         self.assertEqual(code, 0)
         pulumi_up.assert_not_called()
@@ -399,7 +399,7 @@ class InfraTopologyTests(unittest.TestCase):
         configure.assert_not_called()
         toggle_container.assert_called_once_with(
             host_limit="node-1",
-            container_name="xaisen-akamai-node-1-signaling-1",
+            container_name="xaisen-akamai-node-1-cp-daemon-1",
             action="start",
             detach=True,
             log_path=toggle_container.call_args.kwargs["log_path"],
@@ -416,7 +416,7 @@ class InfraTopologyTests(unittest.TestCase):
                 "workers": [
                     {
                         "host": "node-1",
-                        "service": "signaling",
+                        "service": "cp-daemon",
                         "provider": "akamai",
                         "backend": "vm",
                         "desired_state": "running",
@@ -438,13 +438,13 @@ class InfraTopologyTests(unittest.TestCase):
             patch.object(infra, "pulumi_up", return_value=0) as pulumi_up,
             patch.object(infra, "toggle_container", return_value=0) as toggle_container,
         ):
-            code = infra.control("pause", "node-1", "signaling", "akamai", docker_only=True)
+            code = infra.control("pause", "node-1", "cp-daemon", "akamai", docker_only=True)
 
         self.assertEqual(code, 0)
         pulumi_up.assert_not_called()
         toggle_container.assert_called_once_with(
             host_limit="node-1",
-            container_name="xaisen-akamai-node-1-signaling-1",
+            container_name="xaisen-akamai-node-1-cp-daemon-1",
             action="stop",
             detach=False,
             log_path=None,
@@ -466,7 +466,7 @@ class InfraTopologyTests(unittest.TestCase):
                 "workers": [
                     {
                         "host": "node-1",
-                        "service": "signaling",
+                        "service": "cp-daemon",
                         "provider": "akamai",
                         "backend": "vm",
                         "desired_state": "running",
@@ -480,13 +480,13 @@ class InfraTopologyTests(unittest.TestCase):
             patch.object(infra, "pulumi_up", return_value=0) as pulumi_up,
             patch.object(infra, "toggle_container", return_value=0) as toggle_container,
         ):
-            code = infra.control("pause", "node-1", "signaling", "akamai", docker_only=True)
+            code = infra.control("pause", "node-1", "cp-daemon", "akamai", docker_only=True)
 
         self.assertEqual(code, 0)
         pulumi_up.assert_not_called()
         toggle_container.assert_called_once_with(
             host_limit="node-1",
-            container_name="xaisen-akamai-node-1-signaling-1",
+            container_name="xaisen-akamai-node-1-cp-daemon-1",
             action="stop",
             detach=False,
             log_path=None,
@@ -554,7 +554,7 @@ class InfraTopologyTests(unittest.TestCase):
             patch.object(infra, "configure", return_value=0) as configure,
             patch.object(infra, "toggle_container") as toggle_container,
         ):
-            code = infra.control("start", "node-1", "signaling", "akamai", docker_only=True)
+            code = infra.control("start", "node-1", "cp-daemon", "akamai", docker_only=True)
 
         self.assertEqual(code, 0)
         configure.assert_called_once()

@@ -57,10 +57,10 @@
    WRONG port (the main WS/signaling port, not the metrics port these
    routes actually live on) -- confirmed missing for /logs/* and
    /relay-down-hint* before this comment was added. #}
-{% set xaisen_internal_ports = {'relay': 4000, 'signaling': 8080, 'bot': 8095} %}
-{% set xaisen_metrics_ports = {'relay': 4001, 'signaling': 8083, 'bot': 8096, 'cp-daemon': 8092, 'validator-daemon': 8103} %}
-{% set xaisen_healthz_ports = {'relay': 4001, 'signaling': 8082, 'cp-daemon': 8091, 'validator-daemon': 8101} %}
-{% set xaisen_stats_report_services = ['relay', 'signaling'] %}
+{% set xaisen_internal_ports = {'relay': 4000, 'bot': 8095} %}
+{% set xaisen_metrics_ports = {'relay': 4001, 'bot': 8096, 'cp-daemon': 8092, 'validator-daemon': 8103} %}
+{% set xaisen_healthz_ports = {'relay': 4001, 'cp-daemon': 8091, 'validator-daemon': 8101} %}
+{% set xaisen_stats_report_services = ['relay'] %}
 {% for svc in xaisen_public_services %}
 {{ svc.worker_key | default(svc.service) }}.{{ ansible_host | replace('.', '-') }}.sslip.io {
 {% if svc.service in xaisen_metrics_ports %}

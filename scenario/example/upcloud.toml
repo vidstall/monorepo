@@ -16,13 +16,6 @@ tag = ""
 
 [[workers]]
 host = "001"
-service = "signaling"
-provider = "upcloud"
-size = "2xCPU-4GB"
-worker_index = 1
-
-[[workers]]
-host = "001"
 service = "relay"
 provider = "upcloud"
 size = "2xCPU-4GB"
@@ -38,13 +31,6 @@ worker_index = 1
 [[workers]]
 host = "001"
 service = "validator-daemon"
-provider = "upcloud"
-size = "2xCPU-4GB"
-worker_index = 1
-
-[[workers]]
-host = "002"
-service = "signaling"
 provider = "upcloud"
 size = "2xCPU-4GB"
 worker_index = 1

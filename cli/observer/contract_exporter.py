@@ -5,16 +5,15 @@ import time
 import urllib.error
 import urllib.request
 
-# Same 5-role split MinerStore actually tracks on-chain (see
+# Same 4-role split MinerStore actually tracks on-chain (see
 # services/contract/sources/miner/miner_store.move's cp_miners/relay_miners/
-# validator_miners/signaling_miners/user_miners VecSet<ID> fields) -- keyed
+# validator_miners/user_miners VecSet<ID> fields) -- keyed
 # here by the plain role name used everywhere else in this CLI (wallet pool
 # entries' registered_role, deploy_one_service.yml's service branches).
 _MINER_STORE_ROLE_FIELDS = {
     "cp-daemon": "cp_miners",
     "relay": "relay_miners",
     "validator-daemon": "validator_miners",
-    "signaling": "signaling_miners",
     "user": "user_miners",
 }
 

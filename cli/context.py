@@ -93,7 +93,6 @@ BOT_ENV_PATH = WORKER_DIR / "apps" / "bot" / ".env"
 DOCKER_SERVICES = {
     "cp-daemon": WORKER_DIR,
     "relay": WORKER_DIR,
-    "signaling": WORKER_DIR,
     "validator-daemon": WORKER_DIR,
     "bot": WORKER_DIR,
 }

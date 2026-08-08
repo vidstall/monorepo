@@ -116,20 +116,18 @@ def discover_active_peers() -> dict[str, set[str]] | None:
 
 def room_participant_counts() -> dict[str, int] | None:
     """{roomId: current participant count} for every room Prometheus has a
-    dvconf_room_participants sample for -- the signaling service's live
-    gauge (services/worker/apps/signaling/src/rooms.ts), scraped fleet-wide
-    (see prometheus.yml.j2's xaisen-signaling job). Rooms with zero current
-    participants aren't in this dict at all (the gauge is removed, not set
-    to 0, when a room empties -- see RoomManager.leave()); callers should
-    treat a missing roomId as 0, not omit it.
+    dvconf_room_participants sample for -- relay's live gauge
+    (services/worker/apps/relay/src/signaling/index.ts), scraped fleet-wide
+    via relay's existing job (see prometheus.yml.j2). Rooms with zero
+    current participants aren't in this dict at all (the gauge is removed,
+    not set to 0, when a room empties -- see RoomManager.leave()); callers
+    should treat a missing roomId as 0, not omit it.
 
-    NOTE: signaling-only -- bots connect straight to the relay's WS and
-    never touch signaling at all, so this NEVER counts them (same issue the
-    Rooms Grafana dashboard already moved off of, see dashboards/rooms.json's
-    comment on its participants panel). Only meaningful for a
-    signaling-role-specific view (see metrics_worker.py's
-    _signaling_application()); for actual room occupancy (bots + browser
-    clients both), use room_occupancy_counts() instead."""
+    NOTE: never counts bots -- bots connect straight to the relay's WS and
+    don't go through relay's peer-signaling roster (same issue the Rooms
+    Grafana dashboard already moved off of, see dashboards/rooms.json's
+    comment on its participants panel). For actual room occupancy (bots +
+    browser clients both), use room_occupancy_counts() instead."""
     result = query("dvconf_room_participants")
     if result is None:
         return None

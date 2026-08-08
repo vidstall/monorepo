@@ -46,7 +46,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(process_cpu_seconds_total{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (job)",
+          "expr": "sum(rate(process_cpu_seconds_total{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         },
@@ -55,7 +55,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "avg(rate(process_cpu_seconds_total{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m]))",
+          "expr": "avg(rate(process_cpu_seconds_total{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m]))",
           "legendFormat": "average (all workers)",
           "refId": "B"
         }
@@ -86,7 +86,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "avg(process_resident_memory_bytes{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}) by (job)",
+          "expr": "avg(process_resident_memory_bytes{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         },
@@ -95,7 +95,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "avg(process_resident_memory_bytes{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"})",
+          "expr": "avg(process_resident_memory_bytes{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"})",
           "legendFormat": "average (all workers)",
           "refId": "B"
         }
@@ -126,7 +126,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "avg(nodejs_eventloop_lag_seconds{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}) by (job)",
+          "expr": "avg(nodejs_eventloop_lag_seconds{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         },
@@ -135,7 +135,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "avg(nodejs_eventloop_lag_seconds{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"})",
+          "expr": "avg(nodejs_eventloop_lag_seconds{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"})",
           "legendFormat": "average (all workers)",
           "refId": "B"
         }
@@ -167,7 +167,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(dvconf_role_assignment_wait_seconds_bucket{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le, job))",
+          "expr": "histogram_quantile(0.95, sum(rate(dvconf_role_assignment_wait_seconds_bucket{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le, job))",
           "legendFormat": "p95 {{job}}",
           "refId": "A"
         },
@@ -176,12 +176,12 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(dvconf_role_assignment_wait_seconds_bucket{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(dvconf_role_assignment_wait_seconds_bucket{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le))",
           "legendFormat": "average (all workers)",
           "refId": "B"
         }
       ],
-      "description": "dvconf_role_assignment_wait_seconds{service,result} -- waitForRoleAssignment()'s polling loop, packages/shared/src/chain/role-assignment.ts. Emitted by all 4 daemon roles (cp-daemon, relay, signaling, validator-daemon all call waitForRoleAssignment() at startup, confirmed by grep -- not role-restricted, despite an earlier version of this panel's description claiming otherwise).",
+      "description": "dvconf_role_assignment_wait_seconds{service,result} -- waitForRoleAssignment()'s polling loop, packages/shared/src/chain/role-assignment.ts. Emitted by all 3 daemon roles (cp-daemon, relay, validator-daemon all call waitForRoleAssignment() at startup, confirmed by grep -- not role-restricted, despite an earlier version of this panel's description claiming otherwise).",
       "fieldConfig": {
         "defaults": {
           "unit": "s"
@@ -208,7 +208,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(dvconf_role_assignment_wait_seconds_count{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (job, result)",
+          "expr": "sum(rate(dvconf_role_assignment_wait_seconds_count{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (job, result)",
           "legendFormat": "{{job}} {{result}}",
           "refId": "A"
         },
@@ -217,7 +217,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(dvconf_role_assignment_wait_seconds_count{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (result)",
+          "expr": "sum(rate(dvconf_role_assignment_wait_seconds_count{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (result)",
           "legendFormat": "average {{result}}",
           "refId": "B"
         }
@@ -244,7 +244,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_tx_duration_seconds_bucket{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le, job))",
+          "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_tx_duration_seconds_bucket{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le, job))",
           "legendFormat": "p95 {{job}}",
           "refId": "A"
         },
@@ -253,12 +253,12 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_tx_duration_seconds_bucket{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_tx_duration_seconds_bucket{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le))",
           "legendFormat": "average (all workers)",
           "refId": "B"
         }
       ],
-      "description": "dvconf_chain_tx_duration_seconds{service,method} -- executeWithRetry() calls, packages/shared/src/chain/tx.ts. Emitted by all 4 daemon roles.",
+      "description": "dvconf_chain_tx_duration_seconds{service,method} -- executeWithRetry() calls, packages/shared/src/chain/tx.ts. Emitted by all 3 daemon roles.",
       "fieldConfig": {
         "defaults": {
           "unit": "s"
@@ -285,7 +285,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_poll_duration_seconds_bucket{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le, job))",
+          "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_poll_duration_seconds_bucket{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le, job))",
           "legendFormat": "p95 {{job}}",
           "refId": "A"
         },
@@ -294,7 +294,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_poll_duration_seconds_bucket{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_poll_duration_seconds_bucket{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (le))",
           "legendFormat": "average (all workers)",
           "refId": "B"
         }
@@ -326,7 +326,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(dvconf_chain_tx_retries_total{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (job)",
+          "expr": "sum(rate(dvconf_chain_tx_retries_total{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         },
@@ -335,7 +335,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "avg(rate(dvconf_chain_tx_retries_total{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m]))",
+          "expr": "avg(rate(dvconf_chain_tx_retries_total{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m]))",
           "legendFormat": "average (all workers)",
           "refId": "B"
         }
@@ -362,7 +362,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(dvconf_chain_events_processed_total{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (job)",
+          "expr": "sum(rate(dvconf_chain_events_processed_total{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         },
@@ -371,7 +371,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "avg(rate(dvconf_chain_events_processed_total{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m]))",
+          "expr": "avg(rate(dvconf_chain_events_processed_total{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m]))",
           "legendFormat": "average (all workers)",
           "refId": "B"
         }
@@ -509,7 +509,7 @@
               "refId": "A"
             }
           ],
-          "description": "dvconf_role_assignment_wait_seconds{service,result} -- waitForRoleAssignment()'s polling loop, packages/shared/src/chain/role-assignment.ts. Emitted by all 4 daemon roles (cp-daemon, relay, signaling, validator-daemon all call waitForRoleAssignment() at startup, confirmed by grep -- not role-restricted, despite an earlier version of this panel's description claiming otherwise).",
+          "description": "dvconf_role_assignment_wait_seconds{service,result} -- waitForRoleAssignment()'s polling loop, packages/shared/src/chain/role-assignment.ts. Emitted by all 3 daemon roles (cp-daemon, relay, validator-daemon all call waitForRoleAssignment() at startup, confirmed by grep -- not role-restricted, despite an earlier version of this panel's description claiming otherwise).",
           "fieldConfig": {
             "defaults": {
               "unit": "s"
@@ -568,7 +568,7 @@
               "refId": "A"
             }
           ],
-          "description": "dvconf_chain_tx_duration_seconds{service,method} -- executeWithRetry() calls, packages/shared/src/chain/tx.ts. Emitted by all 4 daemon roles.",
+          "description": "dvconf_chain_tx_duration_seconds{service,method} -- executeWithRetry() calls, packages/shared/src/chain/tx.ts. Emitted by all 3 daemon roles.",
           "fieldConfig": {
             "defaults": {
               "unit": "s"
@@ -826,7 +826,7 @@
               "refId": "A"
             }
           ],
-          "description": "dvconf_role_assignment_wait_seconds{service,result} -- waitForRoleAssignment()'s polling loop, packages/shared/src/chain/role-assignment.ts. Emitted by all 4 daemon roles (cp-daemon, relay, signaling, validator-daemon all call waitForRoleAssignment() at startup, confirmed by grep -- not role-restricted, despite an earlier version of this panel's description claiming otherwise).",
+          "description": "dvconf_role_assignment_wait_seconds{service,result} -- waitForRoleAssignment()'s polling loop, packages/shared/src/chain/role-assignment.ts. Emitted by all 3 daemon roles (cp-daemon, relay, validator-daemon all call waitForRoleAssignment() at startup, confirmed by grep -- not role-restricted, despite an earlier version of this panel's description claiming otherwise).",
           "fieldConfig": {
             "defaults": {
               "unit": "s"
@@ -885,7 +885,7 @@
               "refId": "A"
             }
           ],
-          "description": "dvconf_chain_tx_duration_seconds{service,method} -- executeWithRetry() calls, packages/shared/src/chain/tx.ts. Emitted by all 4 daemon roles.",
+          "description": "dvconf_chain_tx_duration_seconds{service,method} -- executeWithRetry() calls, packages/shared/src/chain/tx.ts. Emitted by all 3 daemon roles.",
           "fieldConfig": {
             "defaults": {
               "unit": "s"
@@ -1071,291 +1071,6 @@
       ]
     },
     {
-      "id": 134,
-      "type": "row",
-      "title": "signaling",
-      "collapsed": true,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 131
-      },
-      "panels": [
-        {
-          "id": 135,
-          "type": "timeseries",
-          "title": "CPU usage (5m rate)",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 132
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "Prometheus"
-              },
-              "expr": "rate(process_cpu_seconds_total{job=\"xaisen-signaling\"}[5m])",
-              "legendFormat": "{{instance}}",
-              "refId": "A"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percentunit"
-            }
-          }
-        },
-        {
-          "id": 136,
-          "type": "timeseries",
-          "title": "Resident memory",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 132
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "Prometheus"
-              },
-              "expr": "process_resident_memory_bytes{job=\"xaisen-signaling\"}",
-              "legendFormat": "{{instance}}",
-              "refId": "A"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes"
-            }
-          }
-        },
-        {
-          "id": 137,
-          "type": "timeseries",
-          "title": "Event-loop lag",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 140
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "Prometheus"
-              },
-              "expr": "nodejs_eventloop_lag_seconds{job=\"xaisen-signaling\"}",
-              "legendFormat": "{{instance}}",
-              "refId": "A"
-            }
-          ],
-          "description": "nodejs_eventloop_lag_seconds -- free via collectDefaultMetrics() (metrics-prom.ts), enabled for every daemon. A more direct Node.js saturation/blocking signal than CPU% alone.",
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s"
-            }
-          }
-        },
-        {
-          "id": 138,
-          "type": "timeseries",
-          "title": "Role-assignment wait time (p95)",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 140
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "Prometheus"
-              },
-              "expr": "histogram_quantile(0.95, sum(rate(dvconf_role_assignment_wait_seconds_bucket{job=\"xaisen-signaling\"}[5m])) by (le, result))",
-              "legendFormat": "p95 {{result}}",
-              "refId": "A"
-            }
-          ],
-          "description": "dvconf_role_assignment_wait_seconds{service,result} -- waitForRoleAssignment()'s polling loop, packages/shared/src/chain/role-assignment.ts. Emitted by all 4 daemon roles (cp-daemon, relay, signaling, validator-daemon all call waitForRoleAssignment() at startup, confirmed by grep -- not role-restricted, despite an earlier version of this panel's description claiming otherwise).",
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s"
-            }
-          }
-        },
-        {
-          "id": 139,
-          "type": "timeseries",
-          "title": "Role-assignment wait outcome rate",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 148
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "Prometheus"
-              },
-              "expr": "rate(dvconf_role_assignment_wait_seconds_count{job=\"xaisen-signaling\"}[5m])",
-              "legendFormat": "{{result}}",
-              "refId": "A"
-            }
-          ],
-          "description": "rate(dvconf_role_assignment_wait_seconds_count) by result -- the success-vs-timeout SPLIT the p95-only panel above can't show (a flat p95 looks the same whether everything succeeds slowly or half of it times out)."
-        },
-        {
-          "id": 140,
-          "type": "timeseries",
-          "title": "Chain tx latency by method",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 148
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "Prometheus"
-              },
-              "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_tx_duration_seconds_bucket{job=\"xaisen-signaling\"}[5m])) by (le, method))",
-              "legendFormat": "p95 {{method}}",
-              "refId": "A"
-            }
-          ],
-          "description": "dvconf_chain_tx_duration_seconds{service,method} -- executeWithRetry() calls, packages/shared/src/chain/tx.ts. Emitted by all 4 daemon roles.",
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s"
-            }
-          }
-        },
-        {
-          "id": 141,
-          "type": "timeseries",
-          "title": "Chain event-poll duration",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 156
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "Prometheus"
-              },
-              "expr": "histogram_quantile(0.95, sum(rate(dvconf_chain_poll_duration_seconds_bucket{job=\"xaisen-signaling\"}[5m])) by (le, module))",
-              "legendFormat": "p95 {{module}}",
-              "refId": "A"
-            }
-          ],
-          "description": "dvconf_chain_poll_duration_seconds{service,module} -- EventPoller.pollOnce wall-clock, packages/shared/src/chain/events.ts.",
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s"
-            }
-          }
-        },
-        {
-          "id": 142,
-          "type": "timeseries",
-          "title": "Chain tx retry rate by method",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 156
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "Prometheus"
-              },
-              "expr": "rate(dvconf_chain_tx_retries_total{job=\"xaisen-signaling\"}[5m])",
-              "legendFormat": "{{method}}",
-              "refId": "A"
-            }
-          ],
-          "description": "dvconf_chain_tx_retries_total{service,method} -- executeWithRetry() retry attempts, packages/shared/src/chain/tx.ts. A rising rate here precedes actual tx failures."
-        },
-        {
-          "id": 143,
-          "type": "timeseries",
-          "title": "Chain events processed rate",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 24,
-            "x": 0,
-            "y": 164
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "Prometheus"
-              },
-              "expr": "rate(dvconf_chain_events_processed_total{job=\"xaisen-signaling\"}[5m])",
-              "legendFormat": "{{module}}",
-              "refId": "A"
-            }
-          ],
-          "description": "dvconf_chain_events_processed_total{service,module} -- EventPoller throughput, packages/shared/src/chain/events.ts (poll DURATION is the panel above; this is poll THROUGHPUT)."
-        }
-      ]
-    },
-    {
       "id": 144,
       "type": "row",
       "title": "relay",
@@ -1486,7 +1201,7 @@
               "refId": "A"
             }
           ],
-          "description": "dvconf_role_assignment_wait_seconds{service,result} -- waitForRoleAssignment()'s polling loop, packages/shared/src/chain/role-assignment.ts. Emitted by all 4 daemon roles (cp-daemon, relay, signaling, validator-daemon all call waitForRoleAssignment() at startup, confirmed by grep -- not role-restricted, despite an earlier version of this panel's description claiming otherwise).",
+          "description": "dvconf_role_assignment_wait_seconds{service,result} -- waitForRoleAssignment()'s polling loop, packages/shared/src/chain/role-assignment.ts. Emitted by all 3 daemon roles (cp-daemon, relay, validator-daemon all call waitForRoleAssignment() at startup, confirmed by grep -- not role-restricted, despite an earlier version of this panel's description claiming otherwise).",
           "fieldConfig": {
             "defaults": {
               "unit": "s"
@@ -1545,7 +1260,7 @@
               "refId": "A"
             }
           ],
-          "description": "dvconf_chain_tx_duration_seconds{service,method} -- executeWithRetry() calls, packages/shared/src/chain/tx.ts. Emitted by all 4 daemon roles.",
+          "description": "dvconf_chain_tx_duration_seconds{service,method} -- executeWithRetry() calls, packages/shared/src/chain/tx.ts. Emitted by all 3 daemon roles.",
           "fieldConfig": {
             "defaults": {
               "unit": "s"

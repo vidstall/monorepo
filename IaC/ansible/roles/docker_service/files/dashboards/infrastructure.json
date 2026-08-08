@@ -137,7 +137,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Open file descriptors / TCP sockets",
-      "description": "node_filefd_allocated and node_sockstat_TCP_alloc -- relay/signaling under heavy WebRTC/TCP load can hit fd/socket exhaustion before CPU/memory look stressed at all.",
+      "description": "node_filefd_allocated and node_sockstat_TCP_alloc -- relay under heavy WebRTC/TCP load can hit fd/socket exhaustion before CPU/memory look stressed at all.",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
       "targets": [
@@ -219,7 +219,7 @@
       "id": 14,
       "type": "timeseries",
       "title": "Conntrack + TCP established connections",
-      "description": "node_nf_conntrack_entries vs node_nf_conntrack_entries_limit, and node_netstat_Tcp_CurrEstab -- relay/signaling under heavy WebRTC/TCP fallback load can exhaust the conntrack table before CPU/memory look stressed.",
+      "description": "node_nf_conntrack_entries vs node_nf_conntrack_entries_limit, and node_netstat_Tcp_CurrEstab -- relay under heavy WebRTC/TCP fallback load can exhaust the conntrack table before CPU/memory look stressed.",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 52 },
       "targets": [

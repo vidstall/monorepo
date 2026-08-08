@@ -61,7 +61,7 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                     source_addresses=["0.0.0.0/0", "::/0"],
                 )
             )
-    if any(svc.get("service") in ("relay", "signaling", "bot", "cp-daemon", "validator-daemon") for svc in services):
+    if any(svc.get("service") in ("relay", "bot", "cp-daemon", "validator-daemon") for svc in services):
         # Each relay/signaling/bot instance, plus cp-daemon/validator-daemon (whose
         # only surface is a metrics endpoint), gets a Caddy TLS sidecar (see
         # docker_service/tasks/deploy_one_service.yml) that terminates HTTPS via a

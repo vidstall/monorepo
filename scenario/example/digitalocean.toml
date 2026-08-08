@@ -17,20 +17,6 @@ provider = "alibaba"
 
 [[workers]]
 host = "001"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "001"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 2
-
-[[workers]]
-host = "001"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
@@ -90,20 +76,6 @@ worker_index = 1
 
 [[workers]]
 host = "002"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "002"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 2
-
-[[workers]]
-host = "002"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
@@ -140,20 +112,6 @@ worker_index = 1
 [[workers]]
 host = "002"
 service = "validator-daemon"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 2
-
-[[workers]]
-host = "003"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "003"
-service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2

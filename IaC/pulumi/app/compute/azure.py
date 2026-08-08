@@ -122,7 +122,7 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                 )
             )
             next_priority += 10
-    if any(svc.get("service") in ("relay", "signaling", "bot", "cp-daemon", "validator-daemon") for svc in services):
+    if any(svc.get("service") in ("relay", "bot", "cp-daemon", "validator-daemon") for svc in services):
         # Each relay/signaling/bot instance, plus cp-daemon/validator-daemon
         # (whose only surface is a metrics endpoint), gets a Caddy TLS
         # sidecar -- port 80 for the ACME HTTP-01 challenge, port 443 for

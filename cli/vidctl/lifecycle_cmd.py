@@ -56,7 +56,7 @@ def run_lifecycle_action(action: str, args: argparse.Namespace) -> int:
     pairs and run `action` once per pair, in order, stopping at the first
     failure. Each pair still goes through the exact same infra.control()
     call a single-service invocation would make -- running
-    `--service relay,signaling` (or `2cp-daemon`) is equivalent to (and just
+    `--service relay,cp-daemon` (or `2cp-daemon`) is equivalent to (and just
     a shorthand for) separate single-service/single-worker calls sharing
     the same --host, which is what actually colocates them on one worker
     (see program.py's group-by-host merge)."""
@@ -100,7 +100,7 @@ def add_lifecycle_parsers(subparsers: argparse._SubParsersAction[argparse.Argume
             required=True,
             help=(
                 "Service type(s) hosted by the worker. Comma-separate to colocate "
-                "multiple services on one --host (e.g. relay,signaling). Prefix a token "
+                "multiple services on one --host (e.g. relay,cp-daemon). Prefix a token "
                 "with an integer to run that many workers of it (e.g. 5cp-daemon,relay "
                 "= 5 cp-daemon workers + 1 relay); no prefix defaults to 1. "
                 f"Choices: {', '.join(sorted(DOCKER_SERVICES))}."

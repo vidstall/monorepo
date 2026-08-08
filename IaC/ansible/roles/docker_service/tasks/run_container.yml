@@ -296,11 +296,11 @@
         | combine({xaisen_public_endpoint_env_name: 'wss://' ~ (xaisen_sslip_host | default(''))} if (xaisen_public_endpoint_env_name | default('')) else {})
         | combine({'ANNOUNCED_IP': ansible_host} if xaisen_service_item.service == 'relay' else {})
         | combine({'RTC_MIN_PORT': xaisen_relay_rtc_min, 'RTC_MAX_PORT': xaisen_relay_rtc_max, 'PIPE_PORT_RANGE': xaisen_relay_pipe_min ~ '-' ~ xaisen_relay_pipe_max} if xaisen_service_item.service == 'relay' else {})
-        | combine({'REGISTRATION_MODE': 'voting'} if xaisen_service_item.service in ['relay', 'signaling', 'validator-daemon'] else {})
-        | combine({'DATA_DIR': xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/cursor-data'} if xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
-        | combine({'METRICS_AUTH_TOKEN': xaisen_metrics_auth_token} if (xaisen_metrics_auth_token | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon', 'bot'] else {})
-        | combine({'OTEL_EXPORTER_OTLP_ENDPOINT': xaisen_otel_exporter_endpoint, 'OTEL_SERVICE_NAME': xaisen_service_item.service} if (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
-        | combine({'OTEL_EXPORTER_OTLP_HEADERS': xaisen_otel_exporter_headers} if (xaisen_otel_exporter_headers | default('')) and (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'signaling', 'cp-daemon', 'validator-daemon'] else {})
+        | combine({'REGISTRATION_MODE': 'voting'} if xaisen_service_item.service in ['relay', 'validator-daemon'] else {})
+        | combine({'DATA_DIR': xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/cursor-data'} if xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon'] else {})
+        | combine({'METRICS_AUTH_TOKEN': xaisen_metrics_auth_token} if (xaisen_metrics_auth_token | default('')) and xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon', 'bot'] else {})
+        | combine({'OTEL_EXPORTER_OTLP_ENDPOINT': xaisen_otel_exporter_endpoint, 'OTEL_SERVICE_NAME': xaisen_service_item.service} if (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon'] else {})
+        | combine({'OTEL_EXPORTER_OTLP_HEADERS': xaisen_otel_exporter_headers} if (xaisen_otel_exporter_headers | default('')) and (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon'] else {})
         | combine({
             'GF_SECURITY_ADMIN_PASSWORD': xaisen_grafana_admin_password,
             'GF_SERVER_ROOT_URL': 'https://grafana.' ~ (ansible_host | replace('.', '-')) ~ '.sslip.io/',

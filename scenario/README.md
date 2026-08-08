@@ -92,8 +92,7 @@ brings them up (see above).
 
 ## Samples
 
-- `example.toml` -- minimal two-service DigitalOcean example.
-- `digitalocean-sample.toml` -- one `s-4vcpu-8gb` DigitalOcean node running
-  all 4 worker services colocated (1x signaling, 1x relay, 1x cp-daemon, 5x
-  validator-daemon replicas), plus a DigitalOcean registry publish and an
-  Alibaba OSS frontend update.
+- `example/digitalocean.toml` -- one `s-4vcpu-8gb` DigitalOcean node running
+  the worker services colocated (1x relay, 1x cp-daemon, 5x validator-daemon
+  replicas), plus a DigitalOcean registry publish and an Alibaba OSS frontend
+  update.

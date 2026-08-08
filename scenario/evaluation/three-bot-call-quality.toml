@@ -5,8 +5,8 @@
 # see scenario/evaluation/single-room-multicloud-client-ramp.toml for the
 # load-ramp counterpart.
 #
-# Each of the 3 DigitalOcean instances runs the same 8-worker set (3x
-# validator-daemon, 3x cp-daemon, 1x relay, 1x signaling) PLUS one bot, so
+# Each of the 3 DigitalOcean instances runs the same 7-worker set (3x
+# validator-daemon, 3x cp-daemon, 1x relay) PLUS one bot, so
 # "3 bots on 3 instances" is 1 bot colocated with each instance's worker
 # set rather than needing separate bot-only hosts.
 name = "three-bot-call-quality"
@@ -31,7 +31,7 @@ name = "site-2-bucket"
 object = "frontend"
 provider = "alibaba"
 
-# host 001 -- 3x validator-daemon, 3x cp-daemon, 1x relay, 1x signaling, 1x bot
+# host 001 -- 3x validator-daemon, 3x cp-daemon, 1x relay, 1x bot
 
 [[workers]]
 host = "001"
@@ -78,13 +78,6 @@ worker_index = 3
 [[workers]]
 host = "001"
 service = "relay"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "001"
-service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1
@@ -149,13 +142,6 @@ worker_index = 1
 
 [[workers]]
 host = "002"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "002"
 service = "bot"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
@@ -208,13 +194,6 @@ worker_index = 3
 [[workers]]
 host = "003"
 service = "relay"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "003"
-service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1

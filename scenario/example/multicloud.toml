@@ -30,20 +30,6 @@ provider = "alibaba"
 
 [[workers]]
 host = "001"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "001"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 2
-
-[[workers]]
-host = "001"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
@@ -103,20 +89,6 @@ worker_index = 1
 
 [[workers]]
 host = "002"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "002"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 2
-
-[[workers]]
-host = "002"
 service = "relay"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
@@ -153,20 +125,6 @@ worker_index = 1
 [[workers]]
 host = "002"
 service = "validator-daemon"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 2
-
-[[workers]]
-host = "003"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "003"
-service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 2
@@ -217,13 +175,6 @@ worker_index = 2
 
 [[workers]]
 host = "004"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-[[workers]]
-host = "004"
 service = "relay"
 provider = "akamai"
 size = "g6-standard-4"
@@ -252,13 +203,6 @@ worker_index = 1
 
 [[workers]]
 host = "005"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-[[workers]]
-host = "005"
 service = "relay"
 provider = "akamai"
 size = "g6-standard-4"
@@ -281,13 +225,6 @@ worker_index = 2
 [[workers]]
 host = "005"
 service = "validator-daemon"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-[[workers]]
-host = "006"
-service = "signaling"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 1
@@ -362,13 +299,6 @@ worker_index = 5
 
 [[workers]]
 host = "008"
-service = "signaling"
-provider = "azure"
-size = "Standard_D2als_v7"
-worker_index = 1
-
-[[workers]]
-host = "008"
 service = "relay"
 provider = "azure"
 size = "Standard_D2als_v7"
@@ -387,14 +317,6 @@ service = "validator-daemon"
 provider = "azure"
 size = "Standard_D2als_v7"
 worker_index = 1
-
-[[workers]]
-host = "009"
-service = "signaling"
-provider = "azure"
-size = "Standard_D2als_v7"
-worker_index = 1
-region = "westus2"
 
 [[workers]]
 host = "009"

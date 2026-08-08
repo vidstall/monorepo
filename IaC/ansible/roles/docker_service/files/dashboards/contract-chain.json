@@ -222,7 +222,7 @@
       "id": 3,
       "type": "stat",
       "title": "On-chain registered miners by role",
-      "description": "dvconf_onchain_registered_count{role} -- MinerStore's per-role VecSet sizes (cp_miners/relay_miners/signaling_miners/validator_miners/user_miners), same read this session used to diagnose the quorum-inflation bug.",
+      "description": "dvconf_onchain_registered_count{role} -- MinerStore's per-role VecSet sizes (cp_miners/relay_miners/validator_miners/user_miners), same read this session used to diagnose the quorum-inflation bug.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -452,7 +452,7 @@
       "id": 7,
       "type": "stat",
       "title": "Active rooms",
-      "description": "dvconf_rooms_active (signaling) -- same continuously-scraped metric as the Overview dashboard's \"Active sessions / rooms\" panel.",
+      "description": "dvconf_rooms_active (cp-daemon) -- same continuously-scraped metric as the Overview dashboard's \"Active sessions / rooms\" panel.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -489,7 +489,7 @@
       "id": 8,
       "type": "stat",
       "title": "Active workers (fleet-wide)",
-      "description": "count(up == 1) across every fleet worker job (relay/signaling/cp-daemon/validator-daemon/bot) -- excludes node_exporter/pushgateway, which aren't miner-role workers.",
+      "description": "count(up == 1) across every fleet worker job (relay/cp-daemon/validator-daemon/bot) -- excludes node_exporter/pushgateway, which aren't miner-role workers.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -506,7 +506,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "count(up{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon|xaisen-bot\"} == 1)",
+          "expr": "count(up{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon|xaisen-bot\"} == 1)",
           "refId": "A"
         }
       ],
@@ -542,7 +542,7 @@
       "id": 11,
       "type": "stat",
       "title": "Workers per role",
-      "description": "sum(up) by (job) across every fleet worker job -- how many relay/signaling/cp-daemon/validator-daemon/bot instances are currently reachable.",
+      "description": "sum(up) by (job) across every fleet worker job -- how many relay/cp-daemon/validator-daemon/bot instances are currently reachable.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"
@@ -559,7 +559,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(up{job=~\"xaisen|xaisen-signaling|xaisen-cp-daemon|xaisen-validator-daemon|xaisen-bot\"}) by (job)",
+          "expr": "sum(up{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon|xaisen-bot\"}) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
@@ -605,7 +605,7 @@
       "id": 13,
       "type": "logs",
       "title": "Registration / voting errors (fleet-wide)",
-      "description": "Every registering/voting role's stdout/stderr via Docker's loki logging driver (see deploy_one_service.yml's log_driver/log_options), filtered to error-looking lines and known on-chain registration/voting error codes (E_ALREADY_REGISTERED, E_NOT_RELAY, E_NOT_SIGNALING) -- shows WHY onboarding/voting is stuck, not just that a count isn't moving.",
+      "description": "Every registering/voting role's stdout/stderr via Docker's loki logging driver (see deploy_one_service.yml's log_driver/log_options), filtered to error-looking lines and known on-chain registration/voting error codes (E_ALREADY_REGISTERED, E_NOT_RELAY) -- shows WHY onboarding/voting is stuck, not just that a count isn't moving.",
       "datasource": {
         "type": "loki",
         "uid": "Loki"
@@ -622,7 +622,7 @@
             "type": "loki",
             "uid": "Loki"
           },
-          "expr": "{service=~\"relay|signaling|cp-daemon|validator-daemon\"} |~ \"(?i)error|fail|exception|E_ALREADY_REGISTERED|E_NOT_RELAY|E_NOT_SIGNALING\"",
+          "expr": "{service=~\"relay|cp-daemon|validator-daemon\"} |~ \"(?i)error|fail|exception|E_ALREADY_REGISTERED|E_NOT_RELAY\"",
           "refId": "A"
         }
       ],

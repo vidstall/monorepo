@@ -27,7 +27,6 @@ PROVIDER_COLORS = {
 
 SERVICE_ICONS = {
     "relay": ft.Icons.SWAP_HORIZ,
-    "signaling": ft.Icons.CELL_TOWER,
     "cp-daemon": ft.Icons.SETTINGS_ETHERNET,
     "validator-daemon": ft.Icons.VERIFIED_USER,
     "bot": ft.Icons.SMART_TOY,

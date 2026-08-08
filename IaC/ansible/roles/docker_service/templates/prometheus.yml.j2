@@ -29,20 +29,6 @@ scrape_configs:
 {% endif %}
 {% endfor %}
 {% endfor %}
-  - job_name: xaisen-signaling
-    scheme: https
-    metrics_path: /metrics
-    authorization:
-      credentials: "{{ xaisen_metrics_auth_token }}"
-    static_configs:
-      - targets:
-{% for host in groups['xaisen'] %}
-{% for svc in hostvars[host].get('xaisen_services', []) %}
-{% if svc.service == 'signaling' %}
-          - "{{ svc.worker_key | default(svc.service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"
-{% endif %}
-{% endfor %}
-{% endfor %}
   - job_name: xaisen-cp-daemon
     scheme: https
     metrics_path: /metrics

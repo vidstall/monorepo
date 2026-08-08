@@ -34,20 +34,6 @@ tag = ""
 
 [[workers]]
 host = "001"
-service = "signaling"
-provider = "oci"
-size = "VM.Standard.A1.Flex"
-worker_index = 1
-
-[[workers]]
-host = "001"
-service = "signaling"
-provider = "oci"
-size = "VM.Standard.A1.Flex"
-worker_index = 2
-
-[[workers]]
-host = "001"
 service = "relay"
 provider = "oci"
 size = "VM.Standard.A1.Flex"

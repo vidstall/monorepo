@@ -142,7 +142,7 @@ def _build_image_prefetch_script(
 
 def _prefetch_app_images(address: str, key_path: Path, ssh_user: str) -> dict[str, str]:
     """Best-effort pre-pull of every currently-deployed app image (relay,
-    signaling, cp-daemon, ...) onto the bake VM before it's snapshotted --
+    cp-daemon, ...) onto the bake VM before it's snapshotted --
     lets a scenario apply that provisions brand-new VMs from this golden
     image skip their first `docker pull` entirely (the existing digest-skip
     optimization in deploy_one_service.yml only helps a VM that's pulled an

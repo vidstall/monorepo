@@ -23,11 +23,11 @@ object = "frontend"
 provider = "alibaba"
 
 # --- Topology hosts (6 of 10, randomly selected [seed=42] -- mixed across both providers): 001=digitalocean, 002=digitalocean, 005=akamai, 006=akamai, 007=akamai, 010=akamai ---
-# Each runs 3x validator-daemon, 2x relay, 3x cp-daemon, 2x signaling = 10
-# workers/instance x 6 instances = 60 workers.
+# Each runs 3x validator-daemon, 2x relay, 3x cp-daemon = 8
+# workers/instance x 6 instances = 48 workers.
 #
 # Hosts 001/002 (digitalocean) and 005 (akamai) are the STATIC baseline -- never
-# paused below -- so the room always has a live validator/relay/cp/signaling set
+# paused below -- so the room always has a live validator/relay/cp set
 # even while 006/007/010 are being knocked down. Worker pause/restart (used by
 # the worker.leave/worker.join churn below) is only supported for --provider
 # alibaba/akamai (see cli/infra/control.py) -- 001/002 (digitalocean) couldn't be
@@ -90,20 +90,6 @@ provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 3
 
-[[workers]]
-host = "001"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "001"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 2
-
 # host 002 (digitalocean) -- static baseline
 [[workers]]
 host = "002"
@@ -160,20 +146,6 @@ service = "cp-daemon"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 3
-
-[[workers]]
-host = "002"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "002"
-service = "signaling"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 2
 
 # host 005 (akamai) -- static baseline
 [[workers]]
@@ -232,20 +204,6 @@ provider = "akamai"
 size = "g6-standard-4"
 worker_index = 3
 
-[[workers]]
-host = "005"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-[[workers]]
-host = "005"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 2
-
 # host 006 (akamai) -- CHURNED below
 [[workers]]
 host = "006"
@@ -302,20 +260,6 @@ service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 3
-
-[[workers]]
-host = "006"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-[[workers]]
-host = "006"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 2
 
 # host 007 (akamai) -- CHURNED below
 [[workers]]
@@ -374,20 +318,6 @@ provider = "akamai"
 size = "g6-standard-4"
 worker_index = 3
 
-[[workers]]
-host = "007"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-[[workers]]
-host = "007"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 2
-
 # host 010 (akamai) -- CHURNED below
 [[workers]]
 host = "010"
@@ -444,20 +374,6 @@ service = "cp-daemon"
 provider = "akamai"
 size = "g6-standard-4"
 worker_index = 3
-
-[[workers]]
-host = "010"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 1
-
-[[workers]]
-host = "010"
-service = "signaling"
-provider = "akamai"
-size = "g6-standard-4"
-worker_index = 2
 
 # --- Bot-hosting instances (4 of 10, the remainder not used for topology): 003=digitalocean, 004=akamai, 008=akamai, 009=akamai ---
 # Bot control server is a singleton per host (its HTTP control API is reached
@@ -722,22 +638,6 @@ provider = "akamai"
 worker_index = 3
 
 [[actions]]
-type = "worker.leave"
-timestamp = "+344s"
-host = "006"
-service = "signaling"
-provider = "akamai"
-worker_index = 1
-
-[[actions]]
-type = "worker.leave"
-timestamp = "+347s"
-host = "006"
-service = "signaling"
-provider = "akamai"
-worker_index = 2
-
-[[actions]]
 type = "bot.delete_room"
 timestamp = "+360s"
 host = "003"
@@ -818,22 +718,6 @@ host = "007"
 service = "cp-daemon"
 provider = "akamai"
 worker_index = 3
-
-[[actions]]
-type = "worker.leave"
-timestamp = "+424s"
-host = "007"
-service = "signaling"
-provider = "akamai"
-worker_index = 1
-
-[[actions]]
-type = "worker.leave"
-timestamp = "+427s"
-host = "007"
-service = "signaling"
-provider = "akamai"
-worker_index = 2
 
 [[actions]]
 type = "bot.delete_room"
@@ -918,22 +802,6 @@ provider = "akamai"
 worker_index = 3
 
 [[actions]]
-type = "worker.leave"
-timestamp = "+504s"
-host = "010"
-service = "signaling"
-provider = "akamai"
-worker_index = 1
-
-[[actions]]
-type = "worker.leave"
-timestamp = "+507s"
-host = "010"
-service = "signaling"
-provider = "akamai"
-worker_index = 2
-
-[[actions]]
 type = "worker.join"
 timestamp = "+560s"
 service = "validator-daemon"
@@ -989,23 +857,11 @@ service = "cp-daemon"
 provider = "akamai"
 
 [[actions]]
-type = "worker.join"
-timestamp = "+584s"
-service = "signaling"
-provider = "akamai"
-
-[[actions]]
 type = "bot.join_room"
 room_id = "$room1.roomId"
 timestamp = "+585s"
 host = "003"
 media_mode = "both"
-
-[[actions]]
-type = "worker.join"
-timestamp = "+587s"
-service = "signaling"
-provider = "akamai"
 
 [[actions]]
 type = "bot.join_room"
@@ -1077,18 +933,6 @@ service = "cp-daemon"
 provider = "akamai"
 
 [[actions]]
-type = "worker.join"
-timestamp = "+664s"
-service = "signaling"
-provider = "akamai"
-
-[[actions]]
-type = "worker.join"
-timestamp = "+667s"
-service = "signaling"
-provider = "akamai"
-
-[[actions]]
 type = "bot.join_room"
 room_id = "$room1.roomId"
 timestamp = "+685s"
@@ -1141,18 +985,6 @@ provider = "akamai"
 type = "worker.join"
 timestamp = "+741s"
 service = "cp-daemon"
-provider = "akamai"
-
-[[actions]]
-type = "worker.join"
-timestamp = "+744s"
-service = "signaling"
-provider = "akamai"
-
-[[actions]]
-type = "worker.join"
-timestamp = "+747s"
-service = "signaling"
 provider = "akamai"
 
 [[actions]]

@@ -21,7 +21,6 @@ SHARED_OBJECTS = [
     ("ROOM_HEALTH_ALERT_BOX_ID", "RoomHealthAlertBox", ft.Icons.MONITOR_HEART),
     ("CP_REGISTRY_ID", "ControlPlaneRegistry", ft.Icons.SETTINGS_ETHERNET),
     ("RELAY_REGISTRY_ID", "RelayRegistry", ft.Icons.SWAP_HORIZ),
-    ("SIGNALING_REGISTRY_ID", "SignalingRegistry", ft.Icons.CELL_TOWER),
     ("VALIDATOR_REGISTRY_ID", "ValidatorRegistry", ft.Icons.VERIFIED_USER),
     ("USER_REGISTRY_ID", "UserRegistry", ft.Icons.PEOPLE_OUTLINE),
     ("ROOM_MANAGER_ID", "RoomManager", ft.Icons.MEETING_ROOM),
@@ -30,7 +29,6 @@ SHARED_OBJECTS = [
 
 ROLE_COLORS = {
     "relay": ft.Colors.INDIGO,
-    "signaling": ft.Colors.TEAL,
     "cp-daemon": ft.Colors.DEEP_ORANGE,
     "validator-daemon": ft.Colors.PURPLE,
     "bot": ft.Colors.PINK_600,

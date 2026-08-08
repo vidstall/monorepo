@@ -147,7 +147,6 @@ def test_upgrade(
 REGISTRY_CREATE_SPECS: list[tuple[str, str, str, str]] = [
     ("control_plane_registry", "create", "ControlPlaneRegistry", "CP_REGISTRY_ID"),
     ("relay_registry", "create", "RelayRegistry", "RELAY_REGISTRY_ID"),
-    ("signaling_registry", "create", "SignalingRegistry", "SIGNALING_REGISTRY_ID"),
     ("validator_registry", "create", "ValidatorRegistry", "VALIDATOR_REGISTRY_ID"),
     ("user_registry", "create", "UserRegistry", "USER_REGISTRY_ID"),
     ("room_manager", "create", "RoomManager", "ROOM_MANAGER_ID"),
@@ -156,8 +155,8 @@ REGISTRY_CREATE_SPECS: list[tuple[str, str, str, str]] = [
 
 
 def create_registries(package_id: str, admin_cap_id: str, gas_budget: str | None) -> dict[str, str] | None:
-    """Create the 7 AdminCap-gated shared registries a fresh deployment
-    needs (control-plane/relay/signaling/validator/user registries, the
+    """Create the 6 AdminCap-gated shared registries a fresh deployment
+    needs (control-plane/relay/validator/user registries, the
     room manager, and the CP-quorum config). Returns env-var-key -> object-id,
     or None (with an error already printed) if any single call fails --
     fail-fast, since a partially-bootstrapped network isn't useful."""

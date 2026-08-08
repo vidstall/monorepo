@@ -1,5 +1,5 @@
 # Relay-failover test: minimal topology (2 relay, 4 validator-daemon,
-# 1 cp-daemon, 1 signaling, 1 bot) on a single DigitalOcean host. A bot
+# 1 cp-daemon, 1 bot) on a single DigitalOcean host. A bot
 # creates a room and streams for 5 minutes, then one of the two relays is
 # stopped, then 5 minutes after that the bot's room is torn down.
 #
@@ -78,13 +78,6 @@ worker_index = 4
 [[workers]]
 host = "001"
 service = "cp-daemon"
-provider = "digitalocean"
-size = "s-4vcpu-8gb"
-worker_index = 1
-
-[[workers]]
-host = "001"
-service = "signaling"
 provider = "digitalocean"
 size = "s-4vcpu-8gb"
 worker_index = 1

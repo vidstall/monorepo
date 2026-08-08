@@ -138,7 +138,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "Active sessions / rooms",
-      "description": "dvconf_active_sessions (relay/signaling/bot concurrency gauge) and dvconf_rooms_active (signaling) -- packages/shared/src/metrics-prom.ts, apps/signaling/src/index.ts.",
+      "description": "dvconf_active_sessions (relay/bot concurrency gauge) and dvconf_rooms_active (cp-daemon) -- packages/shared/src/metrics-prom.ts, apps/cp-daemon/src/room-expiry-sweep.ts.",
       "datasource": {
         "type": "prometheus",
         "uid": "Prometheus"

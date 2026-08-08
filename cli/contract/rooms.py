@@ -46,17 +46,6 @@ def _devinspect_view(package_id: str, room_manager_id: str, function: str) -> An
     return values[0] if values else None
 
 
-def _unwrap_option(value: Any) -> Any:
-    """Sui devInspect decodes a Move `Option<T>` as `{"vec": [...]}` (an
-    empty or single-element vector, mirroring Option's actual on-chain BCS
-    representation) rather than a plain nullable value -- unwrap that shape
-    to None/T so callers don't need to know Move's Option encoding."""
-    if isinstance(value, dict) and "vec" in value:
-        vec = value["vec"]
-        return vec[0] if vec else None
-    return value
-
-
 def list_active_rooms(network: str) -> list[dict[str, Any]] | None:
     """Every currently-active (non-closed) room on-chain, via RoomManager's
     get_active_room_ids/get_active_rooms view functions -- both explicitly
@@ -100,7 +89,7 @@ def list_active_rooms(network: str) -> list[dict[str, Any]] | None:
 
 
 def get_room_chain_detail(network: str, room_id: str) -> dict[str, Any] | None:
-    """Per-room on-chain relay/signaling assignment, via RoomManager's
+    """Per-room on-chain relay assignment, via RoomManager's
     get_room_assignment/get_room_status_info view functions -- these are
     keyed by a single room_id, unlike list_active_rooms()'s batch
     get_active_rooms() read. This is the ONLY way to read a specific room's
@@ -126,12 +115,11 @@ def get_room_chain_detail(network: str, room_id: str) -> dict[str, Any] | None:
     if assignment is None or status_info is None:
         return None
 
-    assigned_relays, assigned_signaling = assignment
+    (assigned_relays,) = assignment
     status_value, created_at = status_info
     return {
         "room_id": room_id,
         "status": ROOM_STATUS_NAMES.get(int(status_value or 0), "unknown"),
         "created_at": int(created_at or 0),
         "assigned_relays": assigned_relays or [],
-        "assigned_signaling": _unwrap_option(assigned_signaling),
     }

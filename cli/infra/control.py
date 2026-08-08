@@ -53,7 +53,17 @@ def control(
     # call time is what makes those patches take effect here.
     from .. import infra
 
-    if service not in DOCKER_SERVICES and service not in PINNED_IMAGES and service != BAKE_SERVICE:
+    if (
+        service not in DOCKER_SERVICES
+        and service not in PINNED_IMAGES
+        and service != BAKE_SERVICE
+        # `kill` only tears down what's already deployed (container
+        # name/backend are derived from the worker_key string, not looked
+        # up from DOCKER_SERVICES) -- a service retired from that list
+        # (e.g. the standalone "signaling" node type) must still be
+        # killable, or an old topology entry becomes permanently stuck.
+        and action != "kill"
+    ):
         print(f"Unknown service: {service}", file=sys.stderr)
         return 2
     if provider not in PROVIDERS:

@@ -30,10 +30,9 @@ def _fetch_rooms(env: str) -> list[dict[str, Any]] | None:
     the authoritative on-chain room list.
 
     Uses room_occupancy_counts(), not room_participant_counts() -- the
-    latter is signaling-only and never counts bots (they connect straight
-    to the relay's WS, never touching signaling), which showed as a
-    permanent "0 / N" here even with bots actually in the room. See
-    query.py's room_occupancy_counts() docstring."""
+    latter never counted bots (they connect straight to the relay's WS),
+    which showed as a permanent "0 / N" here even with bots actually in
+    the room. See query.py's room_occupancy_counts() docstring."""
     rooms = contract_cli.list_active_rooms(env)
     if rooms is None:
         return None
@@ -106,7 +105,6 @@ def _relay_controls(extra: dict[str, Any], page: ft.Page) -> list[ft.Control]:
         controls.append(ft.Text(f"Relay assignment unavailable: {identity['error']}", size=12, color=ft.Colors.ERROR))
     else:
         assigned_relays = [str(r) for r in (identity.get("assigned_relays") or [])]
-        assigned_signaling = identity.get("assigned_signaling")
         if assigned_relays:
             controls.append(
                 _room_detail_row(
@@ -116,12 +114,6 @@ def _relay_controls(extra: dict[str, Any], page: ft.Page) -> list[ft.Control]:
             )
         else:
             controls.append(_room_detail_row("Assigned relays", ft.Text("not yet assigned", size=12, color=ft.Colors.OUTLINE)))
-        controls.append(
-            _room_detail_row(
-                "Assigned signaling",
-                copyable_id(str(assigned_signaling), page) if assigned_signaling else ft.Text("-", size=12),
-            )
-        )
 
     if any(v is not None for v in peer_quality.values()):
         controls.append(_room_detail_row("Avg latency", ft.Text(_fmt(peer_quality.get("avg_latency_ms"), " ms"), size=12)))
