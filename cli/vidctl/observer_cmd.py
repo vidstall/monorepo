@@ -182,9 +182,9 @@ def add_observer_parser(subparsers: argparse._SubParsersAction[argparse.Argument
     sync_client_env_parser = actions.add_parser(
         "sync-client-env",
         help=(
-            "Write the registered pushgateway/loki hosts' public URLs and auth tokens into "
-            "services/client/client/.env as VITE_* vars, so the browser can push relay-down-hint "
-            "metrics and log batches directly to the observer stack instead of via a relay."
+            "Write the registered loki host's public URL and auth token into "
+            "services/client/client/.env as VITE_* vars, so the browser can push log "
+            "batches directly to the observer stack instead of via a relay."
         ),
     )
     sync_client_env_parser.set_defaults(handler=lambda args: observer.sync_client_observability_env())
