@@ -55,9 +55,9 @@ apt-get install -y docker.io
 systemctl enable --now docker
 docker --version || true
 
-# Clock sync -- fleet-wide log/metric timestamps (Prometheus/Loki, the
-# Liveness experiment table) are compared across independently-clocked
-# hosts, so every VM cloned from this image needs a real NTP client
+# Clock sync -- fleet-wide log/metric timestamps (Prometheus/Loki) are
+# compared across independently-clocked hosts, so every VM cloned from
+# this image needs a real NTP client
 # running from first boot, not just whatever the base image happens to
 # ship. chrony replaces systemd-timesyncd (stopped first so the two don't
 # fight over clock control); `|| true` since not every base image ships

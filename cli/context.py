@@ -32,7 +32,6 @@ RUNTIME_IMAGES_TOML = RUNTIME_DIR / "images.toml"
 RUNTIME_OBSERVER_TOML = RUNTIME_DIR / "observer.toml"
 RUNTIME_LOCAL_BOTS_TOML = RUNTIME_DIR / "local_bots.toml"
 RUNTIME_LOCAL_BOTS_LOG_DIR = RUNTIME_DIR / "local_bots"
-RUNTIME_WORKER_LIVENESS_TOML = RUNTIME_DIR / "worker_liveness.toml"
 # logs/<provider>/<run-timestamp>/{infra,worker,room,user}/*.json --
 # the live per-entity metrics schema, distinct from LOGS_ROOT (system_log.py's
 # scenario-run event trail). Promoted here because multiple

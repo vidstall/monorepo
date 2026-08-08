@@ -9,7 +9,6 @@ from .lifecycle import clean, destroy, restart, start, stop
 from .query import discover_active_peers, query, room_occupancy_counts, room_participant_counts
 from .secrets import grafana_admin_password, loki_auth_token, tempo_auth_token
 from .status import status
-from .worker_liveness import correlate_once as export_worker_liveness, watch_worker_liveness
 
 __all__ = [
     "DEFAULT_HOST_PORT",
@@ -38,6 +37,4 @@ __all__ = [
     "room_participant_counts",
     "room_occupancy_counts",
     "discover_active_peers",
-    "export_worker_liveness",
-    "watch_worker_liveness",
 ]
