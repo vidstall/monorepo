@@ -179,12 +179,11 @@ def add_observer_parser(subparsers: argparse._SubParsersAction[argparse.Argument
         handler=lambda args: observer.export_contract_state(args.env, args.host, args.watch, args.interval)
     )
 
-    sync_client_env_parser = actions.add_parser(
-        "sync-client-env",
-        help=(
-            "Write the registered loki host's public URL and auth token into "
-            "services/client/client/.env as VITE_* vars, so the browser can push log "
-            "batches directly to the observer stack instead of via a relay."
-        ),
-    )
-    sync_client_env_parser.set_defaults(handler=lambda args: observer.sync_client_observability_env())
+    # No standalone "sync-client-env" subcommand -- syncing the browser-facing
+    # VITE_LOKI_URL/VITE_PUSHGATEWAY_URL vars into services/client/client/.env
+    # is instead run automatically, best-effort, from `scenario apply`
+    # (cli/scenario/apply.py) and from a frontend `object publish`
+    # (cli/object.py), which are the only two commands this repo's operator
+    # workflow ever uses to touch the frontend. observer.sync_client_
+    # observability_env() itself still exists (cli/observer/client_env.py)
+    # for those two call sites to import -- it's just not exposed here.

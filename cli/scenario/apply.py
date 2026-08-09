@@ -107,6 +107,38 @@ def _push_contract_state(env: str) -> None:
         print(f"Warning: contract-state export failed for {name!r} (exit {code}).", file=sys.stderr)
 
 
+def _sync_client_observability_env() -> None:
+    """Called once the observer stack has been refreshed + the contract-state
+    push has landed (see apply()) -- writes the registered loki/pushgateway
+    hosts' public URLs and auth tokens into services/client/client/.env, so a
+    scenario apply is enough on its own to make the browser's direct-to-
+    observer log/metrics push (lib/log.ts, lib/metrics-push.ts) work -- this
+    isn't exposed as its own subcommand (see client_env.py's module
+    docstring); apply() and object.py's frontend publish are the only call
+    sites. Best-effort for the same reason as _refresh_observer_stack() above: no observer host
+    registered is the common case (this is a dashboard/testbed nicety, not a
+    functional requirement of the scenario itself), and sync_client_
+    observability_env() already no-ops per-endpoint when a host isn't
+    registered -- this wrapper only needs to swallow the "not registered at
+    all" / unexpected-exception cases so apply() itself never fails on it."""
+    from .. import observer
+
+    try:
+        hosts = observer.read_hosts()
+    except Exception as exc:
+        print(f"Warning: could not read observer hosts, skipping client env sync: {exc}", file=sys.stderr)
+        return
+    if not hosts:
+        return
+    try:
+        code = observer.sync_client_observability_env()
+    except Exception as exc:
+        print(f"Warning: client env sync failed: {exc}", file=sys.stderr)
+        return
+    if code != 0:
+        print(f"Warning: client env sync failed (exit {code}).", file=sys.stderr)
+
+
 def _clean_observer_stack() -> None:
     """Called once the fleet is fully torn down (see destroy()) -- wipes
     Prometheus/Tempo's stored history via `vidctl observer clean` per
@@ -398,6 +430,7 @@ def apply(path_str: str | None, yes: bool, rebake: bool = False, force_contract:
     with _timed(timings, "observer refresh"):
         _refresh_observer_stack()
         _push_contract_state(env)
+        _sync_client_observability_env()
     print(
         f"Scenario '{scenario['name']}' applied: {len(to_kill)} removed, {len(to_start)} reconciled, "
         f"{deferred_count} awaiting worker.join."

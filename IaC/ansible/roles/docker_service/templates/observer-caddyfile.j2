@@ -72,13 +72,31 @@ grafana.{{ ansible_host | replace('.', '-') }}.sslip.io {
    (scripts/eval/measure-onchain-cost.ts, measure-chain-latency.ts,
    run-scale-ramp.ts) PUT/POST their one-shot results here. Prometheus
    itself never uses this public route -- it scrapes xaisen-pushgateway
-   directly over the internal xaisen-net bridge (see prometheus.yml.j2). #}
+   directly over the internal xaisen-net bridge (see prometheus.yml.j2).
+
+   Also the landing zone for the browser client's testbed-only direct
+   call-quality push (services/client/client/src/lib/metrics-push.ts),
+   PUT straight from the page's own origin -- unlike the eval-harness
+   scripts above, a browser PUT with a custom Authorization header
+   triggers a CORS preflight, so this block needs the SAME
+   preflight-bypass + response-header treatment loki's push API gets
+   below (bearer, not basic, since fetch() can set a real Authorization
+   header, unlike Docker's log driver). #}
 {% if xaisen_observer_pushgateway_service | length > 0 %}
 pushgateway.{{ ansible_host | replace('.', '-') }}.sslip.io {
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, PUT, POST, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Authorization, Content-Type"
+    }
+    @cors_preflight {
+        method OPTIONS
+    }
     @authorized {
         header Authorization "Bearer {{ xaisen_metrics_auth_token }}"
     }
     route {
+        respond @cors_preflight 204
         reverse_proxy @authorized xaisen-pushgateway:9091
         respond 401
     }

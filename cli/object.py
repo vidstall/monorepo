@@ -17,6 +17,36 @@ OBJECT_TYPES = {"frontend": ROOT / "services" / "client" / "client"}
 PROVIDERS = infra.PROVIDERS
 
 
+def _sync_client_observability_env_before_build() -> None:
+    """Best-effort browser-env sync (observer.sync_client_observability_env),
+    run right before the frontend's `pnpm build` (build_static_artifacts) so
+    the just-built bundle bakes in the CURRENT observer host's
+    VITE_LOKI_URL/VITE_PUSHGATEWAY_URL/etc rather than whatever was left over
+    in .env from the last publish or scenario apply (see lib/log.ts,
+    lib/metrics-push.ts). Same best-effort contract as
+    scenario/apply.py's _sync_client_observability_env (and
+    _refresh_observer_stack before it): a frontend publish must succeed
+    exactly as before when no observer host is registered, or the sync
+    otherwise fails -- this is a testbed-observability nicety, not a
+    functional requirement of the frontend publish itself."""
+    from . import observer
+
+    try:
+        hosts = observer.read_hosts()
+    except Exception as exc:
+        print(f"Warning: could not read observer hosts, skipping client env sync: {exc}", file=sys.stderr)
+        return
+    if not hosts:
+        return
+    try:
+        code = observer.sync_client_observability_env()
+    except Exception as exc:
+        print(f"Warning: client env sync failed: {exc}", file=sys.stderr)
+        return
+    if code != 0:
+        print(f"Warning: client env sync failed (exit {code}).", file=sys.stderr)
+
+
 def publish(name: str, object_type: str, provider: str) -> int:
     error = validate(object_type, provider)
     if error:
@@ -45,6 +75,9 @@ def publish(name: str, object_type: str, provider: str) -> int:
     obj["last_updated"] = infra.timestamp()
     set_object_storage_defaults(obj, env_name)
     infra.write_topology(topology)
+
+    if object_type == "frontend":
+        _sync_client_observability_env_before_build()
 
     code = build_static_artifacts(object_type)
     if code == 0:

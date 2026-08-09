@@ -105,6 +105,13 @@ class ScenarioTestCase(unittest.TestCase):
             # actually called, and tests that DO register one shouldn't pay
             # for a real wallet-pool/on-chain read against this fake env.
             patch.object(observer, "export_contract_state", return_value=0),
+            # Best-effort browser-env sync (see apply()'s
+            # _sync_client_observability_env()) -- stubbed for every test in
+            # this file by default, same rationale as the export_contract_state
+            # stub above: no registered host means it's never actually called,
+            # and tests that DO register one shouldn't write real secrets/
+            # services/client/client/.env files as a side effect.
+            patch.object(observer, "sync_client_observability_env", return_value=0),
             # Isolated from the real repo's logs/ dir so `scenario.run()`
             # tests never write files outside this test's tempdir; the
             # snapshot itself is stubbed too since capture_system_snapshot()
