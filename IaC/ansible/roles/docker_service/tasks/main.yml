@@ -66,3 +66,9 @@
 # colocated service, not per-service sidecars. See reverse_proxy.yml.
 - name: Configure and run the shared reverse-proxy containers
   ansible.builtin.import_tasks: reverse_proxy.yml
+
+# Shared coturn TURN/STUN server, once per host -- see coturn.yml's header
+# comment for why this is host-level (not per-relay-replica) and why
+# network_mode: host is required.
+- name: Configure and run the shared coturn TURN server
+  ansible.builtin.import_tasks: coturn.yml

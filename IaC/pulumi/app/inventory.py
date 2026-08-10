@@ -26,6 +26,10 @@ def topology_host_entry(
         {
             "xaisen_service": instance.get("service", ""),
             "xaisen_provider": instance.get("provider", ""),
+            # Stable synthetic host id ("001", not the IP) -- see vm_host_entry's
+            # matching addition below for why path-based Caddy routing needs this
+            # as its own fact instead of string-slicing worker_key.
+            "xaisen_host": instance.get("host", ""),
             "xaisen_env": instance.get("env", topology.get("active_env", "devnet")),
             "xaisen_contract_env": instance.get(
                 "contract_env", topology.get("contract_env", "")
@@ -92,6 +96,10 @@ def vm_host_entry(
             "xaisen_service": instance.get("service", ""),
             "xaisen_services": services,
             "xaisen_provider": instance.get("provider", ""),
+            # Stable synthetic host id ("001", not the IP) -- lets ansible
+            # compute "<provider>-<host>" (the Caddy path-routing instance-name
+            # segment) without string-slicing worker_key.
+            "xaisen_host": instance.get("host", ""),
             "xaisen_env": instance.get(
                 "env", topology.get("active_env", "devnet")
             ),

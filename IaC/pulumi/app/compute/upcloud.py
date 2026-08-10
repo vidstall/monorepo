@@ -60,6 +60,22 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                     source_address_cidr="0.0.0.0/0",
                 )
             )
+        # coturn (docker_service/tasks/coturn.yml), one shared instance per
+        # host: 3478 for STUN/TURN control (both transports), plus the
+        # relayed-media port range (--min-port/--max-port in coturn.yml,
+        # unoffset since it's one instance per host, not per relay replica).
+        for protocol, start, end in (("tcp", 3478, 3478), ("udp", 3478, 3478), ("udp", 49160, 49200)):
+            rules.append(
+                upcloud.FirewallRulesetRuleArgs(
+                    action="accept",
+                    direction="in",
+                    family="IPv4",
+                    protocol=protocol,
+                    destination_port_start=start,
+                    destination_port_end=end,
+                    source_address_cidr="0.0.0.0/0",
+                )
+            )
     if any(svc.get("service") in ("relay", "bot", "cp-daemon", "validator-daemon") for svc in services):
         # Each relay/signaling/bot instance, plus cp-daemon/validator-daemon (whose
         # only surface is a metrics endpoint), gets a Caddy TLS sidecar (see

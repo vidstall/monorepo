@@ -124,18 +124,21 @@
 # without this, both apps default to `ws://127.0.0.1:<port>` (see
 # apps/relay/src/index.ts / apps/signaling/src/index.ts), which is useless
 # to any client since it's the visitor's own loopback address, not the
-# droplet's. sslip.io resolves "<anything>.<a>-<b>-<c>-<d>.sslip.io" to
-# a.b.c.d with no real DNS registration needed -- the worker_key prefix
-# gives each colocated service on this host its OWN hostname (and therefore
-# its own Let's Encrypt cert + Caddy site block, see reverse_proxy.yml's
-# shared xaisen-caddy) sharing one droplet IP, since relay and signaling both
-# publicly listen on the same host and can't each own ports 80/443.
+# droplet's. sslip.io resolves "<a>-<b>-<c>-<d>.sslip.io" to a.b.c.d with no
+# real DNS registration needed -- every colocated service on this host shares
+# that ONE hostname (and therefore ONE Let's Encrypt cert + Caddy site block,
+# see reverse_proxy.yml's shared xaisen-caddy) and is disambiguated by a URL
+# PATH prefix instead (`/<provider>-<host>/<service>-<index>/...`, see
+# Caddyfile.j2's handle_path blocks) -- N separate per-worker subdomains used
+# to mean N separate Let's Encrypt certs per host, which burned that cert's
+# "5 duplicate certs per exact identifier set per 168h" rate limit N times as
+# fast on every redeploy of a colocated host.
 # Gated to relay/signaling only, per xaisen_public_endpoint_env_names below --
 # no other service registers a public endpoint on-chain.
 - name: Determine this service's public sslip.io endpoint env var
   ansible.builtin.set_fact:
     xaisen_public_endpoint_env_name: "{{ xaisen_public_endpoint_env_names.get(xaisen_service_item.service) }}"
-    xaisen_sslip_host: "{{ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) }}.{{ ansible_host | replace('.', '-') }}.sslip.io"
+    xaisen_sslip_host: "{{ ansible_host | replace('.', '-') }}.sslip.io/{{ xaisen_provider }}-{{ xaisen_host }}/{{ xaisen_service_item.service }}-{{ xaisen_service_item.index }}"
   vars:
     xaisen_public_endpoint_env_names:
       relay: RELAY_ENDPOINT_URL

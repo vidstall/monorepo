@@ -1,0 +1,34 @@
+---
+# Included once per xaisen_services entry (only meaningful for relay --
+# see the `when:` below), right after worker_env.yml -- computes
+# xaisen_cp_daemon_rpc_url so run_container.yml can inject it as relay's
+# CP_DAEMON_RPC_URL. Mirrors prometheus.yml.j2's
+# `{% for host in groups['xaisen'] %}{% for svc in
+# hostvars[host].get('xaisen_services', []) %}` cross-host scan idiom --
+# reused here as a runtime Ansible fact instead of a Jinja template loop,
+# since this needs to become a container env var, not a scrape-config line.
+#
+# First cp-daemon found anywhere in the fleet wins (no multi-CP selection
+# logic here -- out of scope for this MVP). If the scenario has NO
+# cp-daemon at all, xaisen_cp_daemon_rpc_url stays '' and
+# run_container.yml's ENABLE_TURN_DELIVERY combine() no-ops -- relay
+# degrades to today's no-TURN behavior, not a hard failure (a scenario with
+# only relays and no cp-daemon is a legitimate, if TURN-less, topology).
+#
+# URL shape matches worker_env.yml's xaisen_sslip_host exactly (same
+# <dashed-ip>.sslip.io/<provider>-<host>/<service>-<index> convention),
+# just with https:// instead of wss:// -- turn-fetcher.ts appends
+# /turn/issue itself, so this must be the BASE url with no path suffix.
+- name: Determine this scenario's cp-daemon TURN RPC base URL (first match wins)
+  ansible.builtin.set_fact:
+    xaisen_cp_daemon_rpc_url: >-
+      {%- set ns = namespace(url='') -%}
+      {%- for host in groups['xaisen'] -%}
+        {%- for svc in hostvars[host].get('xaisen_services', []) -%}
+          {%- if svc.service == 'cp-daemon' and not ns.url -%}
+            {%- set ns.url = 'https://' ~ (hostvars[host].ansible_host | replace('.', '-')) ~ '.sslip.io/' ~ hostvars[host].xaisen_provider ~ '-' ~ hostvars[host].xaisen_host ~ '/' ~ svc.service ~ '-' ~ svc.index -%}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {{ ns.url }}
+  when: xaisen_service_item.service == 'relay'

@@ -191,6 +191,33 @@ def find_cap_id(address: str, env_name: str) -> tuple[str, str] | None:
     return None
 
 
+def sui_address_from_private_key(private_key_bech32: str) -> str:
+    """Derive a Sui address from an ed25519 bech32 private key
+    (`suiprivkey1...`) without importing it into the local keystore.
+    `sui keytool convert` only reformats the key (no keystore side effect)
+    and its `hexWithoutFlag` output is the raw 32-byte private seed; the
+    address is then the same blake2b(flag(0x00) || pubkey) construction
+    `sui keytool generate` uses internally. Used to auto-faucet a bot's
+    own .env-configured wallet without requiring the operator to import it
+    into their sui keystore first."""
+    import hashlib
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    converted = subprocess.run(
+        ["sui", "keytool", "convert", private_key_bech32, "--json"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    seed = bytes.fromhex(json.loads(converted.stdout)["hexWithoutFlag"])
+    secret_key = Ed25519PrivateKey.from_private_bytes(seed)
+    public_key = secret_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    digest = hashlib.blake2b(bytes([0x00]) + public_key, digest_size=32).hexdigest()
+    return f"0x{digest}"
+
+
 def generate_sui_keypair() -> tuple[str, str]:
     with tempfile.TemporaryDirectory() as tmp:
         generated = subprocess.run(

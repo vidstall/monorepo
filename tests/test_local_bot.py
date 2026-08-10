@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cli import bot_client, context, local_bot
+from cli.wallet import chain_ops
 
 
 class PortAllocationTests(unittest.TestCase):
@@ -151,6 +152,53 @@ class StartTests(unittest.TestCase):
         sessions = local_bot.read_sessions()
         self.assertEqual(sessions[1].pid, 4242)
         self.assertEqual(sessions[1].room_id, "")
+
+
+class EnsureGasFundedTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.env = {"PRIVATE_KEY": "suiprivkey1x", "SUI_NETWORK": "devnet"}
+
+    def test_skips_when_network_has_no_faucet(self) -> None:
+        env = {"PRIVATE_KEY": "suiprivkey1x", "SUI_NETWORK": "mainnet"}
+        with patch.object(chain_ops, "sui_address_from_private_key") as derive:
+            local_bot._ensure_gas_funded(env)
+        derive.assert_not_called()
+
+    def test_skips_when_no_private_key_configured(self) -> None:
+        env = {"PRIVATE_KEY": "", "SUI_NETWORK": "devnet"}
+        with patch.object(chain_ops, "sui_address_from_private_key") as derive:
+            local_bot._ensure_gas_funded(env)
+        derive.assert_not_called()
+
+    def test_skips_faucet_when_balance_already_above_threshold(self) -> None:
+        with (
+            patch.object(chain_ops, "sui_address_from_private_key", return_value="0xabc"),
+            patch.object(chain_ops, "current_balance_mist", return_value=local_bot.LOCAL_BOT_MIN_GAS_MIST),
+            patch.object(context, "run") as run,
+        ):
+            with contextlib.redirect_stdout(io.StringIO()):
+                local_bot._ensure_gas_funded(self.env)
+        run.assert_not_called()
+
+    def test_requests_faucet_when_balance_below_threshold(self) -> None:
+        with (
+            patch.object(chain_ops, "sui_address_from_private_key", return_value="0xabc"),
+            patch.object(chain_ops, "current_balance_mist", return_value=0),
+            patch("cli.contract.ensure_active_sui_env", return_value=0),
+            patch.object(context, "run", return_value=0) as run,
+        ):
+            with contextlib.redirect_stdout(io.StringIO()):
+                local_bot._ensure_gas_funded(self.env)
+        run.assert_called_once_with(["sui", "client", "faucet", "--address", "0xabc"])
+
+    def test_balance_check_failure_is_non_fatal(self) -> None:
+        with (
+            patch.object(chain_ops, "sui_address_from_private_key", side_effect=subprocess.CalledProcessError(1, "sui")),
+            patch.object(context, "run") as run,
+        ):
+            with contextlib.redirect_stdout(io.StringIO()):
+                local_bot._ensure_gas_funded(self.env)  # must not raise
+        run.assert_not_called()
 
 
 class RefreshTests(unittest.TestCase):
@@ -384,6 +432,60 @@ class StopAllTests(unittest.TestCase):
                 code = local_bot.stop_all()
         self.assertEqual(code, 0)
         self.assertIn("No local bot sessions", out.getvalue())
+
+
+class LogTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.toml_path = Path(self.temp.name) / "local_bots.toml"
+        self.patch = patch.object(context, "RUNTIME_LOCAL_BOTS_TOML", self.toml_path)
+        self.patch.start()
+        self.log_path = Path(self.temp.name) / "1.log"
+
+    def tearDown(self) -> None:
+        self.patch.stop()
+        self.temp.cleanup()
+
+    def _write_session(self) -> None:
+        local_bot._write_sessions(
+            {1: local_bot.LocalBotSession(1, 4242, local_bot.BASE_PORT, "bot-1", "0xroom", "url", "t", str(self.log_path))}
+        )
+
+    def test_unknown_id_errors(self) -> None:
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = local_bot.log(99)
+        self.assertEqual(code, 1)
+
+    def test_missing_log_file_errors(self) -> None:
+        self._write_session()
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = local_bot.log(1)
+        self.assertEqual(code, 1)
+        self.assertIn("no log file found", out.getvalue())
+
+    def test_prints_trailing_lines_in_order(self) -> None:
+        self._write_session()
+        self.log_path.write_text("\n".join(f"line{i}" for i in range(1, 21)) + "\n", encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = local_bot.log(1, lines=5)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue().splitlines(), ["line16", "line17", "line18", "line19", "line20"])
+
+    def test_lines_exceeding_file_length_returns_whole_file(self) -> None:
+        self._write_session()
+        self.log_path.write_text("only-one-line\n", encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = local_bot.log(1, lines=100)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue().splitlines(), ["only-one-line"])
+
+    def test_follow_shells_out_to_tail_f(self) -> None:
+        self._write_session()
+        self.log_path.write_text("line1\n", encoding="utf-8")
+        with patch.object(subprocess, "call", return_value=0) as call:
+            code = local_bot.log(1, lines=50, follow=True)
+        self.assertEqual(code, 0)
+        call.assert_called_once_with(["tail", "-n", "50", "-f", str(self.log_path)])
 
 
 if __name__ == "__main__":

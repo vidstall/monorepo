@@ -2,15 +2,23 @@
 and show the Docker state of one worker's container: ps/inspect summary,
 a resource snapshot, and recent logs.
 
-Takes the same public hostname a browser/relay client would use (e.g.
-`akamai-003-relay-1.96-126-106-95.sslip.io`, built by
-worker_env.yml/Caddyfile.j2 as `<worker_key>.<ip-with-dashes>.sslip.io`) so
-an operator can paste a URL straight out of Grafana/logs without having to
-separately know the host id or SSH details. `<worker_key>` is
-`<provider>-<host>-<service>-<index>` (see topology.py's worker_identifier(),
-the one-directional builder this module's parse_worker_hostname() reverses),
-and the container it maps to is always named `xaisen-<worker_key>` (see
-run_container.yml).
+Takes the same public identifier a browser/relay client would use, in either
+of two shapes (so an operator can paste a URL straight out of Grafana/logs
+without having to separately know the host id or SSH details):
+
+  - Path-based (current scheme, worker_env.yml's xaisen_sslip_host /
+    Caddyfile.j2): `<ip-with-dashes>.sslip.io/<provider>-<host>/<service>-<index>`,
+    e.g. `45-79-134-247.sslip.io/akamai-004/relay-1`. The leading
+    `<ip-with-dashes>.sslip.io` segment is accepted but not required --
+    `akamai-004/relay-1` alone also parses.
+  - Subdomain-based (legacy scheme, pre-path-routing): a bare
+    `<worker_key>` or `<worker_key>.<ip-with-dashes>.sslip.io`, e.g.
+    `akamai-003-relay-1.96-126-106-95.sslip.io`.
+
+`<worker_key>` is `<provider>-<host>-<service>-<index>` (see topology.py's
+worker_identifier(), the one-directional builder this module's
+parse_worker_hostname() reverses), and the container it maps to is always
+named `xaisen-<worker_key>` (see run_container.yml).
 """
 
 from __future__ import annotations
@@ -44,21 +52,35 @@ class WorkerRef:
 
 def parse_worker_hostname(hostname: str) -> WorkerRef | None:
     """Reverse worker_identifier(): pull `<provider>-<host>-<service>-<index>`
-    back out of a full sslip.io hostname (or a bare worker key, for
-    convenience). Service names may themselves contain dashes (cp-daemon,
-    validator-daemon), so `index` and `provider`/`host` are peeled off the
-    two ends first and everything left in the middle is the service name.
-    Returns None on anything that doesn't parse -- callers print their own
-    usage-appropriate error rather than this raising.
+    back out of either the path-based public identifier
+    (`<ip-with-dashes>.sslip.io/<provider>-<host>/<service>-<index>`, current
+    scheme -- see worker_env.yml's xaisen_sslip_host) or the legacy
+    subdomain-based one (`<worker_key>.<ip-with-dashes>.sslip.io`, or a bare
+    worker key). Service names may themselves contain dashes (cp-daemon,
+    validator-daemon), so `index` is peeled off the end via rpartition and
+    everything left is the service name. Returns None on anything that
+    doesn't parse -- callers print their own usage-appropriate error rather
+    than this raising.
     """
-    worker_key = hostname.split(".", 1)[0]
-    parts = worker_key.split("-")
-    if len(parts) < 4:
-        return None
-
-    provider, host = parts[0], parts[1]
-    index_str = parts[-1]
-    service = "-".join(parts[2:-1])
+    if "/" in hostname:
+        path = hostname.split("://", 1)[-1]
+        segments = [s for s in path.split("/") if s]
+        if len(segments) < 2:
+            return None
+        # Last two non-empty segments are always <provider>-<host> and
+        # <service>-<index> -- works whether or not the leading
+        # <ip-with-dashes>.sslip.io segment is present.
+        provider_host, service_index = segments[-2], segments[-1]
+        provider, _, host = provider_host.rpartition("-")
+        service, _, index_str = service_index.rpartition("-")
+    else:
+        worker_key = hostname.split(".", 1)[0]
+        parts = worker_key.split("-")
+        if len(parts) < 4:
+            return None
+        provider, host = parts[0], parts[1]
+        index_str = parts[-1]
+        service = "-".join(parts[2:-1])
 
     if provider not in infra.PROVIDERS:
         return None
@@ -74,7 +96,7 @@ def parse_worker_hostname(hostname: str) -> WorkerRef | None:
         host=host,
         service=service,
         index=int(index_str),
-        worker_key=worker_key,
+        worker_key=f"{provider}-{host}-{service}-{index_str}",
     )
 
 
@@ -128,9 +150,11 @@ def status(hostname: str) -> int:
     ref = parse_worker_hostname(hostname)
     if ref is None:
         print(
-            f"Could not parse '{hostname}' as a worker hostname. Expected "
-            "<provider>-<host>-<service>-<index>[.<ip-with-dashes>.sslip.io], "
-            "e.g. akamai-003-relay-1.96-126-106-95.sslip.io.",
+            f"Could not parse '{hostname}' as a worker hostname. Expected either "
+            "<ip-with-dashes>.sslip.io/<provider>-<host>/<service>-<index> "
+            "(e.g. 45-79-134-247.sslip.io/akamai-004/relay-1) or the legacy "
+            "<provider>-<host>-<service>-<index>[.<ip-with-dashes>.sslip.io] "
+            "(e.g. akamai-003-relay-1.96-126-106-95.sslip.io).",
             file=sys.stderr,
         )
         return 2
@@ -201,9 +225,11 @@ def _toggle(hostname: str, action: str) -> int:
     ref = parse_worker_hostname(hostname)
     if ref is None:
         print(
-            f"Could not parse '{hostname}' as a worker hostname. Expected "
-            "<provider>-<host>-<service>-<index>[.<ip-with-dashes>.sslip.io], "
-            "e.g. akamai-003-relay-1.96-126-106-95.sslip.io.",
+            f"Could not parse '{hostname}' as a worker hostname. Expected either "
+            "<ip-with-dashes>.sslip.io/<provider>-<host>/<service>-<index> "
+            "(e.g. 45-79-134-247.sslip.io/akamai-004/relay-1) or the legacy "
+            "<provider>-<host>-<service>-<index>[.<ip-with-dashes>.sslip.io] "
+            "(e.g. akamai-003-relay-1.96-126-106-95.sslip.io).",
             file=sys.stderr,
         )
         return 2

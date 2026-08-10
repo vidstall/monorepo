@@ -11,6 +11,7 @@ runtime/*.toml file) -- one [[bots]] row per known id, past or present.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import signal
@@ -24,6 +25,7 @@ import urllib.error
 import urllib.request
 
 from . import bot_client, context, infra
+from .wallet import chain_ops
 
 BASE_PORT = 8095
 # apps/bot also binds a second, independent port for its own Prometheus
@@ -35,6 +37,11 @@ METRICS_BASE_PORT = 9095
 BOT_APP_DIR = context.WORKER_DIR / "apps" / "bot"
 HEALTHZ_TIMEOUT_SECONDS = 20.0
 STOP_GRACE_SECONDS = 5.0
+# Below this, auto-request faucet gas before spawning -- a local bot session
+# submits several txs per run (register, escrow, room create/join), so this
+# is deliberately higher than wallet/chain_ops.py's fleet-wallet MIN_GAS_MIST
+# (2 SUI) to avoid re-fauceting on almost every session.
+LOCAL_BOT_MIN_GAS_MIST = 9_000_000_000  # 9 SUI
 
 
 @dataclass
@@ -203,6 +210,45 @@ def _wait_for_healthz(port: int, timeout: float) -> bool:
     return False
 
 
+def _ensure_gas_funded(session_env: dict[str, str]) -> None:
+    """Best-effort auto-faucet for the bot's own .env-configured wallet: a
+    session submits several on-chain txs (register, escrow, room create/join)
+    right after the healthz check passes, and each one fails outright with
+    "No valid gas coins found for the transaction" if the wallet runs dry --
+    confirmed live, this surfaces as a 502 from POST /bots well after the
+    process already reports healthy, so there's no earlier natural check
+    point than right before spawn. Only devnet/testnet have a faucet (mirrors
+    wallet/chain_ops.py's FAUCET_NETWORKS); mainnet/localnet/custom-RPC
+    SUI_NETWORK values are left alone. Any lookup/request failure is
+    non-fatal -- the session still starts and fails with the original
+    gas-coins error if it turns out to actually be needed."""
+    private_key = session_env.get("PRIVATE_KEY", "")
+    network = session_env.get("SUI_NETWORK", "")
+    if not private_key or network not in chain_ops.FAUCET_NETWORKS:
+        return
+    try:
+        address = chain_ops.sui_address_from_private_key(private_key)
+        balance = chain_ops.current_balance_mist(address)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, ValueError) as exc:
+        print(f"Warning: could not check wallet balance for the bot's PRIVATE_KEY: {exc}")
+        return
+    if balance >= LOCAL_BOT_MIN_GAS_MIST:
+        return
+
+    from . import contract
+
+    code = contract.ensure_active_sui_env(network)
+    if code != 0:
+        print(f"Warning: could not switch sui client to {network}; skipping faucet request.")
+        return
+    print(
+        f"Wallet {address} balance {balance / 1_000_000_000:.2f} SUI is below the "
+        f"{LOCAL_BOT_MIN_GAS_MIST / 1_000_000_000:.0f} SUI threshold -- requesting faucet gas..."
+    )
+    if context.run(["sui", "client", "faucet", "--address", address]) != 0:
+        print(f"Warning: faucet request failed for {address}.")
+
+
 def _spawn_process(bot_local_id: int) -> tuple[int, int, Path]:
     """Spawn a fresh apps/bot dev-server process for this id. Returns
     (pid, port, log_path) -- caller waits on /healthz and records the
@@ -213,6 +259,8 @@ def _spawn_process(bot_local_id: int) -> tuple[int, int, Path]:
     session_env.update(context.read_env_file(BOT_APP_DIR / ".env"))
     session_env["PORT"] = str(port)
     session_env["BOT_METRICS_PORT"] = str(_metrics_port_for(bot_local_id))
+
+    _ensure_gas_funded(session_env)
 
     log_path = context.RUNTIME_LOCAL_BOTS_LOG_DIR / f"{bot_local_id}.log"
     # cwd=WORKER_DIR (pnpm workspace root), not apps/bot -- `pnpm --filter
@@ -464,6 +512,52 @@ def stop_all() -> int:
             + (f" ({', '.join(str(i) for i in stopped_ids)})" if stopped_ids else "")
             + f" and {reaped_orphans} orphaned bot process(es)."
         )
+    return 0
+
+
+def _tail_lines(path: Path, lines: int) -> list[str]:
+    """Last `lines` lines of `path`, read in fixed-size chunks from the end
+    so an arbitrarily large log file is never fully loaded into memory."""
+    chunk_size = 8192
+    with path.open("rb") as f:
+        f.seek(0, os.SEEK_END)
+        remaining = f.tell()
+        blocks: list[bytes] = []
+        newline_count = 0
+        while remaining > 0 and newline_count <= lines:
+            read_size = min(chunk_size, remaining)
+            remaining -= read_size
+            f.seek(remaining)
+            block = f.read(read_size)
+            newline_count += block.count(b"\n")
+            blocks.append(block)
+    text = b"".join(reversed(blocks)).decode("utf-8", errors="replace")
+    return text.splitlines()[-lines:]
+
+
+def log(bot_local_id: int, lines: int = 100, follow: bool = False) -> int:
+    sessions = read_sessions()
+    session = sessions.get(bot_local_id)
+    if session is None:
+        print(f"bot {bot_local_id}: no known session.")
+        return 1
+
+    log_path = Path(session.log_path) if session.log_path else None
+    if log_path is None or not log_path.exists():
+        print(f"bot {bot_local_id}: no log file found (expected {log_path or '<unset>'}).")
+        return 1
+
+    if follow:
+        # Shell out to `tail -f` -- blocks until the caller Ctrl-C's, same UX
+        # as `docker logs -f`. Prints the same trailing window first via `-n`
+        # so `--follow` doesn't start from a blank screen.
+        try:
+            return subprocess.call(["tail", "-n", str(lines), "-f", str(log_path)])
+        except KeyboardInterrupt:
+            return 0
+
+    for line in _tail_lines(log_path, lines):
+        print(line)
     return 0
 
 

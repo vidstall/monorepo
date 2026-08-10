@@ -26,9 +26,13 @@ REQUEST_TIMEOUT_SECONDS = 1.0
 SUPPORTED_SERVICES = {"relay"}
 
 
-def healthz_url(host_ip: str, worker_key: str) -> str:
+def healthz_url(host_ip: str, provider: str, host: str, service: str, worker_index: int) -> str:
+    """Path-based Caddy routing (see Caddyfile.j2): one hostname per VM,
+    workers disambiguated by /<provider>-<host>/<service>-<index> instead of
+    their own subdomain -- avoids one Let's Encrypt cert per colocated
+    worker."""
     dashed = host_ip.replace(".", "-")
-    return f"https://{worker_key}.{dashed}.sslip.io/healthz"
+    return f"https://{dashed}.sslip.io/{provider}-{host}/{service}-{worker_index}/healthz"
 
 
 def worker_healthz_url(host: str, service: str, provider: str, worker_index: int) -> str | None:
@@ -39,13 +43,11 @@ def worker_healthz_url(host: str, service: str, provider: str, worker_index: int
     if service not in SUPPORTED_SERVICES:
         return None
     from .. import infra
-    from ..infra.topology import worker_identifier
 
     ip = infra.host_address(host)
     if not ip:
         return None
-    worker_key = worker_identifier(provider, host, service, worker_index)
-    return healthz_url(ip, worker_key)
+    return healthz_url(ip, provider, host, service, worker_index)
 
 
 def _probe_once(url: str) -> bool:

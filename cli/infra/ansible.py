@@ -7,7 +7,13 @@ from typing import Any
 
 from ..context import ANSIBLE_DIR, CONTRACT_RUNTIME_DIR, PINNED_IMAGES, read_env_file, venv_bin
 from .history import record_history
-from .secrets import loki_shipping_vars, metrics_auth_token, otel_exporter_vars
+from .secrets import (
+    loki_shipping_vars,
+    metrics_auth_token,
+    otel_exporter_vars,
+    turn_rpc_token,
+    turn_static_secret,
+)
 from .topology import active_stack
 
 
@@ -174,6 +180,8 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
         return {
             "xaisen_pinned_images": dict(PINNED_IMAGES),
             "xaisen_metrics_auth_token": metrics_auth_token(),
+            "xaisen_turn_static_secret": turn_static_secret(),
+            "xaisen_turn_rpc_token": turn_rpc_token(),
             **_otel_extra_vars(),
             **_loki_extra_vars(),
             **_tempo_extra_vars(),
@@ -220,6 +228,8 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
         "xaisen_contract_values": contract_values,
         "xaisen_pinned_images": dict(PINNED_IMAGES),
         "xaisen_metrics_auth_token": metrics_auth_token(),
+        "xaisen_turn_static_secret": turn_static_secret(),
+        "xaisen_turn_rpc_token": turn_rpc_token(),
         **_otel_extra_vars(),
         **_loki_extra_vars(),
         **_tempo_extra_vars(),

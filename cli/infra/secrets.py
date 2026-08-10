@@ -50,6 +50,31 @@ def _read_or_generate_secret(path: Path, key: str) -> str:
     return value
 
 
+def turn_static_secret() -> str:
+    """Read (or generate + persist) TURN_STATIC_SECRET from
+    secrets/services/turn.env -- the single coturn `--static-auth-secret`
+    value shared by EVERY coturn instance across the fleet AND cp-daemon's
+    TurnIssuer (which mints credentials off exactly one "current secret"
+    fleet-wide, see turn-issuer.ts's issueFor()). Generated once, on first
+    use, like metrics_auth_token()."""
+    from .. import infra
+
+    return _read_or_generate_secret(infra.SERVICE_SECRETS_DIR / "turn.env", "TURN_STATIC_SECRET")
+
+
+def turn_rpc_token() -> str:
+    """Read (or generate + persist) TURN_RPC_TOKEN from
+    secrets/services/turn.env -- the bearer token gating cp-daemon's
+    POST /turn/issue RPC (turn-rpc.ts; the RPC server only starts once this
+    is set, see cp-issuers-wiring.ts). Shared between cp-daemon (verifies
+    it) and every relay (sends it as Authorization: Bearer, see
+    relay-wiring-turn.ts / turn-fetcher.ts). Same file as
+    turn_static_secret() -- two independent keys, one TURN-secrets file."""
+    from .. import infra
+
+    return _read_or_generate_secret(infra.SERVICE_SECRETS_DIR / "turn.env", "TURN_RPC_TOKEN")
+
+
 def otel_exporter_vars() -> dict[str, str]:
     """Read (never generate) OTEL_EXPORTER_OTLP_ENDPOINT/HEADERS from
     secrets/services/otel.env. There's nothing for `vidctl infra` to

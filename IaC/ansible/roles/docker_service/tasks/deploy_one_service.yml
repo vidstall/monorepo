@@ -16,12 +16,13 @@
 # `| default(xaisen_service_item.service)` guards worker_key in case an
 # older-shaped inventory entry (pre-dating this field) ever reaches here.
 #
-# Split into 4 stages, run in this order -- order is load-bearing: each
+# Split into 5 stages, run in this order -- order is load-bearing: each
 # later file reads facts/registered vars set by an earlier one.
 #   1. service_common_setup.yml -- state dir, secrets, wallet write
 #   2. monitoring_config.yml    -- prometheus/tempo/loki/grafana config
 #   3. worker_env.yml           -- keypair/cap/endpoint facts, pull decision
-#   4. run_container.yml        -- the shared docker_container task
+#   4. turn_rpc_lookup.yml      -- relay-only: cp-daemon's public TURN RPC URL
+#   5. run_container.yml        -- the shared docker_container task
 
 - name: Common per-service setup (state dir, secrets, wallet)
   ansible.builtin.import_tasks: service_common_setup.yml
@@ -31,6 +32,9 @@
 
 - name: Worker-daemon env facts and image-pull decision
   ansible.builtin.import_tasks: worker_env.yml
+
+- name: Resolve cp-daemon's TURN RPC URL (relay only)
+  ansible.builtin.import_tasks: turn_rpc_lookup.yml
 
 - name: Run this service's container
   ansible.builtin.import_tasks: run_container.yml

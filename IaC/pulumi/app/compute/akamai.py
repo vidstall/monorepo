@@ -72,6 +72,21 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                     action="ACCEPT", label=label, protocol="UDP", ports=ports, ipv4s=open_v4, ipv6s=open_v6
                 )
             )
+        # coturn (docker_service/tasks/coturn.yml), one shared instance per
+        # host: 3478 for STUN/TURN control (both transports -- coturn
+        # accepts TURN over TCP or UDP), plus the relayed-media port range
+        # (--min-port/--max-port in coturn.yml, unoffset since it's one
+        # instance per host, not per relay replica).
+        for label, protocol, ports in (
+            ("coturn-control-tcp", "TCP", "3478"),
+            ("coturn-control-udp", "UDP", "3478"),
+            ("coturn-relay", "UDP", "49160-49200"),
+        ):
+            inbounds.append(
+                linode.FirewallInboundArgs(
+                    action="ACCEPT", label=label, protocol=protocol, ports=ports, ipv4s=open_v4, ipv6s=open_v6
+                )
+            )
     if any(svc.get("service") in ("relay", "bot", "cp-daemon", "validator-daemon") for svc in services):
         # Each relay/signaling/bot instance, plus cp-daemon/validator-daemon (whose
         # only surface is a metrics endpoint), gets a Caddy TLS sidecar (see

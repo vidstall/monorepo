@@ -53,6 +53,8 @@ from .secrets import (
     loki_shipping_vars,
     metrics_auth_token,
     otel_exporter_vars,
+    turn_rpc_token,
+    turn_static_secret,
 )
 from .topology import (
     active_stack,
@@ -129,6 +131,8 @@ __all__ = [
     "metrics_auth_token",
     "otel_exporter_vars",
     "loki_shipping_vars",
+    "turn_rpc_token",
+    "turn_static_secret",
     "active_stack",
     "default_topology",
     "ensure_topology",

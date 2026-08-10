@@ -64,6 +64,16 @@ def add_utils_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     bot_list_parser = bot_actions.add_parser("list", help="List local bot sessions.")
     bot_list_parser.set_defaults(handler=lambda _args: local_bot.list_bots())
 
+    bot_log_parser = bot_actions.add_parser("log", help="Show a local bot session's log file.")
+    bot_log_parser.add_argument("id", type=int, help="Local session id, counting from 1.")
+    bot_log_parser.add_argument(
+        "-n", "--lines", type=int, default=100, help="Number of trailing lines to show (default: 100)."
+    )
+    bot_log_parser.add_argument(
+        "-f", "--follow", action="store_true", help="Follow the log file as it grows (like `tail -f`)."
+    )
+    bot_log_parser.set_defaults(handler=lambda args: local_bot.log(args.id, lines=args.lines, follow=args.follow))
+
     worker_parser = actions.add_parser("worker", help="Inspect a deployed fleet worker.")
     worker_actions = worker_parser.add_subparsers(dest="worker_action", required=True)
 
@@ -72,20 +82,32 @@ def add_utils_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     )
     worker_status_parser.add_argument(
         "hostname",
-        help="The worker's public hostname, e.g. akamai-003-relay-1.96-126-106-95.sslip.io.",
+        help=(
+            "The worker's public identifier, e.g. "
+            "45-79-134-247.sslip.io/akamai-004/relay-1 (or the legacy "
+            "akamai-003-relay-1.96-126-106-95.sslip.io form)."
+        ),
     )
     worker_status_parser.set_defaults(handler=lambda args: worker_status.status(args.hostname))
 
     worker_start_parser = worker_actions.add_parser("start", help="docker start a worker's container.")
     worker_start_parser.add_argument(
         "hostname",
-        help="The worker's public hostname, e.g. akamai-003-relay-1.96-126-106-95.sslip.io.",
+        help=(
+            "The worker's public identifier, e.g. "
+            "45-79-134-247.sslip.io/akamai-004/relay-1 (or the legacy "
+            "akamai-003-relay-1.96-126-106-95.sslip.io form)."
+        ),
     )
     worker_start_parser.set_defaults(handler=lambda args: worker_status.start(args.hostname))
 
     worker_stop_parser = worker_actions.add_parser("stop", help="docker stop a worker's container.")
     worker_stop_parser.add_argument(
         "hostname",
-        help="The worker's public hostname, e.g. akamai-003-relay-1.96-126-106-95.sslip.io.",
+        help=(
+            "The worker's public identifier, e.g. "
+            "45-79-134-247.sslip.io/akamai-004/relay-1 (or the legacy "
+            "akamai-003-relay-1.96-126-106-95.sslip.io form)."
+        ),
     )
     worker_stop_parser.set_defaults(handler=lambda args: worker_status.stop(args.hostname))

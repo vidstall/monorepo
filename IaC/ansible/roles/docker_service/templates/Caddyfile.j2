@@ -1,95 +1,142 @@
-{# One site block per relay/signaling/bot/cp-daemon/validator-daemon
-   instance colocated on this host. Hostname must exactly match what
-   deploy_one_service.yml injects as RELAY_ENDPOINT_URL/ENDPOINT_URL
-   (wss://<worker_key>.<ip-dashed>.sslip.io) or the cert Caddy obtains
-   won't match what the client connects to. bot/cp-daemon/validator-daemon
-   have no such env var -- their hostname is whatever sslip.io address is
-   reached directly (bot's control API; cp-daemon/validator-daemon's
-   metrics-only endpoint).
+{# ONE site block per HOST (not per worker) -- every relay/signaling/bot/
+   cp-daemon/validator-daemon instance colocated on this host shares the SAME
+   public hostname (`<ip-dashed>.sslip.io`, one Let's Encrypt cert) and is
+   disambiguated by a URL PATH PREFIX instead: `/<instance-name>/<worker-name>/*`,
+   where instance-name = "<provider>-<host>" (e.g. "akamai-001") and
+   worker-name = "<service>-<index>" (e.g. "relay-1") -- i.e. worker_key split
+   at the service boundary. This MUST exactly match what deploy_one_service.yml
+   injects as RELAY_ENDPOINT_URL/ENDPOINT_URL (wss://<ip-dashed>.sslip.io/
+   <instance-name>/<worker-name>) or the routing here won't match what the
+   client connects to. bot/cp-daemon/validator-daemon have no such env var --
+   their path is whatever sslip.io address is reached directly (bot's control
+   API; cp-daemon/validator-daemon's metrics-only endpoint).
+
+   Switched from one-hostname-per-worker (N Let's Encrypt certs per host) to
+   this scheme because N repeated redeploys of a colocated host were burning
+   Let's Encrypt's "5 duplicate certificates per exact identifier set per
+   168h" rate limit N times as fast as necessary -- one cert per HOST fixes
+   that regardless of how many workers share it.
+
+   Each worker gets a named matcher (`@<service><index>`) matching BOTH the
+   bare `/<instance>/<worker>` prefix AND `/<instance>/<worker>/*` -- a glob
+   pattern alone (`/<prefix>/*`) matches `/<prefix>/` and anything under it
+   but NOT the bare prefix with no trailing slash and nothing after it, and
+   `handle_path` only accepts a single literal path pattern (confirmed via
+   `caddy validate`: passing two space-separated patterns errors with "wrong
+   argument count"), so a bare `handle_path /<prefix>/*` alone silently
+   404s exactly the bare-prefix case. That case is NOT hypothetical:
+   confirmed live, the bot's WS client connects to exactly
+   RELAY_ENDPOINT_URL (no trailing slash -- see worker_env.yml's
+   xaisen_sslip_host), so the primary WS connection hit this 404 while every
+   OTHER path (which always carries its own suffix -- /healthz, /metrics,
+   /api/probe, etc.) matched fine and masked the bug. The `path` matcher
+   (unlike `handle_path`) DOES accept multiple space-separated patterns, so
+   the two-pattern matcher is built there instead; `handle` (not
+   `handle_path`) then dispatches on it, and `uri strip_prefix` explicitly
+   strips the prefix as the block's first directive -- functionally
+   equivalent to `handle_path`, but decoupled from its single-pattern
+   limit. Every INNER handle block below is otherwise BYTE-IDENTICAL to the
+   old per-worker-hostname scheme -- the backend app (relay's
+   metrics-server.ts, packages/shared/healthz.ts, etc.) still sees bare
+   `/metrics`, `/healthz`, `/stats/*`, `/logs/*`, `/relay-down-hint*` exactly
+   as before; it has no idea a prefix was ever there. relay's own WS upgrade
+   handler (signaling/index.ts's WebSocketServer) has no `path` option, so it
+   already accepts an upgrade on any path -- no relay-side change needed for
+   the main WS route either.
 
    The main upstream target is each app's FIXED internal listen port
-   (WS_PORT for relay, SIGNALING_PORT for signaling, PORT for bot --
-   see apps/relay/src/index.ts, apps/signaling/src/index.ts,
-   apps/bot/src/config.ts, none read an env var keyed off worker_index),
-   NOT svc.port -- that field is the per-worker_index-offset HOST-published
-   port (cli/infra.py set_vm_defaults), which only matters for the
-   docker_container ports: mapping. Caddy talks to the sibling container
-   directly over the shared xaisen-net bridge, bypassing published host
-   ports entirely, so every same-service replica on this host listens
-   internally on the SAME fixed port and needs the SAME upstream target.
-   cp-daemon/validator-daemon have NO such main surface at all (chain-
-   facing daemons, not client-facing servers) -- they're absent from
-   xaisen_internal_ports entirely, so their site block below only gets
-   the metrics handle, no generic fallback.
+   (WS_PORT for relay, SIGNALING_PORT for signaling, PORT for bot -- see
+   apps/relay/src/index.ts, apps/signaling/src/index.ts, apps/bot/src/config.ts,
+   none read an env var keyed off worker_index), NOT svc.port -- that field is
+   the per-worker_index-offset HOST-published port (cli/infra.py
+   set_vm_defaults), which only matters for the docker_container ports:
+   mapping. Caddy talks to the sibling container directly over the shared
+   xaisen-net bridge, bypassing published host ports entirely, so every
+   same-service replica on this host listens internally on the SAME fixed
+   port and needs the SAME upstream target. cp-daemon/validator-daemon have NO
+   such main surface at all (chain-facing daemons, not client-facing servers)
+   -- they're absent from xaisen_internal_ports entirely, so their handle_path
+   block below only gets the metrics/healthz handles, no generic fallback.
 
    relay/signaling/bot/cp-daemon/validator-daemon each additionally run a
    SEPARATE metrics HTTP server on its own port (METRICS_PORT=4001,
-   SIGNALING_METRICS_PORT=8083, BOT_METRICS_PORT=8096,
-   CP_METRICS_PORT=8092, VALIDATOR_METRICS_PORT=8103 -- a distinct Node
-   process listener, not the same server as the main port above) which has
-   no published host port and no firewall rule of its own (see
-   IaC/pulumi/app/compute/*.py's per-svc.port inbound rules) -- it's
-   reachable ONLY by path-routing a slice of this SAME public hostname to
-   that internal port, which is what xaisen_metrics_ports + the handle
-   blocks below do. Prometheus's scrape targets go through this same
-   public :443 hostname. /healthz* is NOT always on the same port as
-   /metrics* -- only relay unifies both onto its metrics port (its own
-   metrics-server.ts serves /healthz alongside /metrics, see RO-020).
-   signaling/cp-daemon/validator-daemon each run startHealthzServer (see
-   packages/shared/src/healthz.ts) as a SEPARATE node:http listener on its
-   own *_HEALTHZ_PORT, distinct from its *_METRICS_PORT prom-metrics
-   listener (which 404s on anything but /metrics) -- xaisen_healthz_ports
-   below is that real per-service port, NOT a duplicate of
-   xaisen_metrics_ports. bot has no healthz server at all, so it's absent
-   from xaisen_healthz_ports and gets no /healthz* handle (confirmed via a
-   live 404 from signaling's public hostname, caused by routing /healthz*
-   at signaling's metrics port instead of its healthz port -- fixed here).
-   This is what lets cp-daemon's relay-assignment liveness probe
-   (room-assignment.ts) reach ANY candidate relay's health endpoint
-   over the public hostname, regardless of whether cp-daemon happens to be
-   colocated with that relay or on a different host entirely. /stats/*
-   (the client's POST /stats/report), /logs/* (POST /logs/report), and
-   /relay-down-hint* are relay's own app-protocol routes, not a generic
-   metrics-server feature -- scoped to xaisen_stats_report_services so
-   they aren't wrongly added for bot/cp-daemon/validator-daemon, which
-   don't implement them. Without an explicit handle block here, a path
-   falls through to the generic handle{} below and gets proxied to the
-   WRONG port (the main WS/signaling port, not the metrics port these
-   routes actually live on) -- confirmed missing for /logs/* and
-   /relay-down-hint* before this comment was added. #}
+   SIGNALING_METRICS_PORT=8083, BOT_METRICS_PORT=8096, CP_METRICS_PORT=8092,
+   VALIDATOR_METRICS_PORT=8103 -- a distinct Node process listener, not the
+   same server as the main port above) which has no published host port and
+   no firewall rule of its own (see IaC/pulumi/app/compute/*.py's per-svc.port
+   inbound rules) -- it's reachable ONLY by path-routing a slice of this SAME
+   public hostname to that internal port, which is what xaisen_metrics_ports +
+   the handle blocks below do. Prometheus's scrape targets go through this
+   same public :443 hostname (see prometheus.yml.j2's metrics_path:).
+   /healthz* is NOT always on the same port as /metrics* -- only relay unifies
+   both onto its metrics port (its own metrics-server.ts serves /healthz
+   alongside /metrics, see RO-020). signaling/cp-daemon/validator-daemon each
+   run startHealthzServer (see packages/shared/src/healthz.ts) as a SEPARATE
+   node:http listener on its own *_HEALTHZ_PORT, distinct from its
+   *_METRICS_PORT prom-metrics listener (which 404s on anything but
+   /metrics) -- xaisen_healthz_ports below is that real per-service port, NOT
+   a duplicate of xaisen_metrics_ports. bot has no healthz server at all, so
+   it's absent from xaisen_healthz_ports and gets no /healthz* handle. This is
+   what lets cp-daemon's relay-assignment liveness probe (room-assignment.ts)
+   reach ANY candidate relay's health endpoint over the public hostname,
+   regardless of whether cp-daemon happens to be colocated with that relay or
+   on a different host entirely. /stats/* (the client's POST /stats/report),
+   /logs/* (POST /logs/report), and /relay-down-hint* are relay's own
+   app-protocol routes, not a generic metrics-server feature -- scoped to
+   xaisen_stats_report_services so they aren't wrongly added for
+   bot/cp-daemon/validator-daemon, which don't implement them. Without an
+   explicit handle block here, a path falls through to the generic handle{}
+   below and gets proxied to the WRONG port (the main WS/signaling port, not
+   the metrics port these routes actually live on). #}
 {% set xaisen_internal_ports = {'relay': 4000, 'bot': 8095} %}
 {% set xaisen_metrics_ports = {'relay': 4001, 'bot': 8096, 'cp-daemon': 8092, 'validator-daemon': 8103} %}
 {% set xaisen_healthz_ports = {'relay': 4001, 'cp-daemon': 8091, 'validator-daemon': 8101} %}
 {% set xaisen_stats_report_services = ['relay'] %}
+{# S30.C TURN delivery: cp-daemon's bearer-gated POST /turn/issue RPC
+   (turn-rpc.ts, port from TURN_RPC_PORT, default 8090) -- relay's
+   turn-fetcher.ts calls this over the public sslip.io URL
+   (turn_rpc_lookup.yml's xaisen_cp_daemon_rpc_url), so it needs the same
+   handle-block treatment as /metrics* and /healthz* above. #}
+{% set xaisen_turn_rpc_ports = {'cp-daemon': 8090} %}
+{{ ansible_host | replace('.', '-') }}.sslip.io {
 {% for svc in xaisen_public_services %}
-{{ svc.worker_key | default(svc.service) }}.{{ ansible_host | replace('.', '-') }}.sslip.io {
+{% set xaisen_prefix = '/' ~ xaisen_provider ~ '-' ~ xaisen_host ~ '/' ~ svc.service ~ '-' ~ svc.index %}
+    @{{ svc.service }}{{ svc.index }} path {{ xaisen_prefix }} {{ xaisen_prefix }}/*
+    handle @{{ svc.service }}{{ svc.index }} {
+        uri strip_prefix {{ xaisen_prefix }}
 {% if svc.service in xaisen_metrics_ports %}
-    handle /metrics* {
-        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
-    }
+        handle /metrics* {
+            reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
+        }
 {% if svc.service in xaisen_healthz_ports %}
-    handle /healthz* {
-        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_healthz_ports[svc.service] }}
-    }
+        handle /healthz* {
+            reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_healthz_ports[svc.service] }}
+        }
+{% endif %}
+{% if svc.service in xaisen_turn_rpc_ports %}
+        handle /turn/* {
+            reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_turn_rpc_ports[svc.service] }}
+        }
 {% endif %}
 {% if svc.service in xaisen_stats_report_services %}
-    handle /stats/* {
-        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
-    }
-    handle /logs/* {
-        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
-    }
-    handle /relay-down-hint* {
-        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
-    }
+        handle /stats/* {
+            reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
+        }
+        handle /logs/* {
+            reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
+        }
+        handle /relay-down-hint* {
+            reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_metrics_ports[svc.service] }}
+        }
 {% endif %}
 {% if svc.service in xaisen_internal_ports %}
-    handle {
-        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_internal_ports[svc.service] }}
-    }
+        handle {
+            reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_internal_ports[svc.service] }}
+        }
 {% endif %}
 {% else %}
-    reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_internal_ports[svc.service] }}
+        reverse_proxy xaisen-{{ svc.worker_key | default(svc.service) }}:{{ xaisen_internal_ports[svc.service] }}
 {% endif %}
-}
+    }
 {% endfor %}
+}

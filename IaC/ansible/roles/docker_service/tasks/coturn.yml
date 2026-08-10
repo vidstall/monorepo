@@ -1,0 +1,52 @@
+---
+# Included once per host (statically -- see main.yml), after every service
+# in xaisen_services this host runs has been deployed. Mirrors
+# reverse_proxy.yml's "shared, once-per-host" pattern rather than a
+# per-worker sidecar: coturn-url.ts hardcodes port 3478 with no per-worker
+# offset, so N colocated relay replicas on one host must all point at the
+# SAME coturn:3478 -- one shared container, not one per relay replica.
+#
+# Static-secret MVP (see turn-issuer.ts's generateSharedSecret() env
+# override): coturn's --static-auth-secret is pinned to
+# xaisen_turn_static_secret, the SAME value cp-daemon's TurnIssuer uses for
+# every credential it mints fleet-wide (TurnIssuer keeps exactly one
+# "current secret" for the whole daemon, not one per relay). True live/
+# dynamic secret rotation sync to coturn is NOT implemented here -- a
+# documented, deferred follow-up (see turn-issuer.ts's module doc).
+#
+# network_mode: host is required, not a convenience: coturn allocates
+# relayed-media ports from the min-port/max-port range below, and its
+# --external-ip flag must match the address a client actually observes for
+# those allocations -- Docker's bridge NAT breaks that address symmetry for
+# TURN specifically (a well-documented coturn deployment requirement).
+# Host networking sidesteps it entirely, at the cost of not joining
+# xaisen-net (moot anyway -- nothing else needs to reach coturn by
+# container name; relays reach it over its public IP:3478 like any other
+# TURN client).
+- name: Determine whether this host runs any relay (coturn needed)
+  ansible.builtin.set_fact:
+    xaisen_coturn_relay_services: "{{ xaisen_services | selectattr('service', 'equalto', 'relay') | list }}"
+
+- name: Run the shared coturn TURN server container
+  community.docker.docker_container:
+    name: xaisen-coturn
+    image: "coturn/coturn:4.6.2"
+    restart_policy: unless-stopped
+    state: started
+    restart: false
+    network_mode: host
+    command: >-
+      --listening-port=3478
+      --min-port=49160
+      --max-port=49200
+      --use-auth-secret
+      --static-auth-secret={{ xaisen_turn_static_secret }}
+      --realm={{ ansible_host | replace('.', '-') }}.sslip.io
+      --external-ip={{ ansible_host }}
+      --no-cli
+      --lt-cred-mech
+      --fingerprint
+      --no-tls
+      --no-dtls
+      --log-file=stdout
+  when: xaisen_coturn_relay_services | length > 0

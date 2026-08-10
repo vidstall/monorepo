@@ -10,64 +10,74 @@
    METRICS_AUTH_TOKEN bearer credential every worker's /metrics(/prom)
    route checks. cp-daemon/validator-daemon/bot all use the shared
    packages/shared/src/metrics-prom.ts helper (plain GET /metrics, same as
-   signaling), unlike relay's own hand-rolled /metrics/prom server. #}
+   signaling), unlike relay's own hand-rolled /metrics/prom server.
+
+   One HOSTNAME per host now (path-based Caddy routing, see Caddyfile.j2),
+   not one per worker -- so `metrics_path` can no longer be a single
+   job-level value shared by every target in a job (different workers on
+   different hosts need different `/<provider>-<host>/<service>-<index>/
+   metrics` paths). Each target below instead sets its OWN __metrics_path__
+   meta-label directly in that target's `labels:` block -- Prometheus reads
+   __metrics_path__/__scheme__/__address__ as first-class per-target
+   overrides without needing an explicit relabel_configs step, so this is
+   the standard way to vary the scrape path per static target. #}
 global:
   scrape_interval: 15s
 
 scrape_configs:
   - job_name: xaisen
     scheme: https
-    metrics_path: /metrics/prom
     authorization:
       credentials: "{{ xaisen_metrics_auth_token }}"
     static_configs:
-      - targets:
 {% for host in groups['xaisen'] %}
 {% for svc in hostvars[host].get('xaisen_services', []) %}
 {% if svc.service == 'relay' %}
-          - "{{ svc.worker_key | default(svc.service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"
+      - targets: ["{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"]
+        labels:
+          __metrics_path__: /{{ hostvars[host].xaisen_provider }}-{{ hostvars[host].xaisen_host }}/{{ svc.service }}-{{ svc.index }}/metrics/prom
 {% endif %}
 {% endfor %}
 {% endfor %}
   - job_name: xaisen-cp-daemon
     scheme: https
-    metrics_path: /metrics
     authorization:
       credentials: "{{ xaisen_metrics_auth_token }}"
     static_configs:
-      - targets:
 {% for host in groups['xaisen'] %}
 {% for svc in hostvars[host].get('xaisen_services', []) %}
 {% if svc.service == 'cp-daemon' %}
-          - "{{ svc.worker_key | default(svc.service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"
+      - targets: ["{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"]
+        labels:
+          __metrics_path__: /{{ hostvars[host].xaisen_provider }}-{{ hostvars[host].xaisen_host }}/{{ svc.service }}-{{ svc.index }}/metrics
 {% endif %}
 {% endfor %}
 {% endfor %}
   - job_name: xaisen-validator-daemon
     scheme: https
-    metrics_path: /metrics
     authorization:
       credentials: "{{ xaisen_metrics_auth_token }}"
     static_configs:
-      - targets:
 {% for host in groups['xaisen'] %}
 {% for svc in hostvars[host].get('xaisen_services', []) %}
 {% if svc.service == 'validator-daemon' %}
-          - "{{ svc.worker_key | default(svc.service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"
+      - targets: ["{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"]
+        labels:
+          __metrics_path__: /{{ hostvars[host].xaisen_provider }}-{{ hostvars[host].xaisen_host }}/{{ svc.service }}-{{ svc.index }}/metrics
 {% endif %}
 {% endfor %}
 {% endfor %}
   - job_name: xaisen-bot
     scheme: https
-    metrics_path: /metrics
     authorization:
       credentials: "{{ xaisen_metrics_auth_token }}"
     static_configs:
-      - targets:
 {% for host in groups['xaisen'] %}
 {% for svc in hostvars[host].get('xaisen_services', []) %}
 {% if svc.service == 'bot' %}
-          - "{{ svc.worker_key | default(svc.service) }}.{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"
+      - targets: ["{{ hostvars[host].ansible_host | replace('.', '-') }}.sslip.io:443"]
+        labels:
+          __metrics_path__: /{{ hostvars[host].xaisen_provider }}-{{ hostvars[host].xaisen_host }}/{{ svc.service }}-{{ svc.index }}/metrics
 {% endif %}
 {% endfor %}
 {% endfor %}

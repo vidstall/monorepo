@@ -283,6 +283,28 @@
     # Chromium) -- also container-name-addressed rather than the public
     # sslip.io URL, since the renderer lives on the same host/network, not
     # on the public internet.
+    # cp-watchers-wiring.ts defaults RELAY_HEARTBEAT_SCAN_INTERVAL_MS/
+    # ROOM_HEALTH_SCAN_INTERVAL_MS to sysState.epochDurationMs (the on-chain
+    # epoch length) when unset -- fine on a real network where that's short,
+    # but this devnet's epoch is 1 HOUR, so both on-chain failover watchers
+    # were silently scanning once per hour (confirmed live: a killed relay's
+    # standby never got promoted within any reasonable test window). The
+    # RELAY_HEARTBEAT_SCAN_INTERVAL_MS/ROOM_HEALTH_SCAN_INTERVAL_MS combine()
+    # below sets both to 30s, well ahead of any manual fault-tolerance test
+    # while still far cheaper than relay-heartbeat.ts's Layer B ~3s local path.
+    # S30.C TURN delivery, two combine()s below. Relay leg: both a reachable
+    # cp-daemon (turn_rpc_lookup.yml's xaisen_cp_daemon_rpc_url) AND the
+    # shared bearer token must be present, or buildTurnContext() (relay-side)
+    # falls back to today's no-TURN/no-iceServers behavior -- a scenario with
+    # no cp-daemon at all is a legitimate, if TURN-less, topology, not an
+    # error. cp-daemon leg: TURN_RPC_TOKEN alone auto-starts cp-daemon's
+    # /turn/issue RPC server (turn-rpc.ts / cp-issuers-wiring.ts);
+    # TURN_STATIC_SECRET pins TurnIssuer's shared secret to the SAME value
+    # every coturn instance fleet-wide uses (see turn-issuer.ts's
+    # generateSharedSecret() env override and coturn.yml's
+    # --static-auth-secret). NOTE: this whole env: block is one continuous
+    # {{ }} Jinja print expression -- {# #} comments cannot be nested inside
+    # an open {{ }}, so these notes live here as plain YAML comments instead.
     env: >-
       {{
         {
@@ -298,7 +320,10 @@
         | combine({'RTC_MIN_PORT': xaisen_relay_rtc_min, 'RTC_MAX_PORT': xaisen_relay_rtc_max, 'PIPE_PORT_RANGE': xaisen_relay_pipe_min ~ '-' ~ xaisen_relay_pipe_max} if xaisen_service_item.service == 'relay' else {})
         | combine({'REGISTRATION_MODE': 'voting'} if xaisen_service_item.service in ['relay', 'validator-daemon'] else {})
         | combine({'DATA_DIR': xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/cursor-data'} if xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon'] else {})
+        | combine({'RELAY_HEARTBEAT_SCAN_INTERVAL_MS': '30000', 'ROOM_HEALTH_SCAN_INTERVAL_MS': '30000'} if xaisen_service_item.service == 'cp-daemon' else {})
         | combine({'METRICS_AUTH_TOKEN': xaisen_metrics_auth_token} if (xaisen_metrics_auth_token | default('')) and xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon', 'bot'] else {})
+        | combine({'ENABLE_TURN_DELIVERY': '1', 'CP_DAEMON_RPC_URL': xaisen_cp_daemon_rpc_url, 'TURN_RPC_TOKEN': xaisen_turn_rpc_token} if (xaisen_turn_rpc_token | default('')) and (xaisen_cp_daemon_rpc_url | default('')) and xaisen_service_item.service == 'relay' else {})
+        | combine({'TURN_RPC_TOKEN': xaisen_turn_rpc_token, 'TURN_STATIC_SECRET': xaisen_turn_static_secret} if (xaisen_turn_rpc_token | default('')) and xaisen_service_item.service == 'cp-daemon' else {})
         | combine({'OTEL_EXPORTER_OTLP_ENDPOINT': xaisen_otel_exporter_endpoint, 'OTEL_SERVICE_NAME': xaisen_service_item.service} if (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon'] else {})
         | combine({'OTEL_EXPORTER_OTLP_HEADERS': xaisen_otel_exporter_headers} if (xaisen_otel_exporter_headers | default('')) and (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon'] else {})
         | combine({

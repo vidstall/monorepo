@@ -61,6 +61,19 @@ def create_vm(instance: TopologyInstance, public_key: str) -> dict[str, Any]:
                     source_addresses=["0.0.0.0/0", "::/0"],
                 )
             )
+    if any(svc.get("service") == "relay" for svc in services):
+        # coturn (docker_service/tasks/coturn.yml), one shared instance per
+        # host -- unlike relay's own RTC/pipe ports above, this range is NOT
+        # offset per replica: N colocated relays all point at the same
+        # coturn:3478 (coturn-url.ts hardcodes the port). 3478 for
+        # STUN/TURN control (both transports), plus the relayed-media port
+        # range (--min-port/--max-port in coturn.yml).
+        for protocol, port_range in (("tcp", "3478"), ("udp", "3478"), ("udp", "49160-49200")):
+            inbound_rules.append(
+                digitalocean.FirewallInboundRuleArgs(
+                    protocol=protocol, port_range=port_range, source_addresses=["0.0.0.0/0", "::/0"]
+                )
+            )
     if any(svc.get("service") in ("relay", "bot", "cp-daemon", "validator-daemon") for svc in services):
         # Each relay/signaling/bot instance, plus cp-daemon/validator-daemon (whose
         # only surface is a metrics endpoint), gets a Caddy TLS sidecar (see
