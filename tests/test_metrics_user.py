@@ -8,13 +8,13 @@ from cli.observer import metrics_user
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RELAY_METRICS_SERVER_TS = (
-    REPO_ROOT / "services" / "worker" / "apps" / "relay" / "src" / "metrics-server.ts"
+    REPO_ROOT / "services" / "worker" / "apps" / "relay" / "src" / "metrics-server-types.ts"
 )
 
 
 def _relay_peer_quality_field_names() -> set[str]:
     """Extract the `PeerQualitySample` field names straight out of
-    metrics-server.ts's `PEER_QUALITY_METRIC_INFO` object literal -- the
+    metrics-server-types.ts's `PEER_QUALITY_METRIC_INFO` object literal -- the
     single source of truth for every dvconf_relay_peer_* gauge (see that
     file's own docstring). Regex-based since this is a Python test reading
     a TypeScript source file, not a real TS parser -- good enough to catch
@@ -23,11 +23,12 @@ def _relay_peer_quality_field_names() -> set[str]:
     silently-omitted avSyncDriftMs mapping) this test guards against.
     """
     text = RELAY_METRICS_SERVER_TS.read_text()
-    marker = "const PEER_QUALITY_METRIC_INFO"
+    marker = "export const PEER_QUALITY_METRIC_INFO"
     start = text.index(marker)
     end = text.index("\n};", start)
     body = text[start:end]
     return set(re.findall(r"^\s{2}(\w+):\s*\{", body, flags=re.MULTILINE))
+
 
 
 class MetricsUserFieldMappingTests(unittest.TestCase):
