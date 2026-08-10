@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from .. import contract, image_bake, infra, observer, registry
+from .. import contract, image_bake, infra, local_bot, observer, registry
 from .. import object as object_cmd
 from .lock import clear_lock, read_lock, write_lock
 from .spec import WorkerKey, load_scenario, scenario_hash_of
@@ -444,6 +444,16 @@ def destroy(_args: Any) -> int:
     if lock is None:
         print("No scenario is currently active; nothing to destroy.")
         return 0
+
+    # Local bot dev-server sessions (`vidctl utils bot start`) hold this
+    # scenario's contract addresses baked into their process env for their
+    # whole lifetime -- a `tsx watch` process never reloads `.env` on its
+    # own. Left running past this destroy, they'd keep submitting
+    # transactions against a package/RoomManager nothing watches anymore
+    # (see the local-bot-vs-scenario-destroy investigation this
+    # accompanies). Stop them (tracked AND orphaned) before tearing down
+    # the infra those sessions were talking to.
+    local_bot.stop_all()
 
     env = str(lock.get("env", ""))
     scenario_path_display = str(lock.get("scenario_path", ""))

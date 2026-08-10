@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cli import contract, context, image_bake, infra, observer, registry, scenario
+from cli import contract, context, image_bake, infra, local_bot, observer, registry, scenario
 from cli import object as object_cmd
 from cli.registry import RegistryState
 from cli.scenario import system_log
@@ -111,6 +111,14 @@ class ScenarioTestCase(unittest.TestCase):
             # behavior patch this back per-test.
             patch.object(context, "LOGS_ROOT", self.root / "logs"),
             patch.object(system_log, "capture_system_snapshot", return_value={"stub": True}),
+            # destroy() sweeps local `vidctl utils bot` dev-server sessions
+            # (tracked AND orphaned, via a real `ps` scan + process-group
+            # kill) before tearing down infra -- stubbed for every test in
+            # this file so the suite never reads the real
+            # runtime/local_bots.toml or signals a REAL bot process running
+            # on the machine running these tests. Tests exercising this
+            # behavior patch it back per-test.
+            patch.object(local_bot, "stop_all", return_value=0),
             patch("cli.wallet.checkout_wallet", return_value=(dict(FAKE_WALLET), False)),
             patch("cli.wallet.release_wallet", return_value=None),
             patch.object(contract, "publish", return_value=0),

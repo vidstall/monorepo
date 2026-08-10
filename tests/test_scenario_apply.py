@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from cli import contract, image_bake, infra, observer, registry, scenario
+from cli import contract, image_bake, infra, local_bot, observer, registry, scenario
 from cli import object as object_cmd
 from cli.vidctl import build_parser
 
@@ -223,6 +223,22 @@ class ApplyTests(ScenarioTestCase):
             self.assertEqual(scenario.apply(str(path), True), 0)
             self.assertEqual(scenario.destroy(None), 0)
         delete_frontend.assert_not_called()
+
+    def test_destroy_stops_local_bot_sessions_before_killing_workers(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        self.assertEqual(scenario.apply(str(path), True), 0)
+        with (
+            patch.object(local_bot, "stop_all", return_value=0) as stop_all,
+            patch.object(infra, "control", return_value=0) as control,
+        ):
+            self.assertEqual(scenario.destroy(None), 0)
+        stop_all.assert_called_once_with()
+        control.assert_called()
+
+    def test_destroy_no_op_when_no_scenario_active_never_touches_local_bots(self) -> None:
+        with patch.object(local_bot, "stop_all", return_value=0) as stop_all:
+            self.assertEqual(scenario.destroy(None), 0)
+        stop_all.assert_not_called()
 
     def test_apply_logs_into_registry_when_provider_set(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML + '\n[registry]\nprovider = "digitalocean"\n')

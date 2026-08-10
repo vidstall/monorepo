@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -270,14 +271,119 @@ class StopTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(local_bot.read_sessions(), {})
 
-    def test_stop_sends_sigterm_to_live_process(self) -> None:
+    def test_stop_sends_sigterm_to_the_whole_process_group(self) -> None:
+        # stop() must reach the WHOLE tree pnpm/tsx/node form (see
+        # _terminate_process_tree's doc) via os.killpg, not just the tracked
+        # pid via a plain os.kill -- a single-pid kill left tsx/node
+        # descendants running as orphans once pnpm exited.
         with patch.object(bot_client, "delete_room_local", return_value={}):
             with patch.object(local_bot, "_pid_alive", side_effect=[True, False, False]):
-                with patch("os.kill") as kill:
+                with patch("os.getpgid", return_value=4242) as getpgid:
+                    with patch("os.killpg") as killpg:
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            local_bot.stop(1)
+        getpgid.assert_called_once_with(4242)
+        killpg.assert_called_once()
+        self.assertEqual(killpg.call_args.args[0], 4242)
+
+
+class TerminateProcessTreeTests(unittest.TestCase):
+    def test_sigterm_then_sigkill_if_still_alive_after_grace(self) -> None:
+        with patch.object(local_bot, "STOP_GRACE_SECONDS", 0):
+            with patch.object(local_bot, "_pid_alive", return_value=True):
+                with patch("os.getpgid", return_value=555):
+                    with patch("os.killpg") as killpg:
+                        local_bot._terminate_process_tree(4242)
+        self.assertEqual(killpg.call_count, 2)
+        import signal as _signal
+
+        self.assertEqual(killpg.call_args_list[0].args, (555, _signal.SIGTERM))
+        self.assertEqual(killpg.call_args_list[1].args, (555, _signal.SIGKILL))
+
+    def test_no_sigkill_when_process_exits_within_grace(self) -> None:
+        with patch.object(local_bot, "_pid_alive", return_value=False):
+            with patch("os.getpgid", return_value=555):
+                with patch("os.killpg") as killpg:
+                    local_bot._terminate_process_tree(4242)
+        killpg.assert_called_once()
+
+    def test_already_dead_pid_is_a_silent_no_op(self) -> None:
+        with patch("os.getpgid", side_effect=ProcessLookupError):
+            with patch("os.killpg") as killpg:
+                local_bot._terminate_process_tree(4242)
+        killpg.assert_not_called()
+
+
+class FindBotProcessPidsTests(unittest.TestCase):
+    def _run(self, ps_output: str) -> set[int]:
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=ps_output, stderr="")
+        with patch.object(local_bot.subprocess, "run", return_value=completed):
+            return local_bot._find_bot_process_pids()
+
+    def test_matches_pnpm_bot_dev(self) -> None:
+        pids = self._run("12345 node /opt/homebrew/bin/pnpm --filter bot dev\n")
+        self.assertEqual(pids, {12345})
+
+    def test_matches_orphaned_tsx_watch_child(self) -> None:
+        pids = self._run(
+            "23456 node /path/services/worker/apps/bot/node_modules/.bin/tsx/dist/cli.mjs watch src/index.ts\n"
+        )
+        self.assertEqual(pids, {23456})
+
+    def test_ignores_unrelated_processes(self) -> None:
+        pids = self._run(
+            "1 /sbin/launchd\n"
+            "222 node /opt/homebrew/bin/pnpm --filter relay dev\n"
+            "333 node /path/apps/other-service/src/index.ts\n"
+        )
+        self.assertEqual(pids, set())
+
+    def test_subprocess_failure_returns_empty_set(self) -> None:
+        with patch.object(local_bot.subprocess, "run", side_effect=OSError("no ps")):
+            self.assertEqual(local_bot._find_bot_process_pids(), set())
+
+
+class StopAllTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.toml_path = Path(self.temp.name) / "local_bots.toml"
+        self.patch = patch.object(context, "RUNTIME_LOCAL_BOTS_TOML", self.toml_path)
+        self.patch.start()
+
+    def tearDown(self) -> None:
+        self.patch.stop()
+        self.temp.cleanup()
+
+    def test_stops_every_tracked_session(self) -> None:
+        local_bot._write_sessions(
+            {
+                1: local_bot.LocalBotSession(1, 111, local_bot.BASE_PORT, "b1", "0xr1", "u1", "t", "log1"),
+                2: local_bot.LocalBotSession(2, 222, local_bot.BASE_PORT + 1, "b2", "0xr2", "u2", "t", "log2"),
+            }
+        )
+        with patch.object(bot_client, "delete_room_local", return_value={}):
+            with patch.object(local_bot, "_pid_alive", return_value=False):
+                with patch.object(local_bot, "_find_bot_process_pids", return_value=set()):
                     with contextlib.redirect_stdout(io.StringIO()):
-                        local_bot.stop(1)
-        kill.assert_called_once()
-        self.assertEqual(kill.call_args.args[0], 4242)
+                        code = local_bot.stop_all()
+        self.assertEqual(code, 0)
+        self.assertEqual(local_bot.read_sessions(), {})
+
+    def test_reaps_orphaned_processes_not_in_local_bots_toml(self) -> None:
+        with patch.object(local_bot, "_find_bot_process_pids", return_value={99999}):
+            with patch.object(local_bot, "_pid_alive", return_value=True):
+                with patch.object(local_bot, "_terminate_process_tree") as terminate:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        code = local_bot.stop_all()
+        self.assertEqual(code, 0)
+        terminate.assert_called_once_with(99999)
+
+    def test_no_sessions_and_no_orphans_is_a_clean_no_op(self) -> None:
+        with patch.object(local_bot, "_find_bot_process_pids", return_value=set()):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                code = local_bot.stop_all()
+        self.assertEqual(code, 0)
+        self.assertIn("No local bot sessions", out.getvalue())
 
 
 if __name__ == "__main__":

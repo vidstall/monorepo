@@ -12,7 +12,9 @@ runtime/*.toml file) -- one [[bots]] row per known id, past or present.
 from __future__ import annotations
 
 import os
+import re
 import signal
+import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,6 +67,80 @@ def _pid_alive(pid: int) -> bool:
         # our purposes (we just can't necessarily signal it later).
         return True
     return True
+
+
+def _terminate_process_tree(pid: int) -> None:
+    """SIGTERM (then SIGKILL if still alive after the grace period) the
+    WHOLE process group `pid` leads, not just `pid` itself.
+
+    `_spawn_process` launches `pnpm --filter bot dev` via
+    `context.run_detached(..., start_new_session=True)`, which makes that
+    pnpm pid both the session leader AND the process group leader --
+    `pnpm dev` -> `tsx watch` -> the actual `node src/index.ts` process all
+    inherit that same group. Signaling only the tracked pid (a plain
+    `os.kill`) leaves the tsx/node descendants running as orphans once pnpm
+    exits -- confirmed live: a stopped/crashed session left its `tsx watch`
+    and `node` children bound to the control port for hours. `os.killpg`
+    reaches the whole tree in one shot."""
+    try:
+        pgid = os.getpgid(pid)
+    except ProcessLookupError:
+        return
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    deadline = time.monotonic() + STOP_GRACE_SECONDS
+    while time.monotonic() < deadline and _pid_alive(pid):
+        time.sleep(0.2)
+    if _pid_alive(pid):
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+# Matches the exact argv `_spawn_process` launches (`pnpm --filter bot dev`,
+# cwd=WORKER_DIR) plus its `tsx watch`/`node src/index.ts` descendants under
+# apps/bot -- broad enough to catch a session's process tree even when the
+# top-level pnpm pid already died but a child outlived it (e.g. SIGTERM only
+# reached pnpm, not the group -- see _terminate_process_tree's doc for why
+# that used to happen).
+_ORPHAN_BOT_PATTERN = re.compile(
+    r"pnpm\s+--filter\s+bot\s+dev|apps/bot/.*tsx.*watch|apps/bot\b.*src/index\.ts"
+)
+
+
+def _find_bot_process_pids() -> set[int]:
+    """Every currently-running process (any host user session, not just ones
+    `runtime/local_bots.toml` happens to still be tracking) whose command
+    line matches a local bot dev-server -- see `_ORPHAN_BOT_PATTERN`. Used by
+    `stop_all()` to sweep up sessions that predate a contract redeploy (their
+    baked-in env is stale -- see the local-bot-vs-scenario-destroy
+    investigation this accompanies) or that `stop()` failed to fully reap
+    before the group-kill fix above existed."""
+    try:
+        proc = subprocess.run(
+            ["ps", "-Ao", "pid=,command="],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return set()
+    pids: set[int] = set()
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        pid_str, _, command = line.partition(" ")
+        if not _ORPHAN_BOT_PATTERN.search(command):
+            continue
+        try:
+            pids.add(int(pid_str))
+        except ValueError:
+            continue
+    return pids
 
 
 def read_sessions() -> dict[int, LocalBotSession]:
@@ -348,22 +424,46 @@ def stop(bot_local_id: int) -> int:
             print(f"bot {bot_local_id}: DELETE /bots/{session.bot_id} failed (continuing anyway).")
 
     if _pid_alive(session.pid):
-        try:
-            os.kill(session.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        deadline = time.monotonic() + STOP_GRACE_SECONDS
-        while time.monotonic() < deadline and _pid_alive(session.pid):
-            time.sleep(0.2)
-        if _pid_alive(session.pid):
-            try:
-                os.kill(session.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        _terminate_process_tree(session.pid)
 
     del sessions[bot_local_id]
     _write_sessions(sessions)
     print(f"bot {bot_local_id}: stopped.")
+    return 0
+
+
+def stop_all() -> int:
+    """Stop every local bot session -- tracked (`runtime/local_bots.toml`)
+    AND untracked/orphaned (see `_find_bot_process_pids`). Used by `vidctl
+    scenario destroy` so a redeploy never leaves a bot process running
+    against contract addresses the destroyed scenario just tore down (a
+    long-lived `tsx watch` process never reloads `.env` on its own -- see
+    the local-bot-vs-scenario-destroy investigation this accompanies)."""
+    sessions = read_sessions()
+    stopped_ids: list[int] = []
+    for bot_local_id in sorted(sessions):
+        if stop(bot_local_id) == 0:
+            stopped_ids.append(bot_local_id)
+
+    # A second, pid-based sweep -- catches sessions `runtime/local_bots.toml`
+    # never recorded (e.g. a hand-started `pnpm --filter bot dev`) and any
+    # process the tracked-session pass above didn't fully reap.
+    orphan_pids = _find_bot_process_pids()
+    reaped_orphans = 0
+    for pid in sorted(orphan_pids):
+        if not _pid_alive(pid):
+            continue
+        _terminate_process_tree(pid)
+        reaped_orphans += 1
+
+    if not stopped_ids and reaped_orphans == 0:
+        print("No local bot sessions (tracked or orphaned) found.")
+    else:
+        print(
+            f"Stopped {len(stopped_ids)} tracked bot session(s)"
+            + (f" ({', '.join(str(i) for i in stopped_ids)})" if stopped_ids else "")
+            + f" and {reaped_orphans} orphaned bot process(es)."
+        )
     return 0
 
 
