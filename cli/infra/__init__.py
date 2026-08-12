@@ -12,6 +12,7 @@ from ..context import (
     run_detached,
 )
 from ._constants import (
+    CERT_CACHE_ROOT,
     NETWORKS,
     PROVIDERS,
     SERVICE_BACKENDS,
@@ -93,6 +94,7 @@ __all__ = [
     "SERVICE_BACKENDS",
     "SERVICE_PORTS",
     "SSH_KEY_ROOT",
+    "CERT_CACHE_ROOT",
     "REQUIRED_CONTRACT_KEYS",
     "VM_INSTANCE_SIZE_OVERRIDES",
     "VM_INSTANCE_SIZES",

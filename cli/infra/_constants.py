@@ -47,3 +47,8 @@ VM_INSTANCE_SIZES = {
 # exceeds what relay needs.
 VM_INSTANCE_SIZE_OVERRIDES: dict[tuple[str, str], str] = {}
 SSH_KEY_ROOT = ROOT / "runtime" / "ssh_key"
+# Backed-up Caddy /data (TLS cert storage) per (provider, address) -- see
+# cert_cache.py. Keyed by the actual resolved IP (not scenario host id),
+# since the whole point is reusing a cached cert when a NEW host id lands
+# on an IP that already has one, not per-host-id identity.
+CERT_CACHE_ROOT = ROOT / "runtime" / "cert_cache"

@@ -260,6 +260,12 @@
     # no tracing for it (never imports otel-bootstrap.ts) -- but IS in
     # METRICS_AUTH_TOKEN's list below, since it now runs its own minimal
     # prom-client metrics server (packages/shared/src/metrics-prom.ts) too.
+    # PUSHGATEWAY_URL is bot-only (see cli/infra/ansible.py's
+    # _pushgateway_extra_vars()): lets it push dvconf_relay_peer_* quality
+    # samples straight to the observer Pushgateway, same as the browser
+    # client's lib/metrics-push.ts, instead of the deprecated relay
+    # `/stats/report` bridge -- reuses the same METRICS_AUTH_TOKEN above as
+    # its Bearer, no second secret needed.
     # Grafana's own login, not the observer ingress Caddy's bearer gate (unlike
     # tempo's ingest) -- see cli/observer/secrets.py's grafana_admin_password().
     # GF_SERVER_ROOT_URL tells Grafana its own real public URL so redirects/
@@ -322,6 +328,7 @@
         | combine({'DATA_DIR': xaisen_services_root ~ '/runtime/' ~ (xaisen_service_item.worker_key | default(xaisen_service_item.service)) ~ '/cursor-data'} if xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon'] else {})
         | combine({'RELAY_HEARTBEAT_SCAN_INTERVAL_MS': '30000', 'ROOM_HEALTH_SCAN_INTERVAL_MS': '30000'} if xaisen_service_item.service == 'cp-daemon' else {})
         | combine({'METRICS_AUTH_TOKEN': xaisen_metrics_auth_token} if (xaisen_metrics_auth_token | default('')) and xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon', 'bot'] else {})
+        | combine({'PUSHGATEWAY_URL': xaisen_pushgateway_url} if (xaisen_pushgateway_url | default('')) and xaisen_service_item.service == 'bot' else {})
         | combine({'ENABLE_TURN_DELIVERY': '1', 'CP_DAEMON_RPC_URL': xaisen_cp_daemon_rpc_url, 'TURN_RPC_TOKEN': xaisen_turn_rpc_token} if (xaisen_turn_rpc_token | default('')) and (xaisen_cp_daemon_rpc_url | default('')) and xaisen_service_item.service == 'relay' else {})
         | combine({'TURN_RPC_TOKEN': xaisen_turn_rpc_token, 'TURN_STATIC_SECRET': xaisen_turn_static_secret} if (xaisen_turn_rpc_token | default('')) and xaisen_service_item.service == 'cp-daemon' else {})
         | combine({'OTEL_EXPORTER_OTLP_ENDPOINT': xaisen_otel_exporter_endpoint, 'OTEL_SERVICE_NAME': xaisen_service_item.service} if (xaisen_otel_exporter_endpoint | default('')) and xaisen_service_item.service in ['relay', 'cp-daemon', 'validator-daemon'] else {})

@@ -209,6 +209,15 @@ def control(
     # power change via the alibaba/akamai adapters (see the provider guard
     # above). The docker_only branches further down (toggle_container over
     # SSH) run unconditionally regardless, since `code` stays 0 here.
+    if backend == "vm" and action == "kill":
+        # Back up Caddy's TLS cert storage while the VM (and its SSH
+        # access) is still live -- pulumi_up() below is what actually
+        # destroys it. See cert_cache.py's module doc for why this exists
+        # (Let's Encrypt rate-limit avoidance across IP reuse).
+        from . import cert_cache
+
+        cert_cache.backup_caddy_cert(host, provider)
+
     skip_pulumi = docker_only and backend == "vm" and action in {"pause", "restart"}
     if code == 0 and not skip_pulumi:
         failed_stage = "pulumi"
@@ -282,6 +291,15 @@ def control(
             code = infra.inventory()
             if code == 0:
                 infra.persist_vm_resolution(topology, env_name, host, service, provider)
+            if code == 0:
+                # Restore a cached Caddy cert (if any, and still valid) for
+                # this NEW VM's resolved IP BEFORE configure() ever starts
+                # the Caddy container -- see cert_cache.py's module doc.
+                # Best-effort/never-blocking: falls through to normal ACME
+                # issuance on any failure.
+                from . import cert_cache
+
+                cert_cache.restore_caddy_cert(host, provider)
             if code == 0:
                 failed_stage = "configure"
                 container_state = "restarted" if action == "restart" else "started"

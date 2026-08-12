@@ -150,6 +150,33 @@ def _tempo_extra_vars() -> dict[str, str]:
     return {"xaisen_tempo_auth_token": values.get("TEMPO_AUTH_TOKEN", "")}
 
 
+def _pushgateway_extra_vars() -> dict[str, str]:
+    """Flat xaisen_pushgateway_url var -- same URL client_env.py's
+    sync_client_observability_env() writes as VITE_PUSHGATEWAY_URL for the
+    browser build, computed the same way (find_host_running("pushgateway")),
+    so worker containers (the bot, specifically -- see run_container.yml)
+    can push dvconf_relay_peer_* quality samples the same direct-to-
+    Pushgateway way the browser client already does, instead of the
+    deprecated relay `/stats/report` bridge. Reuses the SAME
+    xaisen_metrics_auth_token every other worker already gets (see
+    docker_deploy_extra_vars()) rather than a second token -- no separate
+    Bearer needed here. Deferred `cli.observer` import: cli/infra/__init__.py
+    imports this module before `toml_value` is defined on the `cli.infra`
+    package object, and cli.observer.config imports THAT at its own
+    top level, so a top-level import here would be circular -- same
+    reasoning as _tempo_extra_vars()/_grafana_extra_vars()'s deferred
+    `from .. import infra`. Empty string (not an omitted key) when no
+    observer host runs pushgateway yet, matching every other _*_extra_vars
+    helper's "always present, empty until configured" convention."""
+    from ..observer.config import find_host_running
+
+    pushgateway_host = find_host_running("pushgateway")
+    if pushgateway_host is None:
+        return {"xaisen_pushgateway_url": ""}
+    dashed = str(pushgateway_host["address"]).replace(".", "-")
+    return {"xaisen_pushgateway_url": f"https://pushgateway.{dashed}.sslip.io"}
+
+
 def _grafana_extra_vars() -> dict[str, str]:
     """Flat xaisen_grafana_admin_password var, same read-never-generate
     decoupling reasoning as _tempo_extra_vars(): the real password belongs
@@ -186,6 +213,7 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
             **_loki_extra_vars(),
             **_tempo_extra_vars(),
             **_grafana_extra_vars(),
+            **_pushgateway_extra_vars(),
         }
 
     # loadNetworkConfig() (services/worker/packages/shared/src/chain/client.ts)
@@ -234,6 +262,7 @@ def docker_deploy_extra_vars() -> dict[str, Any]:
         **_loki_extra_vars(),
         **_tempo_extra_vars(),
         **_grafana_extra_vars(),
+        **_pushgateway_extra_vars(),
     }
     try:
         config = registry.provider_config(state.provider, require_credentials=True)
