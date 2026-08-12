@@ -2,11 +2,22 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from cli import contract, image_bake, infra, local_bot, observer, registry, scenario
+from cli import bot_client, contract, image_bake, infra, local_bot, observer, registry, scenario
 from cli import object as object_cmd
 from cli.vidctl import build_parser
 
 from tests.scenario_test_base import SCENARIO_TOML, SCENARIO_TOML_ONE_INSTANCE, ScenarioTestCase
+
+SCENARIO_TOML_WITH_BOT = (
+    SCENARIO_TOML
+    + """
+[[workers]]
+host = "002"
+service = "bot"
+provider = "digitalocean"
+size = "s-1vcpu-1gb"
+"""
+)
 
 
 class ApplyTests(ScenarioTestCase):
@@ -239,6 +250,51 @@ class ApplyTests(ScenarioTestCase):
         with patch.object(local_bot, "stop_all", return_value=0) as stop_all:
             self.assertEqual(scenario.destroy(None), 0)
         stop_all.assert_not_called()
+
+    def test_clean_no_op_when_no_scenario_active(self) -> None:
+        with patch.object(observer, "read_hosts", return_value=[]) as read_hosts:
+            self.assertEqual(scenario.clean(None), 0)
+        read_hosts.assert_not_called()
+
+    def test_clean_stops_leftover_bot_sessions_without_killing_workers(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML_WITH_BOT)
+        self.assertEqual(scenario.apply(str(path), True), 0)
+        with (
+            patch.object(bot_client, "delete_all_sessions", return_value={"stopped": 2}) as delete_all,
+            patch.object(observer, "read_hosts", return_value=[]),
+            patch.object(infra, "control") as control,
+        ):
+            self.assertEqual(scenario.clean(None), 0)
+        delete_all.assert_called_once_with("002")
+        control.assert_not_called()
+
+    def test_clean_skips_unreachable_bot_worker(self) -> None:
+        path = self.write_scenario("s.toml", SCENARIO_TOML_WITH_BOT)
+        self.assertEqual(scenario.apply(str(path), True), 0)
+        with (
+            patch.object(bot_client, "delete_all_sessions", return_value=None),
+            patch.object(observer, "read_hosts", return_value=[]),
+        ):
+            self.assertEqual(scenario.clean(None), 0)
+
+    def test_clean_redeploys_observer_stack_so_grafana_comes_back(self) -> None:
+        # Regression test: clean() used to call only observer.clean() (via
+        # _clean_observer_stack()), which removes the Grafana container
+        # along with prometheus/tempo -- fine for destroy() (always
+        # followed by an apply() that redeploys everything) but clean() has
+        # no such follow-up, so the operator's dashboard would just stay
+        # down. clean() must always pair the wipe with a redeploy.
+        observer.add_host("bourbon", "1.2.3.4", "deploy", "/tmp/key")
+        path = self.write_scenario("s.toml", SCENARIO_TOML)
+        with patch.object(observer, "deploy", return_value=0):
+            self.assertEqual(scenario.apply(str(path), True), 0)
+        with (
+            patch.object(observer, "clean", return_value=0) as observer_clean,
+            patch.object(observer, "deploy", return_value=0) as observer_deploy,
+        ):
+            self.assertEqual(scenario.clean(None), 0)
+        observer_clean.assert_called_once_with("bourbon")
+        observer_deploy.assert_called_once_with(None)
 
     def test_apply_logs_into_registry_when_provider_set(self) -> None:
         path = self.write_scenario("s.toml", SCENARIO_TOML + '\n[registry]\nprovider = "digitalocean"\n')

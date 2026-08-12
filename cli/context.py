@@ -32,13 +32,17 @@ RUNTIME_IMAGES_TOML = RUNTIME_DIR / "images.toml"
 RUNTIME_OBSERVER_TOML = RUNTIME_DIR / "observer.toml"
 RUNTIME_LOCAL_BOTS_TOML = RUNTIME_DIR / "local_bots.toml"
 RUNTIME_LOCAL_BOTS_LOG_DIR = RUNTIME_DIR / "local_bots"
-# logs/<provider>/<run-timestamp>/{infra,worker,room,user}/*.json --
+# logs/<scenario_name>/<run_timestamp>/{infra,worker,room,user}/*.json --
 # the live per-entity metrics schema, distinct from LOGS_ROOT (system_log.py's
 # scenario-run event trail). Promoted here because multiple
 # cli/observer/metrics_*.py and cli/scenario/metrics_sampler.py modules all
 # need it. Top-level (not under data/) so .gitignore's bare `logs/` rule
 # covers it -- these are regenerated every scenario run, never meant to be
-# tracked.
+# tracked. Keyed by scenario_name (same key LOGS_ROOT below uses), not each
+# entry's own real cloud provider -- infra/worker used to be filed under
+# logs/<provider>/... instead, splitting one run's output across N
+# top-level folders for an N-provider scenario; each entry's real provider
+# is still recorded in its own identity block, just not used as the path.
 METRICS_ROOT = ROOT / "logs"
 # logs/<scenario_name>/<run_timestamp>/{run.json, actions/*.json} --
 # system_log.py's scenario-run event trail, split per-entity the same way as

@@ -9,7 +9,7 @@
   "version": 1,
   "refresh": "30s",
   "time": {
-    "from": "now-1h",
+    "from": "now-5m",
     "to": "now"
   },
   "templating": {
@@ -827,6 +827,101 @@
         "defaults": {
           "unit": "ms"
         }
+      }
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "Relay Failover Downtime (All Users)",
+      "description": "Cross-user aggregation of the same per-event cutover log used by the User dashboard's Relay Failover Downtime table, grouped by (dead relay, switch-to relay) since independently-reporting peers share no cutover-event id -- if the same relay pair fails over twice within the panel's time window, those instances collapse into one aggregated row. Shows the AVERAGE event timestamp and AVERAGE downtime duration across every user who reported that failover, computed via LogQL's avg_over_time range-aggregation with `| unwrap` on the context_downtimeMs / context_eventEpochMs fields Loki's `| json` auto-flattens out of the client's structured log context.",
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 70
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
+          "expr": "avg_over_time({service=\"client\"} | json | module=\"webrtc/useRelay\" | message=~\"Primary relay dropped.*\" | roomId=~\"$room\" | unwrap context_downtimeMs [$__range]) by (context_deadRelayUrl, context_url)",
+          "queryType": "instant",
+          "instant": true,
+          "refId": "A",
+          "legendFormat": "{{context_deadRelayUrl}} -> {{context_url}}"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
+          "expr": "avg_over_time({service=\"client\"} | json | module=\"webrtc/useRelay\" | message=~\"Primary relay dropped.*\" | roomId=~\"$room\" | unwrap context_eventEpochMs [$__range]) by (context_deadRelayUrl, context_url)",
+          "queryType": "instant",
+          "instant": true,
+          "refId": "B",
+          "legendFormat": "{{context_deadRelayUrl}} -> {{context_url}}"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "context_deadRelayUrl": 0,
+              "context_url": 1,
+              "Value #B": 2,
+              "Value #A": 3
+            },
+            "renameByName": {
+              "context_deadRelayUrl": "dead relay",
+              "context_url": "switch-to relay",
+              "Value #B": "timestamp",
+              "Value #A": "downtime"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "downtime"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "timestamp"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
       }
     }
   ]

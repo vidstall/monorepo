@@ -9,7 +9,7 @@
   "version": 1,
   "refresh": "30s",
   "time": {
-    "from": "now-1h",
+    "from": "now-5m",
     "to": "now"
   },
   "panels": [
@@ -46,7 +46,7 @@
             "type": "prometheus",
             "uid": "Prometheus"
           },
-          "expr": "sum(rate(process_cpu_seconds_total{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (job)",
+          "expr": "avg(rate(process_cpu_seconds_total{job=~\"xaisen|xaisen-cp-daemon|xaisen-validator-daemon\"}[5m])) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         },

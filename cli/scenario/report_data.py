@@ -208,6 +208,52 @@ def _load_user_entries(run_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _load_infra_entries(run_dir: Path) -> list[dict[str, Any]]:
+    """One row per infra/<instance>.json tick -- see
+    metrics_sampler._capture_infra_entry()'s "evaluation" array (cpu/memory
+    node_exporter block, keyed by instance_name = "<provider>-<host>")."""
+    infra_dir = run_dir / "infra"
+    if not infra_dir.is_dir():
+        return []
+    rows: list[dict[str, Any]] = []
+    for path in sorted(infra_dir.glob("*.json")):
+        doc = _load_json(path)
+        if doc is None:
+            continue
+        identity = doc.get("identity") or {}
+        instance_name = identity.get("instance_name") or path.stem
+        host = identity.get("host")
+        for entry in doc.get("evaluation") or []:
+            rows.append({"instance_name": instance_name, "host": host, "entry": entry})
+    return rows
+
+
+def _load_worker_entries(run_dir: Path) -> list[dict[str, Any]]:
+    """One row per worker/<process_key>.json tick's identity -- only the
+    identity is needed (service/host, to map a worker role onto the infra
+    host(s) that actually run it); worker/*.json's own "logging" array has
+    no live cpu/memory source today (see metrics_sampler._capture_worker_entry's
+    comment), so callers get cpu/memory from infra rows keyed by `host`
+    instead."""
+    worker_dir = run_dir / "worker"
+    if not worker_dir.is_dir():
+        return []
+    rows: list[dict[str, Any]] = []
+    for path in sorted(worker_dir.glob("*.json")):
+        doc = _load_json(path)
+        if doc is None:
+            continue
+        identity = doc.get("identity") or {}
+        rows.append(
+            {
+                "process_key": identity.get("process_key") or path.stem,
+                "service": identity.get("service"),
+                "host": identity.get("host"),
+            }
+        )
+    return rows
+
+
 def _aggregate(values: list[float]) -> dict[str, float | int | None]:
     clean = [v for v in values if isinstance(v, (int, float))]
     if not clean:

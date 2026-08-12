@@ -9,7 +9,7 @@
   "version": 1,
   "refresh": "30s",
   "time": {
-    "from": "now-1h",
+    "from": "now-5m",
     "to": "now"
   },
   "templating": {
@@ -154,7 +154,10 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "ms",
+          "custom": {
+            "spanNulls": false
+          }
         }
       }
     },
@@ -186,7 +189,10 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "ms",
+          "custom": {
+            "spanNulls": false
+          }
         }
       }
     },
@@ -218,7 +224,10 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent"
+          "unit": "percent",
+          "custom": {
+            "spanNulls": false
+          }
         }
       }
     },
@@ -259,7 +268,10 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "Kbits"
+          "unit": "Kbits",
+          "custom": {
+            "spanNulls": false
+          }
         }
       }
     },
@@ -297,7 +309,14 @@
           "legendFormat": "height {{roomId}}/{{peerId}}",
           "refId": "B"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      }
     },
     {
       "id": 7,
@@ -324,7 +343,14 @@
           "legendFormat": "fps {{roomId}}/{{peerId}}",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      }
     },
     {
       "id": 8,
@@ -363,7 +389,10 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "ms",
+          "custom": {
+            "spanNulls": false
+          }
         }
       }
     },
@@ -392,7 +421,14 @@
           "legendFormat": "freeze {{roomId}}/{{peerId}}",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      }
     },
     {
       "id": 10,
@@ -419,7 +455,14 @@
           "legendFormat": "pause {{roomId}}/{{peerId}}",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      }
     },
     {
       "id": 11,
@@ -449,7 +492,10 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "ms",
+          "custom": {
+            "spanNulls": false
+          }
         }
       }
     },
@@ -481,7 +527,10 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "ms",
+          "custom": {
+            "spanNulls": false
+          }
         }
       }
     },
@@ -745,6 +794,82 @@
       }
     },
     {
+      "id": 19,
+      "type": "table",
+      "title": "Relay Failover Downtime",
+      "description": "One row per relay-failover event for this peer: dead relay, standby switched to, and downtime duration. Sourced from the client's own cutover-completion log line (standby-cutover.ts's clientLog.info('webrtc/useRelay', 'Primary relay dropped...', {...})) shipped directly to Loki -- not a Prometheus gauge, since only the client knows both the dead/new relay identity AND has a discrete per-event history. roomId/peerId are top-level fields on every shipped log line (log.ts); deadRelayUrl/url/downtimeMs/eventEpochMs are nested under `context` and appear here as context_* after Loki's `| json` auto-flatten.",
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 76
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
+          "expr": "{service=\"client\"} | json | module=\"webrtc/useRelay\" | message=~\"Primary relay dropped.*\" | roomId=~\"$room\" | peerId=~\"$peer\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Line": true,
+              "tsNs": true,
+              "id": true,
+              "level": true,
+              "module": true,
+              "message": true,
+              "service": true,
+              "host": true,
+              "roomId": true,
+              "peerId": true,
+              "context_eventEpochMs": true
+            },
+            "indexByName": {
+              "Time": 0,
+              "context_deadRelayUrl": 1,
+              "context_url": 2,
+              "context_downtimeMs": 3
+            },
+            "renameByName": {
+              "Time": "timestamp",
+              "context_deadRelayUrl": "dead relay",
+              "context_url": "switch-to relay",
+              "context_downtimeMs": "downtime"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "downtime"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "id": 101,
       "type": "row",
       "title": "Bot (fake test participant) internals",
@@ -753,7 +878,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 84
       },
       "panels": [
         {
@@ -769,7 +894,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 77
+            "y": 85
           },
           "targets": [
             {
@@ -796,7 +921,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 85
+            "y": 93
           },
           "targets": [
             {
@@ -828,7 +953,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 85
+            "y": 93
           },
           "targets": [
             {
@@ -863,7 +988,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 93
+            "y": 101
           },
           "targets": [
             {
@@ -918,7 +1043,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 101
+            "y": 109
           },
           "targets": [
             {
@@ -954,7 +1079,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 101
+            "y": 109
           },
           "targets": [
             {
@@ -990,7 +1115,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 109
+            "y": 117
           },
           "targets": [
             {
@@ -1039,7 +1164,10 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "ms",
+          "custom": {
+            "spanNulls": false
+          }
         }
       }
     }

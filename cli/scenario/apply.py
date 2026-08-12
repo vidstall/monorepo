@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from .. import contract, image_bake, infra, local_bot, observer, registry
+from .. import bot_client, contract, image_bake, infra, local_bot, observer, registry
 from .. import object as object_cmd
 from .lock import clear_lock, read_lock, write_lock
 from .spec import WorkerKey, load_scenario, scenario_hash_of
@@ -481,4 +481,51 @@ def destroy(_args: Any) -> int:
     _clean_observer_stack()
     clear_lock()
     print(f"Scenario '{scenario_path_display}' destroyed; lock released.")
+    return 0
+
+
+def clean(_args: Any) -> int:
+    """Clear a finished/crashed run's leftovers WITHOUT tearing down the
+    fleet `destroy()` would -- for when a `scenario run` dies mid-timeline
+    (crash, Ctrl-C, an action erroring out) and leaves bot sessions still
+    holding rooms open on otherwise-healthy bot workers, plus stale
+    Prometheus/Tempo history from that run mixed into the NEXT run's
+    observation window. Infra stays up and the lock stays held (or absent)
+    exactly as it was -- this only clears run-scoped state, not the
+    scenario's own reconciled workers."""
+    lock = read_lock()
+    if lock is None:
+        print("No scenario is currently active; nothing to clean.")
+        return 0
+    env = str(lock.get("env", ""))
+
+    bot_rows = sorted(
+        (item for item in _active_workers_for_env(env) if item.get("service") == "bot"),
+        key=lambda r: (str(r.get("host")), int(r.get("worker_index", 1) or 1)),
+    )
+    stopped = 0
+    for item in bot_rows:
+        host = str(item.get("host"))
+        result = bot_client.delete_all_sessions(host)
+        if result is None:
+            print(f"clean: failed to reach bot worker {host}, skipping.", file=sys.stderr)
+            continue
+        count = int(result.get("stopped", 0) or 0)
+        stopped += count
+        if count:
+            print(f"clean: stopped {count} leftover bot session(s) (rooms) on {host}")
+    print(f"clean: stopped {stopped} leftover bot session(s) total.")
+
+    # _clean_observer_stack() removes EVERY monitoring container (including
+    # Grafana itself, see observer_clean.yml) before wiping data -- fine for
+    # destroy(), which is always followed by a fresh apply() that redeploys
+    # the whole stack, but clean() has no such follow-up: left as-is, the
+    # operator's Grafana dashboard would just go dark (container gone, not
+    # merely reset) until they happened to run something else that
+    # redeploys it. Immediately re-running _refresh_observer_stack() here
+    # brings every container -- Grafana included -- straight back up with
+    # empty data, so `clean` reads as "reset", not "tear down and abandon".
+    _clean_observer_stack()
+    _refresh_observer_stack()
+    print("clean: wiped Prometheus/Tempo history and redeployed the observer stack.")
     return 0

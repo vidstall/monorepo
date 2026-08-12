@@ -139,6 +139,16 @@ def delete_room(host: str, bot_id: str) -> dict | None:
     return _request(host, "DELETE", f"/bots/{bot_id}")
 
 
+def delete_all_sessions(host: str) -> dict | None:
+    """DELETE /bots (no id) -- stops and removes EVERY session currently
+    live on this bot worker in one call, e.g. leftover sessions from a
+    scenario run that crashed/was interrupted mid-timeline instead of
+    reaching its own bot.delete_room actions. Returns {"stopped": <count>}
+    on success, None on failure."""
+    result = _request(host, "DELETE", "/bots")
+    return result if isinstance(result, dict) else None
+
+
 def create_room_local(port: int, media_mode: str, mp4_path: str | None = None) -> dict | None:
     """create_room(), but against a local dev bot process on
     http://127.0.0.1:<port> (see cli/local_bot.py) instead of a registered

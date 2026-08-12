@@ -1,6 +1,6 @@
 from ..context import RUNTIME_SCENARIO_LOCK, contract_env_path
 from .actions import run_actions
-from .apply import apply, destroy
+from .apply import apply, clean, destroy
 from .lock import clear_lock, guard_manual_infra, read_lock, write_lock
 from .report import generate_report
 from .run import run
@@ -25,6 +25,7 @@ __all__ = [
     "status",
     "apply",
     "destroy",
+    "clean",
     "run",
     "run_actions",
     "generate_report",

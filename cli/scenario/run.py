@@ -1,19 +1,42 @@
 from __future__ import annotations
 
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..observer.grafana_render import capture_dashboard_images
+from ..observer.grafana_render import (
+    MINI_PANEL_HEIGHT,
+    MINI_PANEL_WIDTH,
+    PANEL_HEIGHT,
+    PANEL_WIDTH,
+    capture_dashboard_images,
+)
 from .actions import run_actions
 from .lock import read_lock
 from .metrics_sampler import INTERVAL_SECONDS, MetricsSampler
+from .mini_report import generate_mini_log
 from .report import generate_report
 from .spec import load_scenario
 from .system_log import SystemLog, backfill_action_snapshots, record_snapshot_event
 
+# capture_dashboard_images() resolves which room(s)/peer(s) to render a
+# Grafana panel variant for by querying Prometheus AS OF the run's own
+# midpoint timestamp -- but Prometheus only scrapes the observer Pushgateway
+# every 15s (prometheus.yml.j2's scrape_interval), independently of when
+# `scenario run` itself finishes. Firing the capture immediately at run end
+# can race ahead of that scrape: any room/peer whose Pushgateway sample
+# hadn't been scraped-and-written into Prometheus's TSDB yet at that exact
+# moment resolves to nothing and gets silently skipped (falling back to a
+# single "All" variant) -- confirmed live: a 5-peer/2-room run only ever
+# rendered 1 variant, and re-querying Prometheus for the identical midpoint
+# moments later found all 5. This margin (comfortably more than one scrape
+# interval) is cheap insurance against that race; it does NOT affect the
+# `at_time` value used for the query itself, only when the query fires.
+GRAFANA_CAPTURE_SETTLE_SECONDS = 20
 
-def run(path_str: str | None, yes: bool, fast: bool = False, report: bool = True) -> int:
+
+def run(path_str: str | None, yes: bool, fast: bool = False, report: bool = True, mini_log: bool = False) -> int:
     if not yes:
         print("Refusing to run a scenario's actions without --yes.", file=sys.stderr)
         return 2
@@ -61,10 +84,7 @@ def run(path_str: str | None, yes: bool, fast: bool = False, report: bool = True
 
     metrics_sampler = MetricsSampler(env, run_timestamp=run_timestamp, room_provider_key=path.stem)
     metrics_sampler.start()
-    print(
-        f"Capturing live metrics every {INTERVAL_SECONDS}s "
-        f"under {system_log.run_dir} (room/user) and logs/<provider>/{metrics_sampler.run_timestamp}/ (infra/worker)"
-    )
+    print(f"Capturing live infra/worker/room/user metrics every {INTERVAL_SECONDS}s under {system_log.run_dir}")
     run_start_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     if fast:
         print(
@@ -91,14 +111,30 @@ def run(path_str: str | None, yes: bool, fast: bool = False, report: bool = True
         metrics_sampler.stop()
         run_end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         img_dir = system_log.run_dir / "img"
+        print(f"Waiting {GRAFANA_CAPTURE_SETTLE_SECONDS}s for Prometheus to catch up before Grafana panel capture...")
+        time.sleep(GRAFANA_CAPTURE_SETTLE_SECONDS)
+        capture_width, capture_height = (MINI_PANEL_WIDTH, MINI_PANEL_HEIGHT) if mini_log else (PANEL_WIDTH, PANEL_HEIGHT)
         try:
-            captured = capture_dashboard_images(run_start_ms, run_end_ms, img_dir)
+            captured = capture_dashboard_images(run_start_ms, run_end_ms, img_dir, capture_width, capture_height)
         except Exception as exc:  # noqa: BLE001 - image capture must never fail the run
             print(f"Warning: Grafana panel capture failed: {exc}", file=sys.stderr)
         else:
             print(f"Captured {captured} Grafana panel image(s) to {img_dir}")
 
-        if report:
+        # --mini-log trades the full report pipeline (CSV export,
+        # matplotlib charts, Markdown report -- all read-heavy over every
+        # raw tick and meant for a thorough post-run review) for one
+        # condensed summary of exactly the fields it was asked for: per-
+        # instance cpu/ram, per-worker-role cpu/ram, and per-room session
+        # averages (see mini_report.py). Mutually exclusive with `report`/
+        # --no-report -- mini-log's whole point is a fast run-end pass, so
+        # it always skips the heavy path regardless of that flag.
+        if mini_log:
+            try:
+                generate_mini_log(system_log, env, run_start_ms, run_end_ms)
+            except Exception as exc:  # noqa: BLE001 - report generation must never fail the run
+                print(f"Warning: mini-log generation failed: {exc}", file=sys.stderr)
+        elif report:
             try:
                 generate_report(system_log, env, run_start_ms, run_end_ms, img_dir)
             except Exception as exc:  # noqa: BLE001 - report generation must never fail the run

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 from cli import bot_client, infra, scenario
@@ -295,6 +296,72 @@ class RunTests(ScenarioTestCase):
         # written, since run_actions() was handed system_log=None.
         action_files = list((run_dir / "actions").glob("*.json"))
         self.assertEqual(action_files, [])
+
+    def test_run_mini_log_uses_reduced_resolution_and_skips_full_report(self) -> None:
+        import importlib
+
+        from cli.observer import grafana_render
+
+        # cli.scenario/__init__.py does `from .run import run`, rebinding
+        # cli.scenario.run to the FUNCTION -- importlib.import_module gets
+        # the actual submodule object (run.py's own top-level names) so
+        # patch.object can target the names run() actually calls.
+        run_module = importlib.import_module("cli.scenario.run")
+
+        path = self.write_scenario(
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
+        )
+        self.assertEqual(scenario.apply(str(path), True), 0)
+
+        with (
+            patch("cli.scenario.actions.time.sleep", return_value=None),
+            patch.object(run_module.time, "sleep", return_value=None),
+            patch.object(bot_client, "create_room", return_value={"botId": "b1"}),
+            patch.object(run_module, "capture_dashboard_images", return_value=0) as capture,
+            patch.object(run_module, "generate_mini_log", return_value=None) as gen_mini,
+            patch.object(run_module, "generate_report") as gen_full,
+        ):
+            code = scenario.run(str(path), True, mini_log=True)
+        self.assertEqual(code, 0)
+
+        capture.assert_called_once()
+        # width/height are the 4th/5th positional args to capture_dashboard_images.
+        self.assertEqual(capture.call_args[0][3], grafana_render.MINI_PANEL_WIDTH)
+        self.assertEqual(capture.call_args[0][4], grafana_render.MINI_PANEL_HEIGHT)
+        gen_mini.assert_called_once()
+        gen_full.assert_not_called()
+
+    def test_run_without_mini_log_uses_full_resolution_and_report(self) -> None:
+        import importlib
+
+        from cli.observer import grafana_render
+
+        # cli.scenario/__init__.py does `from .run import run`, rebinding
+        # cli.scenario.run to the FUNCTION -- importlib.import_module gets
+        # the actual submodule object (run.py's own top-level names) so
+        # patch.object can target the names run() actually calls.
+        run_module = importlib.import_module("cli.scenario.run")
+
+        path = self.write_scenario(
+            "s.toml", SCENARIO_TOML + '\n[[actions]]\ntype = "bot.create_room"\ntimestamp = "+1s"\nhost = "001"\n'
+        )
+        self.assertEqual(scenario.apply(str(path), True), 0)
+
+        with (
+            patch("cli.scenario.actions.time.sleep", return_value=None),
+            patch.object(run_module.time, "sleep", return_value=None),
+            patch.object(bot_client, "create_room", return_value={"botId": "b1"}),
+            patch.object(run_module, "capture_dashboard_images", return_value=0) as capture,
+            patch.object(run_module, "generate_mini_log") as gen_mini,
+            patch.object(run_module, "generate_report", return_value=Path("/tmp/report.md")) as gen_full,
+        ):
+            code = scenario.run(str(path), True)
+        self.assertEqual(code, 0)
+
+        self.assertEqual(capture.call_args[0][3], grafana_render.PANEL_WIDTH)
+        self.assertEqual(capture.call_args[0][4], grafana_render.PANEL_HEIGHT)
+        gen_full.assert_called_once()
+        gen_mini.assert_not_called()
 
     def test_system_log_atomic_write_leaves_no_tmp_file(self) -> None:
         path = self.write_scenario(
