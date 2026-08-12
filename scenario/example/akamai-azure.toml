@@ -1,0 +1,332 @@
+# Straight merge of akamai.toml (hosts 001-002 only -- its host 003 and the
+# 004 validator-quorum-boost host are dropped here, see note below) +
+# azure.toml's full 5-region topology, PLUS one dedicated Akamai bot host
+# (neither source file has one -- bot.py's gen_eval_scenarios.py requires a
+# `service = "bot"` worker to drive room actions, see its _find_bot_host()).
+# Built for the Akamai+Azure-only performance/recovery evaluation harness
+# (scenario/evaluation/*.toml) -- no third provider, so quality numbers
+# aren't muddied by a DigitalOcean/Alibaba leg.
+#
+# `host` renumbered into one continuous sequence per multicloud.toml's
+# convention: Akamai 001-003, Azure 004-008.
+#
+# Dropped akamai.toml's host 004 (5x validator-daemon "quorum boost" host):
+# that host's comment ties it to a SPECIFIC already-registered on-chain
+# validator set (7 registered, only 3 live) from an existing live deployment
+# -- not a general requirement. This base's own validator-daemon count
+# (2 Akamai + 10 Azure = 12) is already well above the 3-per-host minimum
+# quoted there; add a boost host back only if a real quorum failure shows up
+# against whatever registry this actually publishes against.
+name = "akamai-azure-eval-base"
+env = "devnet"
+
+[contract]
+gas_budget = ""
+create_registry_if_missing = false
+force = false
+
+# Reuse the DigitalOcean-hosted registry -- images are already published
+# there (scenario/example/digitalocean.toml); Akamai/Azure instances just
+# pull from it like any other host, no second registry needed.
+[registry]
+provider = "digitalocean"
+tag = ""
+
+# Same shared static frontend bucket every other example.toml points at.
+[[frontends]]
+name = "site-2-bucket"
+object = "frontend"
+provider = "alibaba"
+
+# --- Akamai (from akamai.toml, hosts 001-002) -----------------------------
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+# --- Akamai bot host (003) -- dedicated, no colocated worker services, so
+# room-action load never contends with the relay/cp-daemon/validator-daemon
+# it's driving. Cheapest Akamai default (g6-nanode-1) is plenty -- the bot's
+# job here is HTTP room control calls, not media processing.
+# (see digitalocean.toml's bot worker comment: "only, not part of network
+# role economics".) ---------------------------------------------------------
+
+[[workers]]
+host = "003"
+service = "bot"
+provider = "akamai"
+size = "g6-nanode-1"
+worker_index = 1
+
+# --- Azure (from azure.toml, hosts 001-005 there -> 004-008 here) --------
+# Uniform topology unchanged from azure.toml: 1 relay + 2 cp-daemon +
+# 2 validator-daemon per host, one host per region, Standard_D2als_v7
+# (2 vCPU -- see cli/infra/_constants.py's VM_INSTANCE_SIZES comment), each
+# region's total pinned at 2 vCPU to stay under this subscription's
+# 3-vCPU-per-region cap. Do NOT add a second host to any of these regions
+# without also shrinking VM size.
+
+# host 004 (eastus -- explicit, do NOT leave unset: this subscription's
+# actual azure default is eastus2, already used by host 008 below; see
+# azure.toml's host 001 comment for the quota collision this caused once.)
+
+[[workers]]
+host = "004"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "eastus"
+
+# host 005 (westus2)
+
+[[workers]]
+host = "005"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "005"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "005"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "westus2"
+
+[[workers]]
+host = "005"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "005"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "westus2"
+
+# host 006 (centralus)
+
+[[workers]]
+host = "006"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "centralus"
+
+[[workers]]
+host = "006"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "centralus"
+
+[[workers]]
+host = "006"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "centralus"
+
+[[workers]]
+host = "006"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "centralus"
+
+[[workers]]
+host = "006"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "centralus"
+
+# host 007 (westeurope)
+
+[[workers]]
+host = "007"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westeurope"
+
+[[workers]]
+host = "007"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westeurope"
+
+[[workers]]
+host = "007"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "westeurope"
+
+[[workers]]
+host = "007"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westeurope"
+
+[[workers]]
+host = "007"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "westeurope"
+
+# host 008 (eastus2 -- confirmed-working region for this subscription, see
+# cli/infra/_constants.py's VM_INSTANCE_SIZES comment)
+
+[[workers]]
+host = "008"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus2"
+
+[[workers]]
+host = "008"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus2"
+
+[[workers]]
+host = "008"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "eastus2"
+
+[[workers]]
+host = "008"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus2"
+
+[[workers]]
+host = "008"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "eastus2"

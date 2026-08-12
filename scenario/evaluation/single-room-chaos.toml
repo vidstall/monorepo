@@ -1,0 +1,449 @@
+# Recovery-time eval, type 4/6: single-room capacity ceiling + 40% chaos.
+# PLACEHOLDER bots_per_room=3 (the sweep's start value) -- replace with
+# whatever value single-room-capacity's `vidctl scenario eval-find-capacity`
+# search actually finds as max_passing before running this for real (manual
+# substitution -- there is no automated wiring between the two anymore).
+# Kill targets/seed as baseline-chaos.toml -- see this file's own
+# [[actions]] worker.leave rows.
+# Base topology: scenario/example/akamai-azure.toml (Akamai + Azure only).
+# Run: vidctl scenario apply scenario/evaluation/single-room-chaos.toml --yes
+#   && vidctl scenario run --yes
+# Read results from the Grafana observation system (peer-quality.json's
+# "Relay Failover Downtime" panel, infrastructure.json's node-up panels),
+# same as baseline-chaos.toml -- no separate scoring script.
+# Regenerate: python3 -m cli.scenario.gen_eval_scenarios --base scenario/example/akamai-azure.toml \
+#   --out scenario/evaluation/single-room-chaos.toml --name akamai-azure-single-room-chaos \
+#   --rooms 1 --bots-per-room <max_passing> --kill-fraction 0.4 --hold-seconds 300 --seed 0
+
+name = "akamai-azure-single-room-chaos"
+env = "devnet"
+
+[contract]
+gas_budget = ""
+create_registry_if_missing = false
+force = false
+
+[registry]
+provider = "digitalocean"
+tag = ""
+
+[[frontends]]
+name = "site-2-bucket"
+object = "frontend"
+provider = "alibaba"
+
+[[workers]]
+host = "001"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "001"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "001"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "relay"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "002"
+service = "cp-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 2
+
+[[workers]]
+host = "002"
+service = "validator-daemon"
+provider = "akamai"
+size = "g6-standard-4"
+worker_index = 1
+
+[[workers]]
+host = "003"
+service = "bot"
+provider = "akamai"
+size = "g6-nanode-1"
+worker_index = 1
+
+[[workers]]
+host = "004"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus"
+
+[[workers]]
+host = "004"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "eastus"
+
+[[workers]]
+host = "005"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "005"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "005"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "westus2"
+
+[[workers]]
+host = "005"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westus2"
+
+[[workers]]
+host = "005"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "westus2"
+
+[[workers]]
+host = "006"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "centralus"
+
+[[workers]]
+host = "006"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "centralus"
+
+[[workers]]
+host = "006"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "centralus"
+
+[[workers]]
+host = "006"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "centralus"
+
+[[workers]]
+host = "006"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "centralus"
+
+[[workers]]
+host = "007"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westeurope"
+
+[[workers]]
+host = "007"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westeurope"
+
+[[workers]]
+host = "007"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "westeurope"
+
+[[workers]]
+host = "007"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "westeurope"
+
+[[workers]]
+host = "007"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "westeurope"
+
+[[workers]]
+host = "008"
+service = "relay"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus2"
+
+[[workers]]
+host = "008"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus2"
+
+[[workers]]
+host = "008"
+service = "cp-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "eastus2"
+
+[[workers]]
+host = "008"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 1
+region = "eastus2"
+
+[[workers]]
+host = "008"
+service = "validator-daemon"
+provider = "azure"
+size = "Standard_D2als_v7"
+worker_index = 2
+region = "eastus2"
+
+[[actions]]
+id = "room0"
+type = "bot.create_room"
+timestamp = "+0s"
+host = "003"
+media_mode = "both"
+
+[[actions]]
+id = "room0join1"
+type = "bot.join_room"
+timestamp = "+3s"
+host = "003"
+room_id = "$room0.roomId"
+media_mode = "both"
+
+[[actions]]
+id = "room0join2"
+type = "bot.join_room"
+timestamp = "+6s"
+host = "003"
+room_id = "$room0.roomId"
+media_mode = "both"
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "007"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "007"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "001"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "004"
+service = "relay"
+provider = "azure"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "005"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "005"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "004"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "007"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "004"
+service = "cp-daemon"
+provider = "azure"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "007"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "004"
+service = "validator-daemon"
+provider = "azure"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "006"
+service = "relay"
+provider = "azure"
+worker_index = 1
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "002"
+service = "cp-daemon"
+provider = "akamai"
+worker_index = 2
+
+[[actions]]
+type = "worker.leave"
+timestamp = "+120s"
+host = "008"
+service = "relay"
+provider = "azure"
+worker_index = 1
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+300s"
+host = "003"
+bot_id = "$room0.botId"
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+300s"
+host = "003"
+bot_id = "$room0join1.botId"
+
+[[actions]]
+type = "bot.delete_room"
+timestamp = "+300s"
+host = "003"
+bot_id = "$room0join2.botId"
