@@ -10,3 +10,7 @@
 	path = services/contract
 	url = https://github.com/vidstall/contract.git
 	branch = qvanle
+[submodule "slide"]
+	path = slide
+	url = https://github.com/vidstall/slide.git
+	branch = main
